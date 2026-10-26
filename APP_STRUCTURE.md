@@ -66,7 +66,7 @@ Merging them would corrupt both stock counts and revenue reporting.
   directory (`%APPDATA%\com.example\vola_fix` on Windows). Deliberately not in
   Documents, so it never syncs to OneDrive or gets moved by accident.
 - Seeded on first launch: five device categories (Consoles, Retro consoles,
-  Portable Consoles, Handheld PCs, Controllers) with 75 pickable models, 12
+  Portable Consoles, Handheld PCs, Controllers) with 77 pickable models, 12
   services, and settings (shop name, `VF` ticket prefix, `G` tag prefix,
   90-day warranty default and terms). Seeding is additive and matched by name:
   later launches only add rows that are missing, so shop edits, custom models

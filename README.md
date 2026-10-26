@@ -21,7 +21,7 @@ end to end. Report editors and the remaining tabs are still being built.
 - **Intake** — customer name/phone/email, category → brand → model, optional
   model number, serial or **No serial number sticker**, fault, and a shop tag
   issued in the same transaction.
-- **Device catalog** — 5 categories, 75 pickable models and 12 services, seeded
+- **Device catalog** — 5 categories, 77 pickable models and 12 services, seeded
   additively so upgrades never wipe shop edits.
 - **Report 1 checklist** — per-device photo templates (3DS gets its own five
   shots; PSP gets the slab set), previewed at intake and copied onto the ticket.

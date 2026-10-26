@@ -816,7 +816,13 @@ class AppDatabase extends _$AppDatabase {
         (
           controllers,
           'Sony',
-          ['DualSense 5 (PS5)', 'DualShock 4 (PS4)', 'DualShock 3 (PS3)'],
+          [
+            'DualSense 5 (PS5)',
+            'DualShock 4 (PS4)',
+            'DualShock 3 (PS3)',
+            'DualShock 2 (PS2)',
+            'DualShock 1 (PS1)',
+          ],
         ),
         (
           controllers,
