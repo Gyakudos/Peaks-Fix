@@ -354,7 +354,7 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
-            value: _job,
+            initialValue: _job,
             decoration: const InputDecoration(labelText: 'Staff job'),
             items: _staffJobs
                 .map((job) => DropdownMenuItem(value: job, child: Text(job)))
