@@ -1121,7 +1121,7 @@ void main() {
       MaterialApp(
         home: ShopScope(
           tickets: repository,
-          child: const CheckoutPage(),
+          child: const Scaffold(body: CheckoutPage()),
         ),
       ),
     );
