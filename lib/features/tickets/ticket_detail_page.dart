@@ -37,6 +37,7 @@ class TicketDetailPage extends StatelessWidget {
             ),
           );
         }
+        if (entry == null) {
           return _shell(
             context,
             title: 'Ticket',
