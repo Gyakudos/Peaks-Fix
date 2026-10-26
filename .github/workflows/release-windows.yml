@@ -33,10 +33,17 @@ jobs:
           Compress-Archive -Path "$releaseDirectory/*" -DestinationPath $assetPath
           "ASSET_PATH=$assetPath" >> $env:GITHUB_ENV
       - name: Publish GitHub release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$env:GITHUB_REF_NAME" "$env:ASSET_PATH"
-          --title "Peaks Fix $env:GITHUB_REF_NAME"
-          --notes "Windows release for Peaks Fix $env:GITHUB_REF_NAME. Download and extract the ZIP, then launch vola_fix.exe. App data is stored locally on this Windows machine."
-          --latest
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $env:ASSET_PATH --clobber
+          } else {
+            gh release create $tag $env:ASSET_PATH `
+              --title "Peaks Fix $tag" `
+              --notes "Windows release for Peaks Fix $tag. Download and extract the ZIP, then launch vola_fix.exe. App data is stored locally on this Windows machine." `
+              --latest
+          }
