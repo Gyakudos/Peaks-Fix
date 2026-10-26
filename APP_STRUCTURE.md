@@ -79,7 +79,12 @@ Merging them would corrupt both stock counts and revenue reporting.
   they were booked under.
 - Schema is versioned and migrated on open: v2 added `tickets.device_variant`
   for that model number, v3 added the Report 1 photo-checklist tables and a
-  template key on models and tickets, so upgrading in place never loses data.
+  template key on models and tickets, and v4 added `device_models.sort_order`,
+  so upgrading in place never loses data.
+- The picker follows the catalog's **own order**, not the alphabet:
+  `device_models.sort_order` keeps `DualShock 1 → 2 → 3 → 4 → DualSense 5` and
+  puts newer hardware first (`PlayStation 5` before `PlayStation 4`). Anything
+  added outside the seed list is parked after the seeded models for its brand.
 - Report 1 checklists are **templates per device family** (`hinged`, `slab`,
   `console`, `pc`, `controller`) stored in `photo_templates` /
   `photo_template_slots`. At intake the chosen family is resolved from the

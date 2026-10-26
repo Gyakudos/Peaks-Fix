@@ -898,6 +898,14 @@ class $DeviceModelsTable extends DeviceModels
           GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 80),
       type: DriftSqlType.string,
       requiredDuringInsert: true);
+  static const VerificationMeta _sortOrderMeta =
+      const VerificationMeta('sortOrder');
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+      'sort_order', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _attributesMeta =
       const VerificationMeta('attributes');
   @override
@@ -924,7 +932,7 @@ class $DeviceModelsTable extends DeviceModels
       defaultValue: const Constant(true));
   @override
   List<GeneratedColumn> get $columns =>
-      [id, brandId, name, attributes, photoTemplateKey, isActive];
+      [id, brandId, name, sortOrder, attributes, photoTemplateKey, isActive];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -949,6 +957,10 @@ class $DeviceModelsTable extends DeviceModels
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(_sortOrderMeta,
+          sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
     }
     if (data.containsKey('attributes')) {
       context.handle(
@@ -985,6 +997,8 @@ class $DeviceModelsTable extends DeviceModels
           .read(DriftSqlType.int, data['${effectivePrefix}brand_id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      sortOrder: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sort_order'])!,
       attributes: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}attributes'])!,
       photoTemplateKey: attachedDatabase.typeMapping.read(
@@ -1005,6 +1019,11 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
   final int brandId;
   final String name;
 
+  /// Position inside the brand's model list. Seeded models are numbered, so the
+  /// picker can show `DualShock 1 … 4, DualSense 5` in generation order instead
+  /// of alphabetically. `0` means "not chosen yet" and sorts after the rest.
+  final int sortOrder;
+
   /// Free-form specs (serial format, RAM/SSD, ...) so new categories do not
   /// need a schema change.
   final String attributes;
@@ -1016,6 +1035,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
       {required this.id,
       required this.brandId,
       required this.name,
+      required this.sortOrder,
       required this.attributes,
       this.photoTemplateKey,
       required this.isActive});
@@ -1025,6 +1045,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
     map['id'] = Variable<int>(id);
     map['brand_id'] = Variable<int>(brandId);
     map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
     map['attributes'] = Variable<String>(attributes);
     if (!nullToAbsent || photoTemplateKey != null) {
       map['photo_template_key'] = Variable<String>(photoTemplateKey);
@@ -1038,6 +1059,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
       id: Value(id),
       brandId: Value(brandId),
       name: Value(name),
+      sortOrder: Value(sortOrder),
       attributes: Value(attributes),
       photoTemplateKey: photoTemplateKey == null && nullToAbsent
           ? const Value.absent()
@@ -1053,6 +1075,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
       id: serializer.fromJson<int>(json['id']),
       brandId: serializer.fromJson<int>(json['brandId']),
       name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
       attributes: serializer.fromJson<String>(json['attributes']),
       photoTemplateKey: serializer.fromJson<String?>(json['photoTemplateKey']),
       isActive: serializer.fromJson<bool>(json['isActive']),
@@ -1065,6 +1088,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
       'id': serializer.toJson<int>(id),
       'brandId': serializer.toJson<int>(brandId),
       'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
       'attributes': serializer.toJson<String>(attributes),
       'photoTemplateKey': serializer.toJson<String?>(photoTemplateKey),
       'isActive': serializer.toJson<bool>(isActive),
@@ -1075,6 +1099,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
           {int? id,
           int? brandId,
           String? name,
+          int? sortOrder,
           String? attributes,
           Value<String?> photoTemplateKey = const Value.absent(),
           bool? isActive}) =>
@@ -1082,6 +1107,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
         id: id ?? this.id,
         brandId: brandId ?? this.brandId,
         name: name ?? this.name,
+        sortOrder: sortOrder ?? this.sortOrder,
         attributes: attributes ?? this.attributes,
         photoTemplateKey: photoTemplateKey.present
             ? photoTemplateKey.value
@@ -1093,6 +1119,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
       id: data.id.present ? data.id.value : this.id,
       brandId: data.brandId.present ? data.brandId.value : this.brandId,
       name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       attributes:
           data.attributes.present ? data.attributes.value : this.attributes,
       photoTemplateKey: data.photoTemplateKey.present
@@ -1108,6 +1135,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
           ..write('id: $id, ')
           ..write('brandId: $brandId, ')
           ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('attributes: $attributes, ')
           ..write('photoTemplateKey: $photoTemplateKey, ')
           ..write('isActive: $isActive')
@@ -1116,8 +1144,8 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, brandId, name, attributes, photoTemplateKey, isActive);
+  int get hashCode => Object.hash(
+      id, brandId, name, sortOrder, attributes, photoTemplateKey, isActive);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1125,6 +1153,7 @@ class DeviceModel extends DataClass implements Insertable<DeviceModel> {
           other.id == this.id &&
           other.brandId == this.brandId &&
           other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
           other.attributes == this.attributes &&
           other.photoTemplateKey == this.photoTemplateKey &&
           other.isActive == this.isActive);
@@ -1134,6 +1163,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
   final Value<int> id;
   final Value<int> brandId;
   final Value<String> name;
+  final Value<int> sortOrder;
   final Value<String> attributes;
   final Value<String?> photoTemplateKey;
   final Value<bool> isActive;
@@ -1141,6 +1171,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
     this.id = const Value.absent(),
     this.brandId = const Value.absent(),
     this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.attributes = const Value.absent(),
     this.photoTemplateKey = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -1149,6 +1180,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
     this.id = const Value.absent(),
     required int brandId,
     required String name,
+    this.sortOrder = const Value.absent(),
     this.attributes = const Value.absent(),
     this.photoTemplateKey = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -1158,6 +1190,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
     Expression<int>? id,
     Expression<int>? brandId,
     Expression<String>? name,
+    Expression<int>? sortOrder,
     Expression<String>? attributes,
     Expression<String>? photoTemplateKey,
     Expression<bool>? isActive,
@@ -1166,6 +1199,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
       if (id != null) 'id': id,
       if (brandId != null) 'brand_id': brandId,
       if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (attributes != null) 'attributes': attributes,
       if (photoTemplateKey != null) 'photo_template_key': photoTemplateKey,
       if (isActive != null) 'is_active': isActive,
@@ -1176,6 +1210,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
       {Value<int>? id,
       Value<int>? brandId,
       Value<String>? name,
+      Value<int>? sortOrder,
       Value<String>? attributes,
       Value<String?>? photoTemplateKey,
       Value<bool>? isActive}) {
@@ -1183,6 +1218,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
       id: id ?? this.id,
       brandId: brandId ?? this.brandId,
       name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
       attributes: attributes ?? this.attributes,
       photoTemplateKey: photoTemplateKey ?? this.photoTemplateKey,
       isActive: isActive ?? this.isActive,
@@ -1200,6 +1236,9 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
     }
     if (attributes.present) {
       map['attributes'] = Variable<String>(attributes.value);
@@ -1219,6 +1258,7 @@ class DeviceModelsCompanion extends UpdateCompanion<DeviceModel> {
           ..write('id: $id, ')
           ..write('brandId: $brandId, ')
           ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('attributes: $attributes, ')
           ..write('photoTemplateKey: $photoTemplateKey, ')
           ..write('isActive: $isActive')
@@ -10507,6 +10547,7 @@ typedef $$DeviceModelsTableCreateCompanionBuilder = DeviceModelsCompanion
   Value<int> id,
   required int brandId,
   required String name,
+  Value<int> sortOrder,
   Value<String> attributes,
   Value<String?> photoTemplateKey,
   Value<bool> isActive,
@@ -10516,6 +10557,7 @@ typedef $$DeviceModelsTableUpdateCompanionBuilder = DeviceModelsCompanion
   Value<int> id,
   Value<int> brandId,
   Value<String> name,
+  Value<int> sortOrder,
   Value<String> attributes,
   Value<String?> photoTemplateKey,
   Value<bool> isActive,
@@ -10568,6 +10610,9 @@ class $$DeviceModelsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get attributes => $composableBuilder(
       column: $table.attributes, builder: (column) => ColumnFilters(column));
@@ -10636,6 +10681,9 @@ class $$DeviceModelsTableOrderingComposer
   ColumnOrderings<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get attributes => $composableBuilder(
       column: $table.attributes, builder: (column) => ColumnOrderings(column));
 
@@ -10681,6 +10729,9 @@ class $$DeviceModelsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
   GeneratedColumn<String> get attributes => $composableBuilder(
       column: $table.attributes, builder: (column) => column);
@@ -10759,6 +10810,7 @@ class $$DeviceModelsTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<int> brandId = const Value.absent(),
             Value<String> name = const Value.absent(),
+            Value<int> sortOrder = const Value.absent(),
             Value<String> attributes = const Value.absent(),
             Value<String?> photoTemplateKey = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
@@ -10767,6 +10819,7 @@ class $$DeviceModelsTableTableManager extends RootTableManager<
             id: id,
             brandId: brandId,
             name: name,
+            sortOrder: sortOrder,
             attributes: attributes,
             photoTemplateKey: photoTemplateKey,
             isActive: isActive,
@@ -10775,6 +10828,7 @@ class $$DeviceModelsTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             required int brandId,
             required String name,
+            Value<int> sortOrder = const Value.absent(),
             Value<String> attributes = const Value.absent(),
             Value<String?> photoTemplateKey = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
@@ -10783,6 +10837,7 @@ class $$DeviceModelsTableTableManager extends RootTableManager<
             id: id,
             brandId: brandId,
             name: name,
+            sortOrder: sortOrder,
             attributes: attributes,
             photoTemplateKey: photoTemplateKey,
             isActive: isActive,

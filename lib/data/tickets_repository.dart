@@ -229,6 +229,7 @@ class DriftTicketsRepository implements TicketsRepository {
           ..orderBy([
             OrderingTerm.asc(_db.deviceCategories.sortOrder),
             OrderingTerm.asc(_db.deviceBrands.name),
+            OrderingTerm.asc(_db.deviceModels.sortOrder),
             OrderingTerm.asc(_db.deviceModels.name),
           ]))
         .get();

@@ -108,6 +108,11 @@ class DeviceModels extends Table {
   IntColumn get brandId => integer().references(DeviceBrands, #id)();
   TextColumn get name => text().withLength(min: 1, max: 80)();
 
+  /// Position inside the brand's model list. Seeded models are numbered, so the
+  /// picker can show `DualShock 1 … 4, DualSense 5` in generation order instead
+  /// of alphabetically. `0` means "not chosen yet" and sorts after the rest.
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
   /// Free-form specs (serial format, RAM/SSD, ...) so new categories do not
   /// need a schema change.
   TextColumn get attributes => text().withDefault(const Constant('{}'))();
@@ -489,11 +494,13 @@ class AppDatabase extends _$AppDatabase {
   static final Random _random = Random.secure();
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
   /// model and ticket, and the slot snapshot copied at intake.
+  /// v4 added `device_models.sort_order` so the picker follows the catalog's
+  /// own order (controllers 1 → 5) rather than the alphabet.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -507,6 +514,9 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(deviceModels, deviceModels.photoTemplateKey);
             await m.addColumn(tickets, tickets.photoTemplateKey);
             await m.createTable(ticketPhotoSlots);
+          }
+          if (from < 4) {
+            await m.addColumn(deviceModels, deviceModels.sortOrder);
           }
         },
       );
@@ -612,14 +622,26 @@ class AppDatabase extends _$AppDatabase {
         );
       }
 
-      Future<void> model(int brandId, String name) async {
+      Future<void> model(int brandId, String name, int sortOrder) async {
         final row = await (select(deviceModels)
               ..where((m) => m.brandId.equals(brandId) & m.name.equals(name)))
             .getSingleOrNull();
-        if (row != null) return;
-        await into(deviceModels).insert(
-          DeviceModelsCompanion.insert(brandId: brandId, name: name),
-        );
+        if (row == null) {
+          await into(deviceModels).insert(
+            DeviceModelsCompanion.insert(
+              brandId: brandId,
+              name: name,
+              sortOrder: Value(sortOrder),
+            ),
+          );
+          return;
+        }
+        // Backfill the sort order once. Rows that already have one are left
+        // alone, so a shop that arranges its own picker keeps that arrangement.
+        if (row.sortOrder == 0) {
+          await (update(deviceModels)..where((m) => m.id.equals(row.id)))
+              .write(DeviceModelsCompanion(sortOrder: Value(sortOrder)));
+        }
       }
 
       Future<void> service(String name, int priceCents, int minutes) async {
@@ -817,11 +839,11 @@ class AppDatabase extends _$AppDatabase {
           controllers,
           'Sony',
           [
-            'DualSense 5 (PS5)',
-            'DualShock 4 (PS4)',
-            'DualShock 3 (PS3)',
-            'DualShock 2 (PS2)',
             'DualShock 1 (PS1)',
+            'DualShock 2 (PS2)',
+            'DualShock 3 (PS3)',
+            'DualShock 4 (PS4)',
+            'DualSense 5 (PS5)',
           ],
         ),
         (
@@ -884,10 +906,15 @@ class AppDatabase extends _$AppDatabase {
 
       for (final (categoryId, brandName, models) in catalog) {
         final brandId = await brand(categoryId, brandName);
-        for (final name in models) {
-          await model(brandId, name);
+        for (var index = 0; index < models.length; index++) {
+          await model(brandId, models[index], index + 1);
         }
       }
+
+      // Anything still unordered is shop-added rather than seeded. Park it after
+      // the seeded models for its brand instead of ahead of them.
+      await (update(deviceModels)..where((m) => m.sortOrder.equals(0)))
+          .write(const DeviceModelsCompanion(sortOrder: Value(1000)));
 
       // Every catalog model gets its Report 1 family. Only blank keys are
       // filled, so a shop that changes a model's checklist keeps that choice.
