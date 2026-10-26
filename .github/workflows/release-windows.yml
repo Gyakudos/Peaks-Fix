@@ -1,0 +1,42 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - '0.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build windows --release
+      - name: Package Windows build
+        shell: pwsh
+        run: |
+          $releaseDirectory = 'build/windows/x64/runner/Release'
+          if (!(Test-Path $releaseDirectory)) {
+            throw "Windows release directory not found: $releaseDirectory"
+          }
+          $assetPath = Join-Path $env:RUNNER_TEMP "Peaks-Fix-$env:GITHUB_REF_NAME-Windows.zip"
+          Compress-Archive -Path "$releaseDirectory/*" -DestinationPath $assetPath
+          "ASSET_PATH=$assetPath" >> $env:GITHUB_ENV
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$env:GITHUB_REF_NAME" "$env:ASSET_PATH"
+          --title "Peaks Fix $env:GITHUB_REF_NAME"
+          --notes "Windows release for Peaks Fix $env:GITHUB_REF_NAME. Download and extract the ZIP, then launch vola_fix.exe. App data is stored locally on this Windows machine."
+          --latest
