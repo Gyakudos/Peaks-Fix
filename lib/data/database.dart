@@ -816,7 +816,7 @@ class AppDatabase extends _$AppDatabase {
         (
           controllers,
           'Sony',
-          ['DualSense (PS5)', 'DualShock 4 (PS4)', 'DualShock 3 (PS3)'],
+          ['DualSense 5 (PS5)', 'DualShock 4 (PS4)', 'DualShock 3 (PS3)'],
         ),
         (
           controllers,
@@ -849,6 +849,7 @@ class AppDatabase extends _$AppDatabase {
       // repeated the brand read badly in the picker.
       final renames = <(String, String)>[
         ('Super Nintendo (SNES)', 'Super NES (SNES)'),
+        ('DualSense (PS5)', 'DualSense 5 (PS5)'),
       ];
       for (final (from, to) in renames) {
         final row = await (select(deviceModels)

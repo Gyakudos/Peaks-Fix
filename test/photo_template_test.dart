@@ -42,7 +42,8 @@ void main() {
     expect(photoTemplateKeyFor('Consoles', 'PlayStation 5'), 'console');
     expect(photoTemplateKeyFor('Retro consoles', 'Dreamcast'), 'console');
     expect(photoTemplateKeyFor('Handheld PCs', 'Steam Deck OLED'), 'pc');
-    expect(photoTemplateKeyFor('Controllers', 'DualSense (PS5)'), 'controller');
+    expect(
+        photoTemplateKeyFor('Controllers', 'DualSense 5 (PS5)'), 'controller');
   });
 
   test('a future category falls back to the console checklist', () {
