@@ -37,7 +37,6 @@ class TicketDetailPage extends StatelessWidget {
             ),
           );
         }
-                      labelText: 'Staff',
           return _shell(
             context,
             title: 'Ticket',
