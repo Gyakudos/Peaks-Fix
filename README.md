@@ -2,8 +2,6 @@
 
 Repair Shop OS
 
-Repair Shop OS
-
 Custom built using vibe coding, I made it to manage my shop repair tickets inventory, reports (allows three reports, Intake, Technical, and Client Release) it allows for photos to be added via qr code on any phone. Allows for customer database to be built, and also keep track of returning clients. Keeping track of repairs for each customer.
 
 Current version is only meant for windows, I will make more versions as I continue development. Planned versions Android, iOS, and Mac Current only runs locally, cloud support will be added in the future.
