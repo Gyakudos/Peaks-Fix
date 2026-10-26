@@ -128,6 +128,8 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           ),
           const Divider(height: 36),
+          _MarkupSettings(database: _database),
+          const Divider(height: 36),
           _SectionHeading(
             title: 'Staff',
             action: FilledButton.icon(
@@ -429,6 +431,184 @@ class _NameDialogState extends State<_NameDialog> {
           ),
         ],
       );
+}
+
+class _MarkupSettings extends StatefulWidget {
+  const _MarkupSettings({required this.database});
+
+  final AppDatabase database;
+
+  @override
+  State<_MarkupSettings> createState() => _MarkupSettingsState();
+}
+
+class _MarkupSettingsState extends State<_MarkupSettings> {
+  final _partsMarkupController = TextEditingController();
+  final _partsCostController = TextEditingController(text: '100.00');
+  final _merchMarkupController = TextEditingController();
+  final _merchCostController = TextEditingController(text: '100.00');
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _partsMarkupController.dispose();
+    _partsCostController.dispose();
+    _merchMarkupController.dispose();
+    _merchCostController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final parts = await widget.database.markupPercent('parts_markup_percent', 35);
+    final merch = await widget.database.markupPercent('merch_markup_percent', 45);
+    if (!mounted) return;
+    setState(() {
+      _partsMarkupController.text = '$parts';
+      _merchMarkupController.text = '$merch';
+      _loaded = true;
+    });
+  }
+
+  int? _priceCents(TextEditingController costController,
+      TextEditingController markupController) {
+    final cost = double.tryParse(costController.text.trim());
+    final markup = int.tryParse(markupController.text.trim());
+    if (cost == null || !cost.isFinite || cost < 0 || markup == null ||
+        markup < 0 || markup > 500) {
+      return null;
+    }
+    final costCents = (cost * 100).round();
+    return (costCents * (100 + markup) + 50) ~/ 100;
+  }
+
+  Future<void> _save(String key, TextEditingController controller) async {
+    final markup = int.tryParse(controller.text.trim());
+    if (markup == null || markup < 0 || markup > 500) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a markup from 0% to 500%.')),
+      );
+      return;
+    }
+    try {
+      await widget.database.setMarkupPercent(key, markup);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Markup saved.')),
+      );
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save markup: $error')),
+      );
+    }
+  }
+
+  Widget _calculator({
+    required String title,
+    required String keyPrefix,
+    required String settingKey,
+    required TextEditingController markupController,
+    required TextEditingController costController,
+  }) {
+    final price = _priceCents(costController, markupController);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 150,
+                  child: TextField(
+                    key: Key('$keyPrefix-markup'),
+                    controller: markupController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Markup',
+                      suffixText: '%',
+                      isDense: true,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                SizedBox(
+                  width: 170,
+                  child: TextField(
+                    key: Key('$keyPrefix-cost'),
+                    controller: costController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Example cost',
+                      prefixText: '\$',
+                      isDense: true,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                FilledButton.icon(
+                  key: Key('$keyPrefix-save'),
+                  onPressed: () => _save(settingKey, markupController),
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              price == null
+                  ? 'Enter a valid cost and markup.'
+                  : 'Suggested retail: \$${(price / 100).toStringAsFixed(2)}',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionHeading(title: 'Pricing markups'),
+        if (!_loaded)
+          const LinearProgressIndicator()
+        else ...[
+          _calculator(
+            title: 'Parts',
+            keyPrefix: 'parts',
+            settingKey: 'parts_markup_percent',
+            markupController: _partsMarkupController,
+            costController: _partsCostController,
+          ),
+          const SizedBox(height: 8),
+          _calculator(
+            title: 'Merch',
+            keyPrefix: 'merch',
+            settingKey: 'merch_markup_percent',
+            markupController: _merchMarkupController,
+            costController: _merchCostController,
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _SectionHeading extends StatelessWidget {

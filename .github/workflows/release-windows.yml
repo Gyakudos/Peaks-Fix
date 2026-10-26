@@ -59,8 +59,15 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $env:ASSET_PATH --clobber
           } else {
-            gh release create $tag $env:ASSET_PATH `
-              --title "Peaks Fix $tag" `
-              --notes "Windows release for Peaks Fix $tag. Download and extract the ZIP, then launch vola_fix.exe. App data is stored locally on this Windows machine." `
-              --latest
+            if ($tag.StartsWith('0.025.')) {
+              gh release create $tag $env:ASSET_PATH `
+                --title "Peaks Fix $tag" `
+                --notes "Pre-release for Peaks Fix $tag. Download and extract the ZIP, then launch vola_fix.exe. App data is stored locally on this Windows machine." `
+                --prerelease
+            } else {
+              gh release create $tag $env:ASSET_PATH `
+                --title "Peaks Fix $tag" `
+                --notes "Windows release for Peaks Fix $tag. Download and extract the ZIP, then launch vola_fix.exe. App data is stored locally on this Windows machine." `
+                --latest
+            }
           }

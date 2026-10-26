@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/tickets_repository.dart';
@@ -50,10 +52,12 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   final _retailCostController = TextEditingController(text: '0.00');
   String? _error;
   bool _saving = false;
+  int _markupPercent = 35;
 
   @override
   void initState() {
     super.initState();
+    unawaited(_loadMarkup());
     final part = widget.part;
     if (part == null) return;
     _nameController.text = part.name;
@@ -64,6 +68,15 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _rawCostController.text = (part.rawCostCents / 100).toStringAsFixed(2);
     _retailCostController.text =
         (part.retailPriceCents / 100).toStringAsFixed(2);
+  }
+
+  Future<void> _loadMarkup() async {
+    try {
+      final markup = await widget.repository.getPartsMarkupPercent();
+      if (!mounted) return;
+      setState(() => _markupPercent = markup);
+      if (widget.part == null) _updateRetailCost(_rawCostController.text);
+    } catch (_) {}
   }
 
   @override
@@ -88,7 +101,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   void _updateRetailCost(String rawCost) {
     final cents = _moneyCents(rawCost);
     if (cents == null) return;
-    final retailCents = (cents * 135 + 50) ~/ 100;
+    final retailCents = (cents * (100 + _markupPercent) + 50) ~/ 100;
     _retailCostController.value = TextEditingValue(
       text: (retailCents / 100).toStringAsFixed(2),
       selection: TextSelection.collapsed(
@@ -213,7 +226,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Retail Parts Cost',
                   prefixText: '\$',
-                  helperText: 'Automatically calculated at 1.35× raw cost.',
+                  helperText: 'Calculated with $_markupPercent% markup.',
                 ),
               ),
               if (_error != null) ...[

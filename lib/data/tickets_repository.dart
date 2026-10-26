@@ -257,6 +257,7 @@ class InvoiceLine {
     required this.description,
     required this.quantity,
     required this.unitPriceCents,
+    this.isMerch = false,
   });
 
   final int ticketItemId;
@@ -264,8 +265,25 @@ class InvoiceLine {
   final String description;
   final int quantity;
   final int unitPriceCents;
+  final bool isMerch;
 
   int get lineTotalCents => quantity * unitPriceCents;
+}
+
+class PaymentEntry {
+  const PaymentEntry({
+    required this.id,
+    required this.at,
+    required this.amountCents,
+    required this.method,
+    required this.kind,
+  });
+
+  final int id;
+  final DateTime at;
+  final int amountCents;
+  final PaymentMethod method;
+  final PaymentKind kind;
 }
 
 class InvoiceDraft {
@@ -473,6 +491,32 @@ abstract class TicketsRepository {
   });
 
   Stream<InvoiceDraft?> watchInvoice(int ticketId);
+
+  Stream<List<PaymentEntry>> watchTicketPayments(int ticketId);
+
+  Future<void> addCheckoutMerchLine({
+    required int ticketId,
+    required String description,
+    required int quantity,
+    required int unitCostCents,
+    required int unitPriceCents,
+  });
+
+  Future<void> recordTicketPayment({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  });
+
+  Future<void> closeTicketAfterPayment(int ticketId);
+
+  Future<int> getPartsMarkupPercent();
+
+  Future<int> getMerchMarkupPercent();
+
+  Future<void> savePartsMarkupPercent(int percent);
+
+  Future<void> saveMerchMarkupPercent(int percent);
 
   Future<void> addInvoiceLaborLine({
     required int ticketId,
@@ -802,11 +846,76 @@ class DriftTicketsRepository implements TicketsRepository {
                 description: item.description,
                 quantity: item.quantity,
                 unitPriceCents: item.unitPriceCents,
+                isMerch: item.kind == TicketItemKind.custom &&
+                    item.unitCostCents != null,
               ),
         ],
       );
     });
   }
+
+  @override
+  Stream<List<PaymentEntry>> watchTicketPayments(int ticketId) =>
+      _db.watchTicketPayments(ticketId).map(
+            (rows) => [
+              for (final payment in rows)
+                PaymentEntry(
+                  id: payment.id,
+                  at: payment.at,
+                  amountCents: payment.amountCents,
+                  method: payment.method,
+                  kind: payment.kind,
+                ),
+            ],
+          );
+
+  @override
+  Future<void> addCheckoutMerchLine({
+    required int ticketId,
+    required String description,
+    required int quantity,
+    required int unitCostCents,
+    required int unitPriceCents,
+  }) =>
+      _db.addCheckoutMerchLine(
+        ticketId: ticketId,
+        description: description,
+        quantity: quantity,
+        unitCostCents: unitCostCents,
+        unitPriceCents: unitPriceCents,
+      );
+
+  @override
+  Future<void> recordTicketPayment({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) =>
+      _db.recordTicketPayment(
+        ticketId: ticketId,
+        amountCents: amountCents,
+        method: method,
+      );
+
+  @override
+  Future<void> closeTicketAfterPayment(int ticketId) =>
+      _db.closeTicketAfterPayment(ticketId);
+
+  @override
+  Future<int> getPartsMarkupPercent() =>
+      _db.markupPercent('parts_markup_percent', 35);
+
+  @override
+  Future<int> getMerchMarkupPercent() =>
+      _db.markupPercent('merch_markup_percent', 45);
+
+  @override
+  Future<void> savePartsMarkupPercent(int percent) =>
+      _db.setMarkupPercent('parts_markup_percent', percent);
+
+  @override
+  Future<void> saveMerchMarkupPercent(int percent) =>
+      _db.setMarkupPercent('merch_markup_percent', percent);
 
   @override
   Future<void> addInvoiceLaborLine({

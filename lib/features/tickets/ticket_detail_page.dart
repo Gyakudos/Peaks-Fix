@@ -504,7 +504,13 @@ class _StatusCard extends StatelessWidget {
               ),
               items: [
                 for (final option in TicketStatus.values)
-                  DropdownMenuItem(value: option, child: Text(option.label)),
+                  if (option != TicketStatus.closed ||
+                      status == TicketStatus.closed)
+                    DropdownMenuItem(
+                      value: option,
+                      enabled: option != TicketStatus.closed,
+                      child: Text(option.label),
+                    ),
               ],
               onChanged: (next) async {
                 if (next == null || next == status) return;
@@ -517,8 +523,7 @@ class _StatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Nothing is blocked: change this whenever the job actually '
-              'moves.',
+              'Close ready tickets from Checkout after final payment.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),

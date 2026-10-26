@@ -697,6 +697,18 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<int> markupPercent(String key, int fallback) async {
+    final value = int.tryParse(await _setting(key, '$fallback')) ?? fallback;
+    return value.clamp(0, 500).toInt();
+  }
+
+  Future<void> setMarkupPercent(String key, int value) async {
+    if (value < 0 || value > 500) {
+      throw ArgumentError.value(value, 'value', 'must be between 0 and 500');
+    }
+    await _putSetting(key, '$value');
+  }
+
   /// Creates the catalog and default settings on first run, and adds anything
   /// new to an existing catalog on later runs.
   ///
@@ -711,6 +723,8 @@ class AppDatabase extends _$AppDatabase {
         ('tag_prefix', 'G'),
         ('ticket_seq', '0'),
         ('currency', 'CAD'),
+        ('parts_markup_percent', '35'),
+        ('merch_markup_percent', '45'),
         ('warranty_days', '90'),
         (
           'warranty_terms',
@@ -1959,6 +1973,10 @@ class AppDatabase extends _$AppDatabase {
   /// Moves a ticket along the workflow. Never blocked: a solo shop works out of
   /// order, so this only records what happened.
   Future<void> setTicketStatus(int ticketId, TicketStatus status) async {
+    if (status == TicketStatus.closed) {
+      await closeTicketAfterPayment(ticketId);
+      return;
+    }
     await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
       TicketsCompanion(
         status: Value(status),
@@ -2183,6 +2201,149 @@ class AppDatabase extends _$AppDatabase {
         unitPriceCents: Value(unitPriceCents),
       ),
     );
+  }
+
+  Future<void> addCheckoutMerchLine({
+    required int ticketId,
+    required String description,
+    required int quantity,
+    required int unitCostCents,
+    required int unitPriceCents,
+  }) async {
+    final cleanDescription = description.trim();
+    if (cleanDescription.isEmpty || quantity < 1) {
+      throw ArgumentError('Enter a merchandise name and quantity.');
+    }
+    if (unitCostCents < 0 || unitPriceCents < 0) {
+      throw ArgumentError('Merchandise costs and prices must not be negative.');
+    }
+    final ticket = await (select(tickets)..where((row) => row.id.equals(ticketId)))
+        .getSingleOrNull();
+    if (ticket?.status != TicketStatus.ready) {
+      throw StateError('Merchandise can only be added during checkout.');
+    }
+    await into(ticketItems).insert(
+      TicketItemsCompanion.insert(
+        ticketId: ticketId,
+        kind: TicketItemKind.custom,
+        description: cleanDescription,
+        quantity: Value(quantity),
+        unitPriceCents: Value(unitPriceCents),
+        unitCostCents: Value(unitCostCents),
+      ),
+    );
+  }
+
+  Stream<List<Payment>> watchTicketPayments(int ticketId) =>
+      (select(payments)
+            ..where((payment) => payment.ticketId.equals(ticketId))
+            ..orderBy([(payment) => OrderingTerm.asc(payment.at)]))
+          .watch();
+
+  Future<void> recordTicketPayment({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) async {
+    if (amountCents < 1) {
+      throw ArgumentError.value(amountCents, 'amountCents', 'must be positive');
+    }
+    await transaction(() async {
+      final ticket = await (select(tickets)
+            ..where((row) => row.id.equals(ticketId)))
+          .getSingleOrNull();
+      if (ticket?.status != TicketStatus.ready) {
+        throw StateError('Payment can only be recorded during checkout.');
+      }
+      final items = await (select(ticketItems)
+            ..where((item) => item.ticketId.equals(ticketId)))
+          .get();
+      final subtotal = items.fold<int>(
+        0,
+        (sum, item) => sum + item.quantity * item.unitPriceCents,
+      );
+      final discount = switch (ticket!.invoiceDiscountKind) {
+        InvoiceDiscountKind.none => 0,
+        InvoiceDiscountKind.percentage =>
+          (subtotal * ticket.invoiceDiscountValue + 50) ~/ 100,
+        InvoiceDiscountKind.fixed =>
+          ticket.invoiceDiscountValue > subtotal
+              ? subtotal
+              : ticket.invoiceDiscountValue,
+      };
+      final total = subtotal - discount;
+      final paymentsForTicket = await (select(payments)
+            ..where((payment) => payment.ticketId.equals(ticketId)))
+          .get();
+      final paid = paymentsForTicket.fold<int>(
+        0,
+        (sum, payment) => sum +
+            (payment.kind == PaymentKind.refund
+                ? -payment.amountCents
+                : payment.amountCents),
+      );
+      if (amountCents > total - paid) {
+        throw StateError('Payment exceeds the outstanding balance.');
+      }
+      await into(payments).insert(
+        PaymentsCompanion.insert(
+          ticketId: ticketId,
+          amountCents: amountCents,
+          method: method,
+          kind: PaymentKind.balance,
+        ),
+      );
+    });
+  }
+
+  Future<void> closeTicketAfterPayment(int ticketId) async {
+    await transaction(() async {
+      final ticket = await (select(tickets)
+            ..where((row) => row.id.equals(ticketId)))
+          .getSingleOrNull();
+      if (ticket == null) throw StateError('Ticket was not found.');
+      if (ticket.status != TicketStatus.ready) {
+        throw StateError('Only ready tickets can be closed from checkout.');
+      }
+      final items = await (select(ticketItems)
+            ..where((item) => item.ticketId.equals(ticketId)))
+          .get();
+      final subtotal = items.fold<int>(
+        0,
+        (sum, item) => sum + item.quantity * item.unitPriceCents,
+      );
+      final discount = switch (ticket.invoiceDiscountKind) {
+        InvoiceDiscountKind.none => 0,
+        InvoiceDiscountKind.percentage =>
+          (subtotal * ticket.invoiceDiscountValue + 50) ~/ 100,
+        InvoiceDiscountKind.fixed =>
+          ticket.invoiceDiscountValue > subtotal
+              ? subtotal
+              : ticket.invoiceDiscountValue,
+      };
+      final paymentsForTicket = await (select(payments)
+            ..where((payment) => payment.ticketId.equals(ticketId)))
+          .get();
+      final paid = paymentsForTicket.fold<int>(
+        0,
+        (sum, payment) => sum +
+            (payment.kind == PaymentKind.refund
+                ? -payment.amountCents
+                : payment.amountCents),
+      );
+      if (paid < subtotal - discount) {
+        throw StateError('The invoice must be paid before closing this ticket.');
+      }
+      final now = DateTime.now();
+      await (update(tickets)..where((row) => row.id.equals(ticketId))).write(
+        TicketsCompanion(
+          status: const Value(TicketStatus.closed),
+          completedAt: Value(now),
+          pickedUpAt: Value(now),
+          updatedAt: Value(now),
+        ),
+      );
+    });
   }
 
   Future<void> removeInvoiceLaborLine({

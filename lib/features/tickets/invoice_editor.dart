@@ -279,7 +279,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                                   contentPadding: EdgeInsets.zero,
                                   title: Text(line.description),
                                   subtitle: Text(
-                                    '${_kindLabel(line.kind)} · '
+                                    '${line.isMerch ? 'Merchandise' : _kindLabel(line.kind)} · '
                                     '${line.quantity} × '
                                     '${_money(line.unitPriceCents)}',
                                   ),

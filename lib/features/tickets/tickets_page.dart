@@ -9,7 +9,9 @@ import 'ticket_widgets.dart';
 
 /// The default screen: every job in the shop, grouped by workflow stage.
 class TicketsPage extends StatelessWidget {
-  const TicketsPage({super.key});
+  const TicketsPage({super.key, this.closedOnly = false});
+
+  final bool closedOnly;
 
   static const double _maxContentWidth = 980;
 
@@ -20,11 +22,16 @@ class TicketsPage extends StatelessWidget {
     return StreamBuilder<List<TicketBoardEntry>>(
       stream: repository.watchBoard(),
       builder: (context, snapshot) {
-        final tickets = snapshot.data ?? const <TicketBoardEntry>[];
+        final allTickets = snapshot.data ?? const <TicketBoardEntry>[];
+        final tickets = allTickets
+            .where((ticket) => closedOnly
+                ? ticket.status == TicketStatus.closed
+                : ticket.status != TicketStatus.closed)
+            .toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Header(count: tickets.length),
+            _Header(count: tickets.length, closedOnly: closedOnly),
             Expanded(
               child: switch (snapshot) {
                 AsyncSnapshot(hasError: true) => const _Message(
@@ -37,14 +44,19 @@ class TicketsPage extends StatelessWidget {
                 AsyncSnapshot(hasData: false) => const Center(
                     child: CircularProgressIndicator(),
                   ),
-                _ when tickets.isEmpty => const _Message(
+                _ when tickets.isEmpty => _Message(
                     icon: Icons.assignment_outlined,
-                    title: 'No jobs yet',
-                    body:
-                        'Start with New repair. The device, its serial (or shop '
-                        'tag) and the customer go on one ticket.',
+                    title: closedOnly ? 'No closed tickets' : 'No jobs yet',
+                    body: closedOnly
+                        ? 'Closed tickets will appear here.'
+                        : 'Start with New repair. The device, its serial (or shop '
+                            'tag) and the customer go on one ticket.',
                   ),
-                _ => _Board(tickets: tickets, repository: repository),
+                _ => _Board(
+                    tickets: tickets,
+                    repository: repository,
+                    closedOnly: closedOnly,
+                  ),
               },
             ),
           ],
@@ -55,9 +67,10 @@ class TicketsPage extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.count});
+  const _Header({required this.count, required this.closedOnly});
 
   final int count;
+  final bool closedOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +98,7 @@ class _Header extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Tickets',
+                    closedOnly ? 'Closed Tickets' : 'Tickets',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -99,11 +112,12 @@ class _Header extends StatelessWidget {
                     ),
                 ],
               ),
-              FilledButton.icon(
-                onPressed: () => openNewRepair(context),
-                icon: const Icon(Icons.add),
-                label: const Text('New repair'),
-              ),
+              if (!closedOnly)
+                FilledButton.icon(
+                  onPressed: () => openNewRepair(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('New repair'),
+                ),
             ],
           ),
         ),
@@ -113,13 +127,37 @@ class _Header extends StatelessWidget {
 }
 
 class _Board extends StatelessWidget {
-  const _Board({required this.tickets, required this.repository});
+  const _Board({
+    required this.tickets,
+    required this.repository,
+    required this.closedOnly,
+  });
 
   final List<TicketBoardEntry> tickets;
   final TicketsRepository repository;
+  final bool closedOnly;
 
   @override
   Widget build(BuildContext context) {
+    if (closedOnly) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: TicketsPage._maxContentWidth,
+          ),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              _Group(
+                label: 'Closed',
+                tickets: tickets,
+                repository: repository,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final active = tickets.where((t) => t.status.isActive).toList();
     final finished = tickets.where((t) => !t.status.isActive).toList();
 

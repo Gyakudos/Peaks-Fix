@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/calendar/calendar_page.dart';
+import '../features/checkout/checkout_page.dart';
 import '../features/customers/customers_page.dart';
 import '../features/merch/merch_page.dart';
 import '../features/parts/parts_page.dart';
@@ -30,6 +31,18 @@ class ShopDestination {
       icon: Icons.receipt_long_outlined,
       selectedIcon: Icons.receipt_long,
       page: TicketsPage(),
+    ),
+    ShopDestination(
+      label: 'Closed Tickets',
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2,
+      page: TicketsPage(closedOnly: true),
+    ),
+    ShopDestination(
+      label: 'Checkout',
+      icon: Icons.point_of_sale_outlined,
+      selectedIcon: Icons.point_of_sale,
+      page: CheckoutPage(),
     ),
     ShopDestination(
       label: 'Calendar',

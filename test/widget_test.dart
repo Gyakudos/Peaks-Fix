@@ -9,6 +9,7 @@ import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/photo_templates.dart';
 import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
+import 'package:vola_fix/features/checkout/checkout_page.dart';
 import 'package:vola_fix/features/tickets/ticket_detail_page.dart';
 
 /// Stands in for SQLite so these tests never open a database file.
@@ -72,6 +73,8 @@ class FakeTicketsRepository implements TicketsRepository {
       StreamController<List<InventoryPart>>.broadcast();
   final StreamController<TicketDetailEntry?> _detailUpdates =
       StreamController<TicketDetailEntry?>.broadcast();
+  final Map<int, StreamController<InvoiceDraft?>> _invoiceUpdates = {};
+  final Map<int, StreamController<List<PaymentEntry>>> _paymentUpdates = {};
   final StreamController<PhotoChecklist> _checklistUpdates =
       StreamController<PhotoChecklist>.broadcast();
   final StreamController<List<TechnicalReportBlock>> _technicalUpdates =
@@ -84,6 +87,10 @@ class FakeTicketsRepository implements TicketsRepository {
   final List<StaffMemberEntry> staffRoster = [];
   final List<StaffMemberEntry> clockedInStaff = [];
   final Map<(int, ReportKind), String?> reportStaffAssignments = {};
+  final Map<int, InvoiceDraft> invoices = {};
+  final Map<int, List<PaymentEntry>> ticketPayments = {};
+  int partsMarkupPercent = 35;
+  int merchMarkupPercent = 45;
   final Map<int, List<CustomerDeviceEntry>> customerDevices = {};
 
   TicketDetailEntry? _detail;
@@ -294,13 +301,105 @@ class FakeTicketsRepository implements TicketsRepository {
   }
 
   @override
-  Stream<InvoiceDraft?> watchInvoice(int ticketId) => Stream.value(
+  Stream<InvoiceDraft?> watchInvoice(int ticketId) async* {
+    yield invoices[ticketId] ?? const InvoiceDraft(
+      discountKind: InvoiceDiscountKind.none,
+      discountValue: 0,
+      lines: [],
+    );
+    yield* (_invoiceUpdates[ticketId] ??= StreamController<InvoiceDraft?>.broadcast())
+        .stream;
+  }
+
+  @override
+  Stream<List<PaymentEntry>> watchTicketPayments(int ticketId) async* {
+    yield List.unmodifiable(ticketPayments[ticketId] ?? const []);
+    yield* (_paymentUpdates[ticketId] ??=
+            StreamController<List<PaymentEntry>>.broadcast())
+        .stream;
+  }
+
+  @override
+  Future<void> addCheckoutMerchLine({
+    required int ticketId,
+    required String description,
+    required int quantity,
+    required int unitCostCents,
+    required int unitPriceCents,
+  }) async {
+    final invoice = invoices[ticketId] ??
         const InvoiceDraft(
           discountKind: InvoiceDiscountKind.none,
           discountValue: 0,
           lines: [],
+        );
+    invoices[ticketId] = InvoiceDraft(
+      discountKind: invoice.discountKind,
+      discountValue: invoice.discountValue,
+      lines: [
+        ...invoice.lines,
+        InvoiceLine(
+          ticketItemId: invoice.lines.length + 1,
+          kind: TicketItemKind.custom,
+          description: description,
+          quantity: quantity,
+          unitPriceCents: unitPriceCents,
+          isMerch: true,
         ),
-      );
+      ],
+    );
+    _invoiceUpdates[ticketId]?.add(invoices[ticketId]!);
+  }
+
+  @override
+  Future<void> recordTicketPayment({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) async {
+    final entry = PaymentEntry(
+      id: (ticketPayments[ticketId]?.length ?? 0) + 1,
+      at: DateTime(2026),
+      amountCents: amountCents,
+      method: method,
+      kind: PaymentKind.balance,
+    );
+    final payments = ticketPayments.putIfAbsent(ticketId, () => []);
+    payments.add(entry);
+    _paymentUpdates[ticketId]?.add(List.unmodifiable(payments));
+  }
+
+  @override
+  Future<void> closeTicketAfterPayment(int ticketId) async {
+    final invoice = invoices[ticketId] ??
+        const InvoiceDraft(
+          discountKind: InvoiceDiscountKind.none,
+          discountValue: 0,
+          lines: [],
+        );
+    final paid = (ticketPayments[ticketId] ?? const <PaymentEntry>[])
+        .fold<int>(0, (sum, payment) => sum + payment.amountCents);
+    if (paid < invoice.totalCents) {
+      throw StateError('The invoice must be paid before closing this ticket.');
+    }
+    await updateStatus(ticketId, TicketStatus.closed);
+  }
+
+  @override
+  Future<int> getPartsMarkupPercent() async => partsMarkupPercent;
+
+  @override
+  Future<int> getMerchMarkupPercent() async => merchMarkupPercent;
+
+  @override
+  Future<void> savePartsMarkupPercent(int percent) async {
+    partsMarkupPercent = percent;
+  }
+
+  @override
+  Future<void> saveMerchMarkupPercent(int percent) async {
+    merchMarkupPercent = percent;
+  }
 
   @override
   Future<void> addInvoiceLaborLine({
@@ -598,7 +697,30 @@ class FakeTicketsRepository implements TicketsRepository {
   }
 
   @override
-  Future<void> updateStatus(int ticketId, TicketStatus status) async {}
+  Future<void> updateStatus(int ticketId, TicketStatus status) async {
+    final ticket = boardTickets.singleWhere((entry) => entry.id == ticketId);
+    final updated = TicketBoardEntry(
+      id: ticket.id,
+      number: ticket.number,
+      status: status,
+      customerName: ticket.customerName,
+      device: ticket.device,
+      complaint: ticket.complaint,
+      createdAt: ticket.createdAt,
+      dropOffAt: ticket.dropOffAt,
+      technicianStartAt: ticket.technicianStartAt,
+      partsArriveAt: ticket.partsArriveAt,
+      customerContactedAt: ticket.customerContactedAt,
+      pickedUpAt: status == TicketStatus.closed ? DateTime(2026) : ticket.pickedUpAt,
+      shopTag: ticket.shopTag,
+      serial: ticket.serial,
+      serialMissing: ticket.serialMissing,
+      deviceVariant: ticket.deviceVariant,
+      deviceSide: ticket.deviceSide,
+    );
+    boardTickets[boardTickets.indexOf(ticket)] = updated;
+    _boardUpdates.add(List.unmodifiable(boardTickets));
+  }
 
   @override
   Future<void> updateTicketDates(int ticketId, TicketDates dates) async {
@@ -951,16 +1073,117 @@ void main() {
     expect(repository.reportStaffAssignments[(7, ReportKind.intake)], 'tech-1');
   });
 
-  testWidgets('app builds with all six tabs', (WidgetTester tester) async {
+  testWidgets('app builds with all eight tabs', (WidgetTester tester) async {
     await tester.pumpWidget(VolaFixApp(tickets: FakeTicketsRepository()));
 
     expect(find.text('Peaks Fix'), findsWidgets);
     expect(find.text('Tickets'), findsWidgets);
+    expect(find.text('Closed Tickets'), findsWidgets);
+    expect(find.text('Checkout'), findsWidgets);
     expect(find.text('Calendar'), findsWidgets);
     expect(find.text('Customers'), findsWidgets);
     expect(find.text('Merch'), findsWidgets);
     expect(find.text('Parts'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
+  });
+
+  testWidgets('checkout adds merchandise, takes payment, and closes ticket',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.createTicket(
+      customerName: 'Checkout Customer',
+      customerPhone: '555-0100',
+      customerEmail: 'checkout@example.com',
+      deviceName: 'Repair console',
+      complaint: 'Broken HDMI port',
+    );
+    repository.invoices[7] = const InvoiceDraft(
+      discountKind: InvoiceDiscountKind.none,
+      discountValue: 0,
+      lines: [
+        InvoiceLine(
+          ticketItemId: 1,
+          kind: TicketItemKind.custom,
+          description: 'Repair labor',
+          quantity: 1,
+          unitPriceCents: 2500,
+        ),
+      ],
+    );
+    await repository.updateStatus(7, TicketStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopScope(
+          tickets: repository,
+          child: const CheckoutPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Balance due \$25.00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('checkout-open-7')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('checkout-add-merch')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('checkout-merch-name')),
+      'Shop T-shirt',
+    );
+    await tester.enterText(
+      find.byKey(const Key('checkout-merch-cost')),
+      '20.00',
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('45% markup: \$29.00'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('checkout-merch-add')));
+    await tester.pumpAndSettle();
+    expect(find.text('Shop T-shirt'), findsOneWidget);
+    expect(find.textContaining('Balance due \$54.00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('checkout-record-payment')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('checkout-payment-save')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Balance due \$0.00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('checkout-close-7')));
+    await tester.pumpAndSettle();
+    expect(repository.boardTickets.single.status, TicketStatus.closed);
+    expect(find.text('No tickets are ready for checkout.'), findsOneWidget);
+  });
+
+  testWidgets('closed tickets are shown in their own tab',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.createTicket(
+      customerName: 'Closed Customer',
+      customerPhone: '555-0100',
+      customerEmail: 'closed@example.com',
+      deviceName: 'Repaired console',
+      complaint: 'Fixed HDMI port',
+    );
+    await repository.updateStatus(7, TicketStatus.ready);
+    await repository.closeTicketAfterPayment(7);
+
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.pumpAndSettle();
+    expect(find.text('PF-000001'), findsNothing);
+
+    await tester.tap(find.text('Closed Tickets').first);
+    await tester.pumpAndSettle();
+    expect(find.text('PF-000001'), findsOneWidget);
   });
 
   testWidgets('calendar shows all ticket workflow dates and opens tickets',
@@ -1022,7 +1245,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-    expect(rail.selectedIndex, 3);
+    expect(rail.selectedIndex, 5);
   });
 
   testWidgets('narrow layout uses the bottom bar', (WidgetTester tester) async {
