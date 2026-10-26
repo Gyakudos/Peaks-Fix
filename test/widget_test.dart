@@ -2084,6 +2084,8 @@ void main() {
     await _open3dsReport1(tester, repository);
     repository.markAllPhotosCaptured();
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
 
     final complete = find.byKey(const Key('complete-report1'));
     await tester.scrollUntilVisible(
