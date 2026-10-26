@@ -32,6 +32,8 @@ class _NewRepairPageState extends State<NewRepairPage> {
   String? _side;
   bool _otherDevice = false;
   bool _serialMissing = false;
+  bool _serialPending = false;
+  int _serialRequest = 0;
 
   bool _saving = false;
   String? _error;
@@ -57,16 +59,46 @@ class _NewRepairPageState extends State<NewRepairPage> {
     super.dispose();
   }
 
-  void _setSerialMissing(bool? value) {
+  /// Ticking the box replaces the factory serial with a shop-applied one:
+  /// `PFS-` plus nine random digits, generated before the ticket exists so the
+  /// operator can write it on the device and see it on the form.
+  Future<void> _setSerialMissing(bool? value) async {
     final missing = value ?? false;
-    setState(() {
-      _serialMissing = missing;
-      if (missing) {
-        // A stale serial must never survive the device being marked as
-        // unlabelled; the shop tag becomes the identifier.
+    final token = ++_serialRequest;
+
+    if (!missing) {
+      setState(() {
+        _serialMissing = false;
+        _serialPending = false;
         _serial.clear();
-      }
+      });
+      return;
+    }
+
+    // A stale factory serial must never survive the device being marked as
+    // unlabelled.
+    setState(() {
+      _serialMissing = true;
+      _serialPending = true;
+      _serial.clear();
+      _error = null;
     });
+
+    try {
+      final applied = await ShopScope.of(context).nextShopSerial();
+      if (!mounted || token != _serialRequest || !_serialMissing) return;
+      setState(() {
+        _serial.text = applied;
+        _serialPending = false;
+      });
+    } catch (error) {
+      if (!mounted || token != _serialRequest) return;
+      setState(() {
+        _serialMissing = false;
+        _serialPending = false;
+        _error = 'Could not generate a shop serial: $error';
+      });
+    }
   }
 
   void _selectCategory(String? category) {
@@ -130,6 +162,9 @@ class _NewRepairPageState extends State<NewRepairPage> {
     if (!_serialMissing && _serial.text.trim().isEmpty) {
       return 'Enter the serial number, or tick “No serial number sticker”.';
     }
+    if (_serialMissing && _serial.text.trim().isEmpty) {
+      return 'Wait for the shop serial to finish generating.';
+    }
     if (_complaint.text.trim().isEmpty) {
       return 'Describe the reported fault.';
     }
@@ -158,7 +193,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
         deviceVariant: _deviceVariant.text,
         deviceSide: _side,
         photoTemplateKey: _photoTemplateKey,
-        serial: _serialMissing ? null : _serial.text,
+        serial: _serial.text,
         serialMissing: _serialMissing,
         complaint: _complaint.text,
       );
@@ -352,26 +387,43 @@ class _NewRepairPageState extends State<NewRepairPage> {
                         controller: _serial,
                         enabled: !_serialMissing,
                         textCapitalization: TextCapitalization.characters,
+                        style: _serialMissing
+                            ? TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              )
+                            : null,
                         decoration: InputDecoration(
-                          labelText: 'Serial number / IMEI',
-                          hintText: 'Exactly as printed on the sticker',
+                          labelText: _serialMissing
+                              ? 'Shop-applied serial'
+                              : 'Serial number / IMEI',
+                          hintText: _serialMissing
+                              ? 'Generated automatically'
+                              : 'Exactly as printed on the sticker',
                           border: const OutlineInputBorder(),
-                          helperText: _serialMissing
-                              ? 'Not recorded: the device has no readable sticker.'
-                              : null,
+                          helperText: _serialPending
+                              ? 'Generating a shop serial…'
+                              : _serialMissing
+                                  ? 'Replaces the missing sticker and goes on '
+                                      'the ticket and reports.'
+                                  : null,
                         ),
                       ),
                       const SizedBox(height: 4),
                       CheckboxListTile(
+                        key: const Key('intake-serial-missing'),
                         value: _serialMissing,
-                        onChanged: _setSerialMissing,
+                        onChanged: _saving
+                            ? null
+                            : (value) => _setSerialMissing(value),
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                         title: const Text('No serial number sticker'),
                         subtitle: const Text(
-                          'Missing, worn or illegible. Check this instead of '
-                          'typing a serial.',
+                          'Missing, worn or illegible. The shop issues a '
+                          'PFS- serial for this device instead.',
                         ),
                       ),
                       if (_serialMissing) const _ShopTagNote(),
@@ -404,7 +456,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
                     children: [
                       FilledButton.icon(
                         key: const Key('intake-save'),
-                        onPressed: _saving ? null : _save,
+                        onPressed: _saving || _serialPending ? null : _save,
                         icon: _saving
                             ? const SizedBox(
                                 width: 16,
@@ -553,9 +605,9 @@ class _ShopTagNote extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Shop tag G-000000000 is issued when you save this ticket: one '
-              'sticker on the outside of the device, one inside. That tag '
-              'becomes its identity.',
+              'Shop serial PFS-000000000 replaces the missing sticker. Saving '
+              'also issues shop tag G-000000000 — one sticker outside the '
+              'device, one inside.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSecondaryContainer,
                 height: 1.35,

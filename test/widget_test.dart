@@ -70,6 +70,9 @@ class FakeTicketsRepository implements TicketsRepository {
   Future<List<DeviceOption>> deviceCatalog() async => catalog;
 
   @override
+  Future<String> nextShopSerial() async => 'PFS-123456789';
+
+  @override
   Future<NewTicket> createTicket({
     required String customerName,
     required String customerPhone,
@@ -101,7 +104,7 @@ class FakeTicketsRepository implements TicketsRepository {
 
     const result = NewTicket(
       id: 7,
-      number: 'VF-000001',
+      number: 'PF-000001',
       shopTag: 'G-123456789',
       customerId: 1,
     );
@@ -286,7 +289,7 @@ void main() {
     expect(find.text('No serial number sticker'), findsOneWidget);
   });
 
-  testWidgets('missing serial sticker clears and disables the serial field',
+  testWidgets('a missing sticker swaps in a generated shop serial',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -306,17 +309,18 @@ void main() {
 
     final disabled = tester.widget<TextField>(field);
     expect(disabled.enabled, isFalse);
-    expect(disabled.controller!.text, isEmpty);
+    expect(disabled.controller!.text, 'PFS-123456789');
     expect(
-      find.textContaining('Shop tag G-000000000 is issued'),
+      find.textContaining('Shop serial PFS-000000000 replaces'),
       findsOneWidget,
     );
 
     await tester.tap(find.text('No serial number sticker'));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(field).enabled, isTrue);
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
     expect(
-      find.textContaining('Shop tag G-000000000 is issued'),
+      find.textContaining('Shop serial PFS-000000000 replaces'),
       findsNothing,
     );
   });
@@ -478,7 +482,7 @@ void main() {
     expect(created.complaint, 'No HDMI output');
 
     // The intake route is replaced by the new ticket.
-    expect(find.text('VF-000001'), findsWidgets);
+    expect(find.text('PF-000001'), findsWidgets);
     expect(find.text('No HDMI output'), findsOneWidget);
     expect(find.text('G-123456789'), findsWidgets);
   });
@@ -570,9 +574,10 @@ void main() {
 
     expect(repository.creations, hasLength(1));
     final created = repository.creations.single;
-    expect(created.serial, isNull);
+    expect(created.serial, 'PFS-123456789');
     expect(created.serialMissing, isTrue);
-    expect(find.text('not present'), findsOneWidget);
+    expect(find.text('SHOP SERIAL'), findsOneWidget);
+    expect(find.text('PFS-123456789'), findsWidgets);
   });
 
   testWidgets('a single Joy-Con asks which side it is', (tester) async {

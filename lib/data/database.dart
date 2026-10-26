@@ -169,7 +169,7 @@ class Services extends Table {
 class Tickets extends Table {
   IntColumn get id => integer().autoIncrement()();
 
-  /// Human-facing job number, e.g. `VF-000123`. Never reused.
+  /// Human-facing job number, e.g. `PF-000123`. Never reused.
   TextColumn get number => text().withLength(min: 1, max: 24)();
 
   IntColumn get customerId => integer().references(Customers, #id)();
@@ -189,10 +189,12 @@ class Tickets extends Table {
   /// single Joy-Con, where the model alone does not identify the unit.
   TextColumn get deviceSide => text().nullable()();
 
+  /// Serial exactly as printed on the device, or the shop-applied serial
+  /// (`PFS-482913057`) when the factory sticker is gone.
   TextColumn get serial => text().nullable()();
 
-  /// No readable factory serial/IMEI sticker was present. The shop tag still
-  /// identifies the unit; this flag records why the serial is blank.
+  /// No readable factory serial/IMEI sticker was present. [serial] then holds
+  /// the shop-applied serial, so a missing sticker still has a stable identity.
   BoolColumn get serialMissing =>
       boolean().withDefault(const Constant(false))();
 
@@ -551,7 +553,8 @@ class AppDatabase extends _$AppDatabase {
     await transaction(() async {
       const defaults = <(String, String)>[
         ('shop_name', 'Peaks Fix'),
-        ('ticket_prefix', 'VF'),
+        ('ticket_prefix', 'PF'),
+        ('serial_prefix', 'PFS'),
         ('tag_prefix', 'G'),
         ('ticket_seq', '0'),
         ('currency', 'CAD'),
@@ -572,13 +575,18 @@ class AppDatabase extends _$AppDatabase {
         );
       }
 
-      // The app was renamed from Vola Fix. Carry the old default across, but
-      // never overwrite a shop name the operator has already changed.
+      // The app was renamed from Vola Fix. Carry the old defaults across, but
+      // never overwrite values the operator has already changed.
       await (update(settings)
             ..where(
               (s) => s.key.equals('shop_name') & s.value.equals('Vola Fix'),
             ))
           .write(const SettingsCompanion(value: Value('Peaks Fix')));
+      await (update(settings)
+            ..where(
+              (s) => s.key.equals('ticket_prefix') & s.value.equals('VF'),
+            ))
+          .write(const SettingsCompanion(value: Value('PF')));
 
       Future<void> photoTemplate(PhotoTemplateSeed seed) async {
         final row = await (select(photoTemplates)
@@ -983,18 +991,40 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Next job number, e.g. `VF-000123`.
+  /// Next job number, e.g. `PF-000123`.
   ///
   /// Numbered from a counter in [settings] rather than the row id, so deleting
   /// a ticket can never cause a number to be reused.
   Future<String> nextTicketNumber() => transaction(_allocateTicketNumber);
 
   Future<String> _allocateTicketNumber() async {
-    final prefix = await _setting('ticket_prefix', 'VF');
+    final prefix = await _setting('ticket_prefix', 'PF');
     final current = int.tryParse(await _setting('ticket_seq', '0')) ?? 0;
     final next = current + 1;
     await _putSetting('ticket_seq', '$next');
     return '$prefix-${next.toString().padLeft(6, '0')}';
+  }
+
+  /// Issues a shop-applied serial, e.g. `PFS-482913057`, for a device whose
+  /// factory serial sticker is missing, worn or illegible.
+  ///
+  /// Random rather than sequential: the value is written on the shop's own
+  /// sticker and read back by eye, so it must not be guessable from another
+  /// ticket. Checked against [tickets] so no two jobs ever share one.
+  Future<String> nextShopSerial() => transaction(_allocateShopSerial);
+
+  Future<String> _allocateShopSerial() async {
+    final prefix = await _setting('serial_prefix', 'PFS');
+    for (var attempt = 0; attempt < 64; attempt++) {
+      final digits = _random.nextInt(1000000000).toString().padLeft(9, '0');
+      final serial = '$prefix-$digits';
+      final taken = await (select(tickets)
+            ..where((t) => t.serial.equals(serial)))
+          .getSingleOrNull();
+      if (taken != null) continue;
+      return serial;
+    }
+    throw StateError('Could not allocate an unused shop-applied serial.');
   }
 
   /// Issues a shop tag, e.g. `G-482913057`: the prefix from settings plus nine
@@ -1143,6 +1173,14 @@ class AppDatabase extends _$AppDatabase {
       }
 
       final number = await _allocateTicketNumber();
+      // A missing sticker always gets a shop-applied serial, even if the
+      // caller only ticked the box and sent no value.
+      final typedSerial = (serial ?? '').trim();
+      final effectiveSerial = typedSerial.isNotEmpty
+          ? typedSerial
+          : serialMissing
+              ? await _allocateShopSerial()
+              : '';
       final ticketId = await into(tickets).insert(
         TicketsCompanion.insert(
           number: number,
@@ -1155,9 +1193,7 @@ class AppDatabase extends _$AppDatabase {
             (deviceVariant ?? '').trim().isEmpty ? null : deviceVariant!.trim(),
           ),
           deviceSide: Value(side.isEmpty ? null : side),
-          serial: Value(
-            (serial ?? '').trim().isEmpty ? null : serial!.trim(),
-          ),
+          serial: Value(effectiveSerial.isEmpty ? null : effectiveSerial),
           serialMissing: Value(serialMissing),
           complaint: complaint.trim(),
           photoTemplateKey: Value(templateKey),

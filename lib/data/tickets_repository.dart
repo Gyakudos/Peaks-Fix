@@ -38,7 +38,8 @@ class TicketBoardEntry {
   /// single Joy-Con.
   final String? deviceSide;
 
-  /// Serial when it exists, otherwise the shop tag that replaces it.
+  /// Serial when recorded — factory or shop-applied — otherwise a note saying
+  /// no serial was captured.
   String get identity =>
       serial ?? (serialMissing ? 'no serial sticker' : 'serial not recorded');
 
@@ -171,6 +172,10 @@ abstract class TicketsRepository {
 
   Future<List<DeviceOption>> deviceCatalog();
 
+  /// A fresh `PFS-#########` for a device whose factory serial sticker is
+  /// missing. Previewed in intake before the ticket exists.
+  Future<String> nextShopSerial();
+
   Future<NewTicket> createTicket({
     required String customerName,
     required String customerPhone,
@@ -277,6 +282,9 @@ class DriftTicketsRepository implements TicketsRepository {
         ),
     ];
   }
+
+  @override
+  Future<String> nextShopSerial() => _db.nextShopSerial();
 
   @override
   Future<NewTicket> createTicket({

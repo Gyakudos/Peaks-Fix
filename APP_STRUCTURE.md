@@ -67,8 +67,9 @@ Merging them would corrupt both stock counts and revenue reporting.
   Documents, so it never syncs to OneDrive or gets moved by accident.
 - Seeded on first launch: five device categories (Consoles, Retro consoles,
   Portable Consoles, Handheld PCs, Controllers) with 78 pickable models, 12
-  services, and settings (shop name, `VF` ticket prefix, `G` tag prefix,
-  90-day warranty default and terms). Seeding is additive and matched by name:
+  services, and settings (shop name, `PF` ticket prefix, `PFS` shop-serial
+  prefix, `G` tag prefix, 90-day warranty default and terms). Seeding is
+  additive and matched by name:
   later launches only add rows that are missing, so shop edits, custom models
   and added categories survive, and an existing database never needs to be wiped
   to gain a new model.
@@ -96,8 +97,13 @@ Merging them would corrupt both stock counts and revenue reporting.
   model, and its slots are copied into `ticket_photo_slots` on the ticket. A
   later template edit therefore never rewrites an open job, and each ticket can
   gain its own captured photo paths.
-- Ticket numbers come from a stored counter (`VF-000001`), so they are never
+- Ticket numbers come from a stored counter (`PF-000001`), so they are never
   reused even if a ticket is deleted.
+- When the factory sticker is missing, intake ticks **No serial number sticker**
+  and the app issues a shop-applied serial (`PFS-482913057`): random nine digits,
+  checked against every stored serial, saved in `tickets.serial` with
+  `serial_missing = true`. A ticket can never be missing a sticker and a serial
+  at the same time.
 - Shop tags are random nine-digit numbers (`G-482913057`), recorded permanently
   and never issued twice; two stickers per tag, one outside the device and one
   inside.
@@ -109,7 +115,8 @@ Merging them would corrupt both stock counts and revenue reporting.
 
 - **Shell** — done: persisted window geometry, custom Flutter title bar, tray
   icon, single instance, rail/bottom-bar navigation.
-- **Data** — drift/SQLite, seeded catalog, ticket numbering, shop tags.
+- **Data** — drift/SQLite, seeded catalog, ticket numbering, shop tags and
+  shop-applied serials.
 - **Tickets** — real board, working intake (saves a ticket and issues its tag)
   and a ticket page where the status can be moved. Intake previews the Report 1
   photo checklist for the selected device, and the ticket keeps its own copy.

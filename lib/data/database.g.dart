@@ -2565,7 +2565,7 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
 class Ticket extends DataClass implements Insertable<Ticket> {
   final int id;
 
-  /// Human-facing job number, e.g. `VF-000123`. Never reused.
+  /// Human-facing job number, e.g. `PF-000123`. Never reused.
   final String number;
   final int customerId;
 

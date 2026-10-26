@@ -118,7 +118,8 @@ class _TicketBody extends StatelessWidget {
                           emphasise: true,
                         ),
                         _Meta(
-                          label: 'Serial',
+                          label:
+                              summary.serialMissing ? 'Shop serial' : 'Serial',
                           value: summary.serial ??
                               (summary.serialMissing
                                   ? 'not present'

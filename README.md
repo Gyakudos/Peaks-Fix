@@ -19,9 +19,10 @@ end to end. Report editors and the remaining tabs are still being built.
   a rail on wide windows and a bottom bar on narrow ones.
 - **Tickets board** — `In the shop` and `Finished`, with a real intake form.
 - **Intake** — customer name/phone/email, category → brand → model, optional
-  model number, serial or **No serial number sticker**, fault, and a shop tag
-  issued in the same transaction. A single Joy-Con adds a **Left / Right**
-  selector, and the side travels with the ticket.
+  model number, serial or **No serial number sticker** (which issues a
+  shop-applied `PFS-` serial), fault, and a shop tag issued in the same
+  transaction. A single Joy-Con adds a **Left / Right** selector, and the side
+  travels with the ticket.
 - **Device catalog** — 5 categories, 78 pickable models and 12 services, seeded
   additively so upgrades never wipe shop edits.
 - **Report 1 checklist** — per-device photo templates (3DS gets its own five

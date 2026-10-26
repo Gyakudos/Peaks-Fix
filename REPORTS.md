@@ -13,10 +13,11 @@ Purpose: liability and a baseline for the client report.
 - Device identity: category → brand → model, serial/IMEI, accessories received,
   and the **shop tag** issued at intake (`G-482913057`).
 - Serial field plus a **`No serial number sticker` checkbox** — the single
-  switch for "there is nothing readable on this unit". Checking it disables and
-  clears the serial field, so a blank serial is never ambiguous: it was either
-  typed, or the sticker is gone and the box is ticked. It does not affect tag
-  issuance, because every device gets a tag.
+  switch for "there is nothing readable on this unit". Checking it generates a
+  shop-applied serial (`PFS-482913057`), fills the now-disabled serial field with
+  it, and stores it on the ticket. A serial is therefore never blank by accident:
+  it was either typed from the factory sticker, or the shop issued one. The tag
+  is still issued as well, because every device gets one.
 - Cosmetic checklist by area: screen, bezel, front shell, back shell, corners,
   ports, buttons, hinge/stand, vents.
 - Condition scale: `good / scuffed / scratched / cracked / missing`.
@@ -163,15 +164,19 @@ page leads back to exactly one unit:
 
 | | Printed as |
 | --- | --- |
-| Ticket number | `VF-000123` |
+| Ticket number | `PF-000123` |
+| Serial (factory) | `XKW1000123` |
+| Serial (shop-applied) | `PFS-482913057` |
 | Shop tag | `G-482913057` |
 
 - The shop tag is the one stuck on the device, outside and inside, so it is the
-  fastest way to match paper to hardware — and the only one that still works
-  when the factory serial is gone.
-- When a factory serial exists it is printed next to the tag. When it does not,
-  the report reads `serial: not present — shop tag issued` rather than leaving
-  a blank that looks like an oversight.
+  fastest way to match paper to hardware — and it still works when the factory
+  serial is gone.
+- When a factory serial exists it is printed next to the tag. When the sticker
+  is missing, the report prints the shop-applied `PFS-` serial the intake form
+  generated — never a blank that looks like an oversight.
+- The shop-applied serial is written on the device's intake label and cannot be
+  guessed from the ticket number, so it is safe to quote to a customer.
 - The tag is **stored on the report revision**, not looked up live, so a sent
   report keeps the tag it was issued with even if the sticker is later replaced.
 - The client report repeats the tag beside the collection details, so the
