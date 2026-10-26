@@ -22,6 +22,23 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build windows --release
+      - name: Smoke test Windows startup
+        shell: pwsh
+        run: |
+          $appPath = Resolve-Path 'build/windows/x64/runner/Release/vola_fix.exe'
+          $process = Start-Process -FilePath $appPath -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            $process.Refresh()
+            if ($process.HasExited) {
+              throw "vola_fix.exe exited during startup with code $($process.ExitCode)."
+            }
+            Write-Host 'vola_fix.exe stayed running during the startup smoke test.'
+          } finally {
+            if (!$process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
       - name: Package Windows build
         shell: pwsh
         run: |
