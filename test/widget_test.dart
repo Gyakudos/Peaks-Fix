@@ -7,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/app.dart';
 import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/photo_templates.dart';
+import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
+import 'package:vola_fix/features/tickets/ticket_detail_page.dart';
 
 /// Stands in for SQLite so these tests never open a database file.
 class FakeTicketsRepository implements TicketsRepository {
@@ -79,6 +81,9 @@ class FakeTicketsRepository implements TicketsRepository {
   final List<InventoryPart> inventoryParts = [];
   final List<RequiredPart> requiredParts = [];
   final List<CustomerRecord> customers = [];
+  final List<StaffMemberEntry> staffRoster = [];
+  final List<StaffMemberEntry> clockedInStaff = [];
+  final Map<int, String?> ticketStaffAssignments = {};
   final Map<int, List<CustomerDeviceEntry>> customerDevices = {};
 
   TicketDetailEntry? _detail;
@@ -322,6 +327,28 @@ class FakeTicketsRepository implements TicketsRepository {
   Stream<TicketDetailEntry?> watchTicket(int ticketId) async* {
     yield _detail;
     yield* _detailUpdates.stream;
+  }
+
+  @override
+  Stream<List<StaffMemberEntry>> watchClockedInStaff() =>
+      Stream.value(List.unmodifiable(clockedInStaff));
+
+  @override
+  Stream<StaffMemberEntry?> watchTicketStaffAssignment(int ticketId) {
+    final staffId = ticketStaffAssignments[ticketId];
+    for (final staff in staffRoster) {
+      if (staff.id == staffId) return Stream.value(staff);
+    }
+    return Stream.value(null);
+  }
+
+  @override
+  Future<void> setTicketStaffAssignment(int ticketId, String? staffId) async {
+    if (staffId != null &&
+        !clockedInStaff.any((staff) => staff.id == staffId)) {
+      throw StateError('Staff must be active and clocked in to be assigned.');
+    }
+    ticketStaffAssignments[ticketId] = staffId;
   }
 
   @override
@@ -851,6 +878,52 @@ void main() {
 
     expect(find.text('PF-000001'), findsNothing);
     expect(find.text('PF-000001 deleted'), findsOneWidget);
+  });
+
+  testWidgets('ticket staff selector offers signed-in staff only',
+      (WidgetTester tester) async {
+    final repository = FakeTicketsRepository();
+    await repository.createTicket(
+      customerName: 'Test Customer',
+      customerPhone: '555-0100',
+      customerEmail: 'test@example.com',
+      deviceName: 'Test console',
+      complaint: 'Does not power on',
+    );
+    const clockedInTech = StaffMemberEntry(
+      id: 'tech-1',
+      name: 'Alex Tech',
+      job: 'Tech 2',
+      isActive: true,
+    );
+    const offShiftTech = StaffMemberEntry(
+      id: 'tech-2',
+      name: 'Sam Tech',
+      job: 'Tech 1',
+      isActive: true,
+    );
+    repository.staffRoster.addAll([clockedInTech, offShiftTech]);
+    repository.clockedInStaff.add(clockedInTech);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopScope(
+          tickets: repository,
+          child: const TicketDetailPage(ticketId: 7),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final selector = find.byKey(const Key('ticket-staff-7'));
+    await tester.tap(selector);
+    await tester.pumpAndSettle();
+    expect(find.text('Alex Tech · Tech 2'), findsOneWidget);
+    expect(find.text('Sam Tech · Tech 1'), findsNothing);
+
+    await tester.tap(find.text('Alex Tech · Tech 2'));
+    await tester.pumpAndSettle();
+    expect(repository.ticketStaffAssignments[7], 'tech-1');
   });
 
   testWidgets('app builds with all six tabs', (WidgetTester tester) async {

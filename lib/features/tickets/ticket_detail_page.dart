@@ -168,6 +168,8 @@ class _TicketBody extends StatelessWidget {
             const SizedBox(height: 16),
             _StatusCard(ticketId: summary.id, status: summary.status),
             const SizedBox(height: 16),
+            _TicketStaffAssignment(ticketId: summary.id),
+            const SizedBox(height: 16),
             _TextCard(
               title: 'Reported fault',
               body: summary.complaint,
@@ -191,6 +193,105 @@ class _TicketBody extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TicketStaffAssignment extends StatefulWidget {
+  const _TicketStaffAssignment({required this.ticketId});
+
+  final int ticketId;
+
+  @override
+  State<_TicketStaffAssignment> createState() =>
+      _TicketStaffAssignmentState();
+}
+
+class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
+  bool _saving = false;
+
+  Future<void> _save(String? staffId) async {
+    setState(() => _saving = true);
+    try {
+      await ShopScope.of(context)
+          .setTicketStaffAssignment(widget.ticketId, staffId);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not assign staff: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = ShopScope.of(context);
+    return StreamBuilder<List<StaffMemberEntry>>(
+      stream: repository.watchClockedInStaff(),
+      builder: (context, activeSnapshot) => StreamBuilder<StaffMemberEntry?>(
+        stream: repository.watchTicketStaffAssignment(widget.ticketId),
+        builder: (context, assignmentSnapshot) {
+          final assigned = assignmentSnapshot.data;
+          final activeStaff = activeSnapshot.data ?? const [];
+          final options = [
+            ...activeStaff,
+            if (assigned != null &&
+                !activeStaff.any((staff) => staff.id == assigned.id))
+              assigned,
+          ];
+          final assignedIsClockedIn = assigned != null &&
+              activeStaff.any((staff) => staff.id == assigned.id);
+
+          return Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Staff', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('ticket-staff-${widget.ticketId}'),
+                    initialValue: assigned?.id ?? '',
+                    decoration: const InputDecoration(
+                      labelText: 'Assigned staff',
+                      helperText:
+                          'Only active staff who are currently signed in can be assigned.',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('Unassigned'),
+                      ),
+                      for (final staff in options)
+                        DropdownMenuItem(
+                          value: staff.id,
+                          enabled: assigned?.id != staff.id ||
+                              assignedIsClockedIn,
+                          child: Text(
+                            assigned?.id == staff.id && !assignedIsClockedIn
+                                ? '${staff.name} · off shift'
+                                : '${staff.name} · ${staff.job}',
+                          ),
+                        ),
+                    ],
+                    onChanged: _saving ? null : _save,
+                  ),
+                  if (!activeSnapshot.hasData &&
+                      !assignmentSnapshot.hasData) ...[
+                    const SizedBox(height: 8),
+                    const LinearProgressIndicator(),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

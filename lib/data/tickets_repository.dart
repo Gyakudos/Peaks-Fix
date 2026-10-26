@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import 'database.dart';
@@ -178,6 +180,28 @@ class DeviceOption {
 
   /// e.g. `Nintendo 3DS`.
   final String label;
+}
+
+class StaffMemberEntry {
+  const StaffMemberEntry({
+    required this.id,
+    required this.name,
+    required this.job,
+    required this.isActive,
+  });
+
+  final String id;
+  final String name;
+  final String job;
+  final bool isActive;
+
+  factory StaffMemberEntry.fromJson(Map<String, dynamic> json) =>
+      StaffMemberEntry(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        job: json['job'] as String,
+        isActive: json['isActive'] as bool? ?? true,
+      );
 }
 
 class InventoryPart {
@@ -469,6 +493,12 @@ abstract class TicketsRepository {
   });
 
   Stream<TicketDetailEntry?> watchTicket(int ticketId);
+
+  Stream<List<StaffMemberEntry>> watchClockedInStaff();
+
+  Stream<StaffMemberEntry?> watchTicketStaffAssignment(int ticketId);
+
+  Future<void> setTicketStaffAssignment(int ticketId, String? staffId);
 
   /// The Report 1 shot list stored on the ticket, in the order it was seeded.
   Stream<PhotoChecklist> watchPhotoChecklist(int ticketId);
@@ -872,6 +902,72 @@ class DriftTicketsRepository implements TicketsRepository {
         ticketId: ticketId,
         ticketItemId: ticketItemId,
       );
+
+  @override
+  Stream<List<StaffMemberEntry>> watchClockedInStaff() {
+    final query = _db.select(_db.settings)
+      ..where((setting) => setting.key.isIn([
+            'staff_roster',
+            'staff_clock_sessions',
+          ]));
+    return query.watch().map((rows) {
+      final values = {for (final row in rows) row.key: row.value};
+      final roster = (jsonDecode(values['staff_roster'] ?? '[]')
+              as List<dynamic>)
+          .map((item) =>
+              StaffMemberEntry.fromJson(item as Map<String, dynamic>))
+          .toList();
+      final clockedInIds = (jsonDecode(values['staff_clock_sessions'] ?? '[]')
+              as List<dynamic>)
+          .map((item) => item as Map<String, dynamic>)
+          .where((session) => session['clockOutAt'] == null)
+          .map((session) => session['staffId'] as String)
+          .toSet();
+      return roster
+          .where((staff) => staff.isActive && clockedInIds.contains(staff.id))
+          .toList()
+        ..sort((first, second) => first.name.compareTo(second.name));
+    });
+  }
+
+  @override
+  Stream<StaffMemberEntry?> watchTicketStaffAssignment(int ticketId) {
+    final assignmentKey = 'ticket_staff_$ticketId';
+    final query = _db.select(_db.settings)
+      ..where((setting) => setting.key.isIn([
+            'staff_roster',
+            assignmentKey,
+          ]));
+    return query.watch().map((rows) {
+      final values = {for (final row in rows) row.key: row.value};
+      final staffId = values[assignmentKey];
+      if (staffId == null || staffId.isEmpty) return null;
+      final roster = (jsonDecode(values['staff_roster'] ?? '[]')
+              as List<dynamic>)
+          .map((item) =>
+              StaffMemberEntry.fromJson(item as Map<String, dynamic>));
+      for (final staff in roster) {
+        if (staff.id == staffId) return staff;
+      }
+      return null;
+    });
+  }
+
+  @override
+  Future<void> setTicketStaffAssignment(int ticketId, String? staffId) async {
+    if (staffId != null) {
+      final available = await watchClockedInStaff().first;
+      if (!available.any((staff) => staff.id == staffId)) {
+        throw StateError('Staff must be active and clocked in to be assigned.');
+      }
+    }
+    await _db.into(_db.settings).insertOnConflictUpdate(
+          SettingsCompanion.insert(
+            key: 'ticket_staff_$ticketId',
+            value: staffId ?? '',
+          ),
+        );
+  }
 
   @override
   Stream<TicketDetailEntry?> watchTicket(int ticketId) {
