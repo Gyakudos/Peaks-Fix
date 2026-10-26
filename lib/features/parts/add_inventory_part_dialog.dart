@@ -223,7 +223,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 key: const Key('inventory-part-retail-cost'),
                 controller: _retailCostController,
                 readOnly: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Retail Parts Cost',
                   prefixText: '\$',
                   helperText: 'Calculated with $_markupPercent% markup.',
