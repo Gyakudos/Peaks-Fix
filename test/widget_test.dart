@@ -83,7 +83,7 @@ class FakeTicketsRepository implements TicketsRepository {
   final List<CustomerRecord> customers = [];
   final List<StaffMemberEntry> staffRoster = [];
   final List<StaffMemberEntry> clockedInStaff = [];
-  final Map<int, String?> ticketStaffAssignments = {};
+  final Map<(int, ReportKind), String?> reportStaffAssignments = {};
   final Map<int, List<CustomerDeviceEntry>> customerDevices = {};
 
   TicketDetailEntry? _detail;
@@ -334,8 +334,11 @@ class FakeTicketsRepository implements TicketsRepository {
       Stream.value(List.unmodifiable(clockedInStaff));
 
   @override
-  Stream<StaffMemberEntry?> watchTicketStaffAssignment(int ticketId) {
-    final staffId = ticketStaffAssignments[ticketId];
+  Stream<StaffMemberEntry?> watchReportStaffAssignment(
+    int ticketId,
+    ReportKind reportKind,
+  ) {
+    final staffId = reportStaffAssignments[(ticketId, reportKind)];
     for (final staff in staffRoster) {
       if (staff.id == staffId) return Stream.value(staff);
     }
@@ -343,12 +346,16 @@ class FakeTicketsRepository implements TicketsRepository {
   }
 
   @override
-  Future<void> setTicketStaffAssignment(int ticketId, String? staffId) async {
+  Future<void> setReportStaffAssignment({
+    required int ticketId,
+    required ReportKind reportKind,
+    required String? staffId,
+  }) async {
     if (staffId != null &&
         !clockedInStaff.any((staff) => staff.id == staffId)) {
       throw StateError('Staff must be active and clocked in to be assigned.');
     }
-    ticketStaffAssignments[ticketId] = staffId;
+    reportStaffAssignments[(ticketId, reportKind)] = staffId;
   }
 
   @override
@@ -915,7 +922,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final selector = find.byKey(const Key('ticket-staff-7'));
+    await tester.tap(find.byKey(const Key('report1-checklist')));
+    await tester.pumpAndSettle();
+    final selector = find.byKey(const Key('report-staff-intake-7'));
     await tester.tap(selector);
     await tester.pumpAndSettle();
     expect(find.text('Alex Tech · Tech 2'), findsOneWidget);
@@ -923,7 +932,7 @@ void main() {
 
     await tester.tap(find.text('Alex Tech · Tech 2'));
     await tester.pumpAndSettle();
-    expect(repository.ticketStaffAssignments[7], 'tech-1');
+    expect(repository.reportStaffAssignments[(7, ReportKind.intake)], 'tech-1');
   });
 
   testWidgets('app builds with all six tabs', (WidgetTester tester) async {

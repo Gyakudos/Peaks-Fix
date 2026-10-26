@@ -37,7 +37,7 @@ class TicketDetailPage extends StatelessWidget {
             ),
           );
         }
-        if (entry == null) {
+                      labelText: 'Staff',
           return _shell(
             context,
             title: 'Ticket',
@@ -168,8 +168,6 @@ class _TicketBody extends StatelessWidget {
             const SizedBox(height: 16),
             _StatusCard(ticketId: summary.id, status: summary.status),
             const SizedBox(height: 16),
-            _TicketStaffAssignment(ticketId: summary.id),
-            const SizedBox(height: 16),
             _TextCard(
               title: 'Reported fault',
               body: summary.complaint,
@@ -199,9 +197,15 @@ class _TicketBody extends StatelessWidget {
 }
 
 class _TicketStaffAssignment extends StatefulWidget {
-  const _TicketStaffAssignment({required this.ticketId});
+  const _TicketStaffAssignment({
+    required this.ticketId,
+    required this.reportKind,
+    required this.label,
+  });
 
   final int ticketId;
+  final ReportKind reportKind;
+  final String label;
 
   @override
   State<_TicketStaffAssignment> createState() =>
@@ -214,8 +218,11 @@ class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
   Future<void> _save(String? staffId) async {
     setState(() => _saving = true);
     try {
-      await ShopScope.of(context)
-          .setTicketStaffAssignment(widget.ticketId, staffId);
+      await ShopScope.of(context).setReportStaffAssignment(
+        ticketId: widget.ticketId,
+        reportKind: widget.reportKind,
+        staffId: staffId,
+      );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -233,7 +240,10 @@ class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
     return StreamBuilder<List<StaffMemberEntry>>(
       stream: repository.watchClockedInStaff(),
       builder: (context, activeSnapshot) => StreamBuilder<StaffMemberEntry?>(
-        stream: repository.watchTicketStaffAssignment(widget.ticketId),
+        stream: repository.watchReportStaffAssignment(
+          widget.ticketId,
+          widget.reportKind,
+        ),
         builder: (context, assignmentSnapshot) {
           final assigned = assignmentSnapshot.data;
           final activeStaff = activeSnapshot.data ?? const [];
@@ -253,13 +263,18 @@ class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Staff', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    widget.label,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    key: ValueKey('ticket-staff-${widget.ticketId}'),
+                    key: ValueKey(
+                      'report-staff-${widget.reportKind.name}-${widget.ticketId}',
+                    ),
                     initialValue: assigned?.id ?? '',
                     decoration: const InputDecoration(
-                      labelText: 'Assigned staff',
+                      labelText: 'Staff',
                       helperText:
                           'Only active staff who are currently signed in can be assigned.',
                     ),
@@ -297,6 +312,32 @@ class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
   }
 }
 
+class _ReportSubtitle extends StatelessWidget {
+  const _ReportSubtitle({
+    required this.ticketId,
+    required this.reportKind,
+    required this.fallbackText,
+  });
+
+  final int ticketId;
+  final ReportKind reportKind;
+  final String fallbackText;
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = ShopScope.of(context);
+    return StreamBuilder<StaffMemberEntry?>(
+      stream: repository.watchReportStaffAssignment(ticketId, reportKind),
+      builder: (context, snapshot) {
+        final staff = snapshot.data;
+        return Text(
+          staff == null ? fallbackText : '$fallbackText · ${staff.name}',
+        );
+      },
+    );
+  }
+}
+
 class _ReportSection extends StatefulWidget {
   const _ReportSection({
     super.key,
@@ -311,7 +352,7 @@ class _ReportSection extends StatefulWidget {
   });
 
   final String title;
-  final String subtitle;
+  final Widget subtitle;
   final IconData icon;
   final String status;
   final Widget child;
@@ -344,7 +385,7 @@ class _ReportSectionState extends State<_ReportSection> {
                 : theme.colorScheme.primary,
           ),
           title: Text(widget.title),
-          subtitle: Text(widget.subtitle),
+          subtitle: widget.subtitle,
           onTap: _toggle,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -590,8 +631,17 @@ class _ReportsCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  subtitle: Text(_intakeSummary(checklist)),
+                  subtitle: _ReportSubtitle(
+                    ticketId: ticketId,
+                    reportKind: ReportKind.intake,
+                    fallbackText: _intakeSummary(checklist),
+                  ),
                   children: [
+                      _TicketStaffAssignment(
+                        ticketId: ticketId,
+                        reportKind: ReportKind.intake,
+                        label: 'Checked in by',
+                      ),
                     if (checklist == null)
                       const Padding(
                         padding: EdgeInsets.only(top: 8),
@@ -729,9 +779,13 @@ class _ReportsCard extends StatelessWidget {
                 _ReportSection(
                   key: const Key('report2-row'),
                   title: 'Technical',
-                  subtitle: report1CompletedAt == null
-                      ? 'Complete report 1 to unlock'
-                      : 'Bench notes and photos · internal',
+                  subtitle: _ReportSubtitle(
+                    ticketId: ticketId,
+                    reportKind: ReportKind.technical,
+                    fallbackText: report1CompletedAt == null
+                        ? 'Complete report 1 to unlock'
+                        : 'Bench notes and photos · internal',
+                  ),
                   icon: report1CompletedAt == null
                       ? Icons.lock_outline
                       : Icons.description_outlined,
@@ -766,6 +820,11 @@ class _ReportsCard extends StatelessWidget {
                         )
                       : Column(
                           children: [
+                            _TicketStaffAssignment(
+                              ticketId: ticketId,
+                              reportKind: ReportKind.technical,
+                              label: 'Diagnosis / repair by',
+                            ),
                             TicketDatesPanel(
                               ticketId: ticketId,
                               title: 'Technical report dates',
@@ -783,13 +842,22 @@ class _ReportsCard extends StatelessWidget {
                 _ReportSection(
                   key: const Key('report3-row'),
                   title: 'Client report',
-                  subtitle: 'Editable draft · review before sharing',
+                  subtitle: _ReportSubtitle(
+                    ticketId: ticketId,
+                    reportKind: ReportKind.client,
+                    fallbackText: 'Editable draft · review before sharing',
+                  ),
                   icon: Icons.description_outlined,
                   status: 'Draft',
                   expandKey: const Key('report3-expand'),
                   startKey: const Key('report3-start'),
                   child: Column(
                     children: [
+                      _TicketStaffAssignment(
+                        ticketId: ticketId,
+                        reportKind: ReportKind.client,
+                        label: 'Completed by',
+                      ),
                       TicketDatesPanel(
                         ticketId: ticketId,
                         title: 'Client report dates',

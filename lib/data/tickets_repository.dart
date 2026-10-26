@@ -496,9 +496,16 @@ abstract class TicketsRepository {
 
   Stream<List<StaffMemberEntry>> watchClockedInStaff();
 
-  Stream<StaffMemberEntry?> watchTicketStaffAssignment(int ticketId);
+  Stream<StaffMemberEntry?> watchReportStaffAssignment(
+    int ticketId,
+    ReportKind reportKind,
+  );
 
-  Future<void> setTicketStaffAssignment(int ticketId, String? staffId);
+  Future<void> setReportStaffAssignment({
+    required int ticketId,
+    required ReportKind reportKind,
+    required String? staffId,
+  });
 
   /// The Report 1 shot list stored on the ticket, in the order it was seeded.
   Stream<PhotoChecklist> watchPhotoChecklist(int ticketId);
@@ -595,6 +602,9 @@ class TicketPhotoCleanupException implements Exception {
   @override
   String toString() => cause.toString();
 }
+
+String _reportStaffSettingKey(int ticketId, ReportKind reportKind) =>
+  'ticket_staff_${ticketId}_${reportKind.name}';
 
 /// SQLite implementation, backed by [AppDatabase].
 class DriftTicketsRepository implements TicketsRepository {
@@ -931,8 +941,11 @@ class DriftTicketsRepository implements TicketsRepository {
   }
 
   @override
-  Stream<StaffMemberEntry?> watchTicketStaffAssignment(int ticketId) {
-    final assignmentKey = 'ticket_staff_$ticketId';
+  Stream<StaffMemberEntry?> watchReportStaffAssignment(
+    int ticketId,
+    ReportKind reportKind,
+  ) {
+    final assignmentKey = _reportStaffSettingKey(ticketId, reportKind);
     final query = _db.select(_db.settings)
       ..where((setting) => setting.key.isIn([
             'staff_roster',
@@ -954,7 +967,11 @@ class DriftTicketsRepository implements TicketsRepository {
   }
 
   @override
-  Future<void> setTicketStaffAssignment(int ticketId, String? staffId) async {
+  Future<void> setReportStaffAssignment({
+    required int ticketId,
+    required ReportKind reportKind,
+    required String? staffId,
+  }) async {
     if (staffId != null) {
       final available = await watchClockedInStaff().first;
       if (!available.any((staff) => staff.id == staffId)) {
@@ -963,7 +980,7 @@ class DriftTicketsRepository implements TicketsRepository {
     }
     await _db.into(_db.settings).insertOnConflictUpdate(
           SettingsCompanion.insert(
-            key: 'ticket_staff_$ticketId',
+            key: _reportStaffSettingKey(ticketId, reportKind),
             value: staffId ?? '',
           ),
         );
