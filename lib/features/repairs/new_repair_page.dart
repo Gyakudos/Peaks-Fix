@@ -29,6 +29,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
   String? _category;
   int? _modelId;
   String? _modelName;
+  String? _side;
   bool _otherDevice = false;
   bool _serialMissing = false;
 
@@ -73,6 +74,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
       _category = category;
       _modelId = null;
       _modelName = null;
+      _side = null;
       _otherDevice = false;
     });
   }
@@ -84,8 +86,13 @@ class _NewRepairPageState extends State<NewRepairPage> {
       _modelName = _otherDevice
           ? null
           : models.firstWhere((model) => model.modelId == value).modelName;
+      // A side belongs to the model it was chosen for.
+      _side = null;
     });
   }
+
+  /// A single Joy-Con is booked on its own, so intake asks which half it is.
+  bool get _needsSide => deviceSideRequired(_modelName);
 
   /// Which Report 1 checklist this device will get. The ticket stores its own
   /// copy on save; this is only the preview inside the form.
@@ -117,6 +124,9 @@ class _NewRepairPageState extends State<NewRepairPage> {
     if (_otherDevice && _deviceOther.text.trim().isEmpty) {
       return 'Describe the device (brand and model).';
     }
+    if (_needsSide && _side == null) {
+      return 'Choose which side this Joy-Con is: left or right.';
+    }
     if (!_serialMissing && _serial.text.trim().isEmpty) {
       return 'Enter the serial number, or tick “No serial number sticker”.';
     }
@@ -146,6 +156,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
         deviceModelId: _otherDevice ? null : _modelId,
         deviceName: _otherDevice ? _deviceOther.text : null,
         deviceVariant: _deviceVariant.text,
+        deviceSide: _side,
         photoTemplateKey: _photoTemplateKey,
         serial: _serialMissing ? null : _serial.text,
         serialMissing: _serialMissing,
@@ -242,6 +253,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
                     title: 'Device',
                     children: [
                       DropdownButtonFormField<String>(
+                        key: const Key('intake-category'),
                         initialValue: _category,
                         decoration: const InputDecoration(
                           labelText: 'Category',
@@ -258,6 +270,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
+                        key: const Key('intake-model'),
                         initialValue: _modelId,
                         decoration: const InputDecoration(
                           labelText: 'Model',
@@ -290,6 +303,31 @@ class _NewRepairPageState extends State<NewRepairPage> {
                             hintText: 'e.g. Sega Dreamcast',
                             border: OutlineInputBorder(),
                           ),
+                        ),
+                      ],
+                      if (_needsSide) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          key: const Key('intake-side'),
+                          initialValue: _side,
+                          decoration: const InputDecoration(
+                            labelText: 'Side',
+                            helperText:
+                                'A Joy-Con is booked one half at a time. '
+                                'Which half is this?',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'left',
+                              child: Text('Left (L)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'right',
+                              child: Text('Right (R)'),
+                            ),
+                          ],
+                          onChanged: (value) => setState(() => _side = value),
                         ),
                       ],
                       if (_photoTemplateKey != null)

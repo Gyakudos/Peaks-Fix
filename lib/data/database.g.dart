@@ -2244,6 +2244,12 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
   late final GeneratedColumn<String> deviceVariant = GeneratedColumn<String>(
       'device_variant', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _deviceSideMeta =
+      const VerificationMeta('deviceSide');
+  @override
+  late final GeneratedColumn<String> deviceSide = GeneratedColumn<String>(
+      'device_side', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _serialMeta = const VerificationMeta('serial');
   @override
   late final GeneratedColumn<String> serial = GeneratedColumn<String>(
@@ -2350,6 +2356,7 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
         deviceModelId,
         deviceName,
         deviceVariant,
+        deviceSide,
         serial,
         serialMissing,
         shopTag,
@@ -2410,6 +2417,12 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
           _deviceVariantMeta,
           deviceVariant.isAcceptableOrUnknown(
               data['device_variant']!, _deviceVariantMeta));
+    }
+    if (data.containsKey('device_side')) {
+      context.handle(
+          _deviceSideMeta,
+          deviceSide.isAcceptableOrUnknown(
+              data['device_side']!, _deviceSideMeta));
     }
     if (data.containsKey('serial')) {
       context.handle(_serialMeta,
@@ -2504,6 +2517,8 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
           .read(DriftSqlType.string, data['${effectivePrefix}device_name']),
       deviceVariant: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}device_variant']),
+      deviceSide: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}device_side']),
       serial: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}serial']),
       serialMissing: attachedDatabase.typeMapping
@@ -2563,6 +2578,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
   /// `New 3DS XL`, `PS5 Slim (disc)`. Kept free-text so one catalog row can
   /// cover a whole family without inventing rows for every revision.
   final String? deviceVariant;
+
+  /// Which half of a two-part device this job is: `left` or `right`. Set for a
+  /// single Joy-Con, where the model alone does not identify the unit.
+  final String? deviceSide;
   final String? serial;
 
   /// No readable factory serial/IMEI sticker was present. The shop tag still
@@ -2594,6 +2613,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       this.deviceModelId,
       this.deviceName,
       this.deviceVariant,
+      this.deviceSide,
       this.serial,
       required this.serialMissing,
       this.shopTag,
@@ -2623,6 +2643,9 @@ class Ticket extends DataClass implements Insertable<Ticket> {
     }
     if (!nullToAbsent || deviceVariant != null) {
       map['device_variant'] = Variable<String>(deviceVariant);
+    }
+    if (!nullToAbsent || deviceSide != null) {
+      map['device_side'] = Variable<String>(deviceSide);
     }
     if (!nullToAbsent || serial != null) {
       map['serial'] = Variable<String>(serial);
@@ -2675,6 +2698,9 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       deviceVariant: deviceVariant == null && nullToAbsent
           ? const Value.absent()
           : Value(deviceVariant),
+      deviceSide: deviceSide == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceSide),
       serial:
           serial == null && nullToAbsent ? const Value.absent() : Value(serial),
       serialMissing: Value(serialMissing),
@@ -2716,6 +2742,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       deviceModelId: serializer.fromJson<int?>(json['deviceModelId']),
       deviceName: serializer.fromJson<String?>(json['deviceName']),
       deviceVariant: serializer.fromJson<String?>(json['deviceVariant']),
+      deviceSide: serializer.fromJson<String?>(json['deviceSide']),
       serial: serializer.fromJson<String?>(json['serial']),
       serialMissing: serializer.fromJson<bool>(json['serialMissing']),
       shopTag: serializer.fromJson<String?>(json['shopTag']),
@@ -2744,6 +2771,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       'deviceModelId': serializer.toJson<int?>(deviceModelId),
       'deviceName': serializer.toJson<String?>(deviceName),
       'deviceVariant': serializer.toJson<String?>(deviceVariant),
+      'deviceSide': serializer.toJson<String?>(deviceSide),
       'serial': serializer.toJson<String?>(serial),
       'serialMissing': serializer.toJson<bool>(serialMissing),
       'shopTag': serializer.toJson<String?>(shopTag),
@@ -2770,6 +2798,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           Value<int?> deviceModelId = const Value.absent(),
           Value<String?> deviceName = const Value.absent(),
           Value<String?> deviceVariant = const Value.absent(),
+          Value<String?> deviceSide = const Value.absent(),
           Value<String?> serial = const Value.absent(),
           bool? serialMissing,
           Value<String?> shopTag = const Value.absent(),
@@ -2794,6 +2823,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         deviceName: deviceName.present ? deviceName.value : this.deviceName,
         deviceVariant:
             deviceVariant.present ? deviceVariant.value : this.deviceVariant,
+        deviceSide: deviceSide.present ? deviceSide.value : this.deviceSide,
         serial: serial.present ? serial.value : this.serial,
         serialMissing: serialMissing ?? this.serialMissing,
         shopTag: shopTag.present ? shopTag.value : this.shopTag,
@@ -2826,6 +2856,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       deviceVariant: data.deviceVariant.present
           ? data.deviceVariant.value
           : this.deviceVariant,
+      deviceSide:
+          data.deviceSide.present ? data.deviceSide.value : this.deviceSide,
       serial: data.serial.present ? data.serial.value : this.serial,
       serialMissing: data.serialMissing.present
           ? data.serialMissing.value
@@ -2861,6 +2893,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ..write('deviceModelId: $deviceModelId, ')
           ..write('deviceName: $deviceName, ')
           ..write('deviceVariant: $deviceVariant, ')
+          ..write('deviceSide: $deviceSide, ')
           ..write('serial: $serial, ')
           ..write('serialMissing: $serialMissing, ')
           ..write('shopTag: $shopTag, ')
@@ -2888,6 +2921,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         deviceModelId,
         deviceName,
         deviceVariant,
+        deviceSide,
         serial,
         serialMissing,
         shopTag,
@@ -2914,6 +2948,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           other.deviceModelId == this.deviceModelId &&
           other.deviceName == this.deviceName &&
           other.deviceVariant == this.deviceVariant &&
+          other.deviceSide == this.deviceSide &&
           other.serial == this.serial &&
           other.serialMissing == this.serialMissing &&
           other.shopTag == this.shopTag &&
@@ -2938,6 +2973,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
   final Value<int?> deviceModelId;
   final Value<String?> deviceName;
   final Value<String?> deviceVariant;
+  final Value<String?> deviceSide;
   final Value<String?> serial;
   final Value<bool> serialMissing;
   final Value<String?> shopTag;
@@ -2960,6 +2996,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.deviceModelId = const Value.absent(),
     this.deviceName = const Value.absent(),
     this.deviceVariant = const Value.absent(),
+    this.deviceSide = const Value.absent(),
     this.serial = const Value.absent(),
     this.serialMissing = const Value.absent(),
     this.shopTag = const Value.absent(),
@@ -2983,6 +3020,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.deviceModelId = const Value.absent(),
     this.deviceName = const Value.absent(),
     this.deviceVariant = const Value.absent(),
+    this.deviceSide = const Value.absent(),
     this.serial = const Value.absent(),
     this.serialMissing = const Value.absent(),
     this.shopTag = const Value.absent(),
@@ -3009,6 +3047,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     Expression<int>? deviceModelId,
     Expression<String>? deviceName,
     Expression<String>? deviceVariant,
+    Expression<String>? deviceSide,
     Expression<String>? serial,
     Expression<bool>? serialMissing,
     Expression<String>? shopTag,
@@ -3032,6 +3071,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       if (deviceModelId != null) 'device_model_id': deviceModelId,
       if (deviceName != null) 'device_name': deviceName,
       if (deviceVariant != null) 'device_variant': deviceVariant,
+      if (deviceSide != null) 'device_side': deviceSide,
       if (serial != null) 'serial': serial,
       if (serialMissing != null) 'serial_missing': serialMissing,
       if (shopTag != null) 'shop_tag': shopTag,
@@ -3057,6 +3097,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       Value<int?>? deviceModelId,
       Value<String?>? deviceName,
       Value<String?>? deviceVariant,
+      Value<String?>? deviceSide,
       Value<String?>? serial,
       Value<bool>? serialMissing,
       Value<String?>? shopTag,
@@ -3079,6 +3120,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       deviceModelId: deviceModelId ?? this.deviceModelId,
       deviceName: deviceName ?? this.deviceName,
       deviceVariant: deviceVariant ?? this.deviceVariant,
+      deviceSide: deviceSide ?? this.deviceSide,
       serial: serial ?? this.serial,
       serialMissing: serialMissing ?? this.serialMissing,
       shopTag: shopTag ?? this.shopTag,
@@ -3117,6 +3159,9 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     }
     if (deviceVariant.present) {
       map['device_variant'] = Variable<String>(deviceVariant.value);
+    }
+    if (deviceSide.present) {
+      map['device_side'] = Variable<String>(deviceSide.value);
     }
     if (serial.present) {
       map['serial'] = Variable<String>(serial.value);
@@ -3176,6 +3221,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
           ..write('deviceModelId: $deviceModelId, ')
           ..write('deviceName: $deviceName, ')
           ..write('deviceVariant: $deviceVariant, ')
+          ..write('deviceSide: $deviceSide, ')
           ..write('serial: $serial, ')
           ..write('serialMissing: $serialMissing, ')
           ..write('shopTag: $shopTag, ')
@@ -11792,6 +11838,7 @@ typedef $$TicketsTableCreateCompanionBuilder = TicketsCompanion Function({
   Value<int?> deviceModelId,
   Value<String?> deviceName,
   Value<String?> deviceVariant,
+  Value<String?> deviceSide,
   Value<String?> serial,
   Value<bool> serialMissing,
   Value<String?> shopTag,
@@ -11815,6 +11862,7 @@ typedef $$TicketsTableUpdateCompanionBuilder = TicketsCompanion Function({
   Value<int?> deviceModelId,
   Value<String?> deviceName,
   Value<String?> deviceVariant,
+  Value<String?> deviceSide,
   Value<String?> serial,
   Value<bool> serialMissing,
   Value<String?> shopTag,
@@ -11986,6 +12034,9 @@ class $$TicketsTableFilterComposer
 
   ColumnFilters<String> get deviceVariant => $composableBuilder(
       column: $table.deviceVariant, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get deviceSide => $composableBuilder(
+      column: $table.deviceSide, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get serial => $composableBuilder(
       column: $table.serial, builder: (column) => ColumnFilters(column));
@@ -12245,6 +12296,9 @@ class $$TicketsTableOrderingComposer
       column: $table.deviceVariant,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get deviceSide => $composableBuilder(
+      column: $table.deviceSide, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get serial => $composableBuilder(
       column: $table.serial, builder: (column) => ColumnOrderings(column));
 
@@ -12354,6 +12408,9 @@ class $$TicketsTableAnnotationComposer
 
   GeneratedColumn<String> get deviceVariant => $composableBuilder(
       column: $table.deviceVariant, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceSide => $composableBuilder(
+      column: $table.deviceSide, builder: (column) => column);
 
   GeneratedColumn<String> get serial =>
       $composableBuilder(column: $table.serial, builder: (column) => column);
@@ -12626,6 +12683,7 @@ class $$TicketsTableTableManager extends RootTableManager<
             Value<int?> deviceModelId = const Value.absent(),
             Value<String?> deviceName = const Value.absent(),
             Value<String?> deviceVariant = const Value.absent(),
+            Value<String?> deviceSide = const Value.absent(),
             Value<String?> serial = const Value.absent(),
             Value<bool> serialMissing = const Value.absent(),
             Value<String?> shopTag = const Value.absent(),
@@ -12649,6 +12707,7 @@ class $$TicketsTableTableManager extends RootTableManager<
             deviceModelId: deviceModelId,
             deviceName: deviceName,
             deviceVariant: deviceVariant,
+            deviceSide: deviceSide,
             serial: serial,
             serialMissing: serialMissing,
             shopTag: shopTag,
@@ -12672,6 +12731,7 @@ class $$TicketsTableTableManager extends RootTableManager<
             Value<int?> deviceModelId = const Value.absent(),
             Value<String?> deviceName = const Value.absent(),
             Value<String?> deviceVariant = const Value.absent(),
+            Value<String?> deviceSide = const Value.absent(),
             Value<String?> serial = const Value.absent(),
             Value<bool> serialMissing = const Value.absent(),
             Value<String?> shopTag = const Value.absent(),
@@ -12695,6 +12755,7 @@ class $$TicketsTableTableManager extends RootTableManager<
             deviceModelId: deviceModelId,
             deviceName: deviceName,
             deviceVariant: deviceVariant,
+            deviceSide: deviceSide,
             serial: serial,
             serialMissing: serialMissing,
             shopTag: shopTag,

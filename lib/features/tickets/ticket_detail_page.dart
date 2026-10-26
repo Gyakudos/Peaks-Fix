@@ -129,6 +129,11 @@ class _TicketBody extends StatelessWidget {
                             label: 'Model number',
                             value: summary.deviceVariant!,
                           ),
+                        if (deviceSideLabel(summary.deviceSide).isNotEmpty)
+                          _Meta(
+                            label: 'Side',
+                            value: deviceSideLabel(summary.deviceSide),
+                          ),
                         _Meta(
                           label: 'Opened',
                           value: shortDate(summary.createdAt),

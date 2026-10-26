@@ -185,6 +185,10 @@ class Tickets extends Table {
   /// cover a whole family without inventing rows for every revision.
   TextColumn get deviceVariant => text().nullable()();
 
+  /// Which half of a two-part device this job is: `left` or `right`. Set for a
+  /// single Joy-Con, where the model alone does not identify the unit.
+  TextColumn get deviceSide => text().nullable()();
+
   TextColumn get serial => text().nullable()();
 
   /// No readable factory serial/IMEI sticker was present. The shop tag still
@@ -494,13 +498,15 @@ class AppDatabase extends _$AppDatabase {
   static final Random _random = Random.secure();
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
   /// model and ticket, and the slot snapshot copied at intake.
   /// v4 added `device_models.sort_order` so the picker follows the catalog's
   /// own order (controllers 1 → 5) rather than the alphabet.
+  /// v5 added `tickets.device_side` for devices booked one half at a time,
+  /// starting with the single Joy-Con.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -517,6 +523,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 4) {
             await m.addColumn(deviceModels, deviceModels.sortOrder);
+          }
+          if (from < 5) {
+            await m.addColumn(tickets, tickets.deviceSide);
           }
         },
       );
@@ -636,9 +645,10 @@ class AppDatabase extends _$AppDatabase {
           );
           return;
         }
-        // Backfill the sort order once. Rows that already have one are left
-        // alone, so a shop that arranges its own picker keeps that arrangement.
-        if (row.sortOrder == 0) {
+        // Keep the whole seeded list in catalog order. Renumbering also repairs
+        // positions when a model is inserted into the middle of a list, while
+        // shop-added models (never in the seed) keep their own value.
+        if (row.sortOrder != sortOrder) {
           await (update(deviceModels)..where((m) => m.id.equals(row.id)))
               .write(DeviceModelsCompanion(sortOrder: Value(sortOrder)));
         }
@@ -862,6 +872,7 @@ class AppDatabase extends _$AppDatabase {
             'Switch 2 Pro Controller',
             'Switch Pro Controller',
             'Joy-Con (pair)',
+            'Joy-Con (single)',
             'GameCube Controller',
           ],
         ),
@@ -1047,6 +1058,7 @@ class AppDatabase extends _$AppDatabase {
     int? deviceModelId,
     String? deviceName,
     String? deviceVariant,
+    String? deviceSide,
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
@@ -1056,6 +1068,10 @@ class AppDatabase extends _$AppDatabase {
       final name = customerName.trim();
       final phone = customerPhone.trim();
       final email = customerEmail.trim();
+      final side = (deviceSide ?? '').trim().toLowerCase();
+      if (side.isNotEmpty && side != 'left' && side != 'right') {
+        throw ArgumentError.value(deviceSide, 'deviceSide', 'left or right');
+      }
       if (phone.isEmpty) {
         throw ArgumentError.value(customerPhone, 'customerPhone', 'required');
       }
@@ -1130,6 +1146,7 @@ class AppDatabase extends _$AppDatabase {
           deviceVariant: Value(
             (deviceVariant ?? '').trim().isEmpty ? null : deviceVariant!.trim(),
           ),
+          deviceSide: Value(side.isEmpty ? null : side),
           serial: Value(
             (serial ?? '').trim().isEmpty ? null : serial!.trim(),
           ),

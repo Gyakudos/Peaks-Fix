@@ -17,6 +17,7 @@ class TicketBoardEntry {
     this.serial,
     this.serialMissing = false,
     this.deviceVariant,
+    this.deviceSide,
   });
 
   final int id;
@@ -33,13 +34,24 @@ class TicketBoardEntry {
   /// Model number / revision typed on the ticket, e.g. `PSP-3000`.
   final String? deviceVariant;
 
+  /// `left` or `right` when the device is booked one half at a time, e.g. a
+  /// single Joy-Con.
+  final String? deviceSide;
+
   /// Serial when it exists, otherwise the shop tag that replaces it.
   String get identity =>
       serial ?? (serialMissing ? 'no serial sticker' : 'serial not recorded');
 
   /// `Sony PSP · PSP-3000` when a revision was noted, otherwise just the model.
-  String get deviceWithVariant =>
-      deviceVariant == null ? device : '$device · $deviceVariant';
+  /// A single Joy-Con also carries its side: `Nintendo Joy-Con (single) · Left`.
+  String get deviceWithVariant {
+    final parts = [
+      device,
+      if (deviceSideLabel(deviceSide).isNotEmpty) deviceSideLabel(deviceSide),
+      if (deviceVariant != null) deviceVariant!,
+    ];
+    return parts.join(' · ');
+  }
 }
 
 /// Everything the ticket page shows.
@@ -130,6 +142,23 @@ String deviceLabel(String brand, String model) {
   return '$prefix $name';
 }
 
+/// `left` / `right` as shown to people; empty when the device has no side.
+String deviceSideLabel(String? side) {
+  switch (side) {
+    case 'left':
+      return 'Left';
+    case 'right':
+      return 'Right';
+    default:
+      return '';
+  }
+}
+
+/// Whether intake should ask which half of a two-part device this is. A single
+/// Joy-Con is booked on its own, so its model name does not identify the unit.
+bool deviceSideRequired(String? modelName) =>
+    modelName != null && modelName.toLowerCase().contains('(single)');
+
 /// What the UI needs from storage. Kept as an interface so widget tests can run
 /// without opening SQLite.
 abstract class TicketsRepository {
@@ -149,6 +178,7 @@ abstract class TicketsRepository {
     int? deviceModelId,
     String? deviceName,
     String? deviceVariant,
+    String? deviceSide,
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
@@ -256,6 +286,7 @@ class DriftTicketsRepository implements TicketsRepository {
     int? deviceModelId,
     String? deviceName,
     String? deviceVariant,
+    String? deviceSide,
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
@@ -268,6 +299,7 @@ class DriftTicketsRepository implements TicketsRepository {
       deviceModelId: deviceModelId,
       deviceName: deviceName,
       deviceVariant: deviceVariant,
+      deviceSide: deviceSide,
       serial: serial,
       serialMissing: serialMissing,
       photoTemplateKey: photoTemplateKey,
@@ -315,6 +347,7 @@ class DriftTicketsRepository implements TicketsRepository {
       serial: ticket.serial,
       serialMissing: ticket.serialMissing,
       deviceVariant: ticket.deviceVariant,
+      deviceSide: ticket.deviceSide,
     );
   }
 }

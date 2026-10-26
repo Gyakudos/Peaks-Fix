@@ -32,6 +32,18 @@ class FakeTicketsRepository implements TicketsRepository {
       modelName: '3DS',
       label: 'Nintendo 3DS',
     ),
+    DeviceOption(
+      modelId: 4,
+      category: 'Controllers',
+      modelName: 'Joy-Con (pair)',
+      label: 'Nintendo Joy-Con (pair)',
+    ),
+    DeviceOption(
+      modelId: 5,
+      category: 'Controllers',
+      modelName: 'Joy-Con (single)',
+      label: 'Nintendo Joy-Con (single)',
+    ),
   ];
 
   final List<DeviceOption> catalog;
@@ -65,6 +77,7 @@ class FakeTicketsRepository implements TicketsRepository {
     int? deviceModelId,
     String? deviceName,
     String? deviceVariant,
+    String? deviceSide,
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
@@ -78,6 +91,7 @@ class FakeTicketsRepository implements TicketsRepository {
         deviceModelId: deviceModelId,
         deviceName: deviceName,
         deviceVariant: deviceVariant,
+        deviceSide: deviceSide,
         serial: serial,
         serialMissing: serialMissing,
         photoTemplateKey: photoTemplateKey,
@@ -105,6 +119,7 @@ class FakeTicketsRepository implements TicketsRepository {
         serial: serial,
         serialMissing: serialMissing,
         deviceVariant: deviceVariant,
+        deviceSide: deviceSide,
       ),
     );
 
@@ -139,6 +154,7 @@ class CreateCall {
     this.deviceModelId,
     this.deviceName,
     this.deviceVariant,
+    this.deviceSide,
     this.serial,
     this.serialMissing = false,
     this.photoTemplateKey,
@@ -150,6 +166,7 @@ class CreateCall {
   final int? deviceModelId;
   final String? deviceName;
   final String? deviceVariant;
+  final String? deviceSide;
   final String? serial;
   final bool serialMissing;
   final String? photoTemplateKey;
@@ -162,12 +179,12 @@ Future<void> _openIntake(WidgetTester tester) async {
 }
 
 Future<void> _selectDevice(WidgetTester tester) async {
-  await tester.tap(find.byType(DropdownButtonFormField<String>));
+  await tester.tap(find.byKey(const Key('intake-category')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Consoles').last);
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byType(DropdownButtonFormField<int>));
+  await tester.tap(find.byKey(const Key('intake-model')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Sony PlayStation 5').last);
   await tester.pumpAndSettle();
@@ -177,12 +194,24 @@ Future<void> _selectPortableDevice(
   WidgetTester tester,
   String label,
 ) async {
-  await tester.tap(find.byType(DropdownButtonFormField<String>));
+  await tester.tap(find.byKey(const Key('intake-category')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Portable Consoles').last);
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byType(DropdownButtonFormField<int>));
+  await tester.tap(find.byKey(const Key('intake-model')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectController(WidgetTester tester, String label) async {
+  await tester.tap(find.byKey(const Key('intake-category')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Controllers').last);
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byKey(const Key('intake-model')));
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
@@ -544,6 +573,61 @@ void main() {
     expect(created.serial, isNull);
     expect(created.serialMissing, isTrue);
     expect(find.text('not present'), findsOneWidget);
+  });
+
+  testWidgets('a single Joy-Con asks which side it is', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await _openIntake(tester);
+    await _fillCustomer(tester);
+
+    // A pair is one device: no side to choose.
+    await _selectController(tester, 'Nintendo Joy-Con (pair)');
+    expect(find.byKey(const Key('intake-side')), findsNothing);
+
+    await _selectController(tester, 'Nintendo Joy-Con (single)');
+    expect(find.byKey(const Key('intake-side')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('intake-serial')),
+      'XKW1000123',
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('intake-save')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('intake-save')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Choose which side this Joy-Con is: left or right.'),
+      findsOneWidget,
+    );
+    expect(repository.creations, isEmpty);
+
+    await tester.tap(find.byKey(const Key('intake-side')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Left (L)').last);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('intake-save')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('intake-save')));
+    await tester.pumpAndSettle();
+
+    expect(repository.creations, hasLength(1));
+    expect(repository.creations.single.deviceSide, 'left');
+    expect(find.text('SIDE'), findsOneWidget);
+    expect(find.text('Left'), findsWidgets);
   });
 
   testWidgets('intake previews the 3DS photo checklist',

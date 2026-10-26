@@ -66,7 +66,7 @@ Merging them would corrupt both stock counts and revenue reporting.
   directory (`%APPDATA%\com.example\vola_fix` on Windows). Deliberately not in
   Documents, so it never syncs to OneDrive or gets moved by accident.
 - Seeded on first launch: five device categories (Consoles, Retro consoles,
-  Portable Consoles, Handheld PCs, Controllers) with 77 pickable models, 12
+  Portable Consoles, Handheld PCs, Controllers) with 78 pickable models, 12
   services, and settings (shop name, `VF` ticket prefix, `G` tag prefix,
   90-day warranty default and terms). Seeding is additive and matched by name:
   later launches only add rows that are missing, so shop edits, custom models
@@ -79,8 +79,13 @@ Merging them would corrupt both stock counts and revenue reporting.
   they were booked under.
 - Schema is versioned and migrated on open: v2 added `tickets.device_variant`
   for that model number, v3 added the Report 1 photo-checklist tables and a
-  template key on models and tickets, and v4 added `device_models.sort_order`,
-  so upgrading in place never loses data.
+  template key on models and tickets, v4 added `device_models.sort_order`, and
+  v5 added `tickets.device_side` for devices booked one half at a time, so
+  upgrading in place never loses data.
+- A **single Joy-Con** is a catalog row of its own (`Joy-Con (single)`), and
+  intake asks **Left / Right** as a follow-up. The side is stored on the ticket
+  (`device_side`) and shown on the board and the ticket page. A pair remains one
+  device and asks nothing.
 - The picker follows the catalog's **own order**, not the alphabet:
   `device_models.sort_order` keeps `DualShock 1 → 2 → 3 → 4 → DualSense 5` and
   puts newer hardware first (`PlayStation 5` before `PlayStation 4`). Anything
