@@ -19,15 +19,18 @@ built.
 
 - **Windows shell** — persisted window geometry, centered first launch, custom
   Flutter title bar, tray icon and single instance.
-- **Five tabs** — Tickets (default), Customers, Merch, Parts, Settings, shown as
-  a rail on wide windows and a bottom bar on narrow ones.
+- **Six tabs** — Tickets (default), Calendar, Customers, Merch, Parts, Settings,
+  shown as a rail on wide windows and a bottom bar on narrow ones.
 - **Tickets board** — `In the shop` and `Finished`, with a real intake form.
 - **Intake** — customer name/phone/email, category → brand → model, optional
   model number, serial or **No serial number sticker** (which issues a
   shop-applied `PFS-` serial), fault, and a shop tag issued in the same
   transaction. A single Joy-Con adds a **Left / Right** selector, and the side
   travels with the ticket. Find returning customers by phone or email and
-  reuse their saved device records.
+  reuse their saved device records. Track Drop Off, Technician Start Date,
+  Parts Arrive, Customer Contacted and Date of Pick Up from intake and reports.
+- **Calendar** — month view of ticket workflow dates; select a day to open the
+  associated ticket.
 - **Customers** — searchable customer profiles with editable contact details
   and notes, owned devices, and repair-ticket history.
 - **Device catalog** — 7 categories, including Vacuum with common Dyson, Kirby,

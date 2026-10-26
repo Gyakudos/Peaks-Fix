@@ -234,6 +234,13 @@ class Tickets extends Table {
   /// set; reopening Report 1 clears it.
   DateTimeColumn get report1CompletedAt => dateTime().nullable()();
 
+  /// Shop workflow dates. Drop-off falls back to the ticket creation date on
+  /// older records; pickup reuses [pickedUpAt].
+  DateTimeColumn get dropOffAt => dateTime().nullable()();
+  DateTimeColumn get technicianStartAt => dateTime().nullable()();
+  DateTimeColumn get partsArriveAt => dateTime().nullable()();
+  DateTimeColumn get customerContactedAt => dateTime().nullable()();
+
   /// Report 1 checklist family this job was booked under, e.g. `hinged`. The
   /// slots themselves are copied into [TicketPhotoSlots] at intake.
   TextColumn get photoTemplateKey => text().nullable()();
@@ -569,7 +576,7 @@ class AppDatabase extends _$AppDatabase {
   static final Random _random = Random.secure();
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -584,6 +591,8 @@ class AppDatabase extends _$AppDatabase {
   /// v9 added the inventory part location.
   /// v10 added saved invoice discounts and backfilled Required Parts prices.
   /// v11 added customer-owned device records and linked tickets to them.
+  /// v12 added ticket drop-off, technician-start, parts-arrival, and
+  /// customer-contacted dates. Pickup already existed as `picked_up_at`.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -661,6 +670,16 @@ class AppDatabase extends _$AppDatabase {
               'AND customer_devices.device_side IS tickets.device_side '
               'AND customer_devices.serial_missing = tickets.serial_missing)) '
               'LIMIT 1)',
+            );
+          }
+          if (from < 12) {
+            await m.addColumn(tickets, tickets.dropOffAt);
+            await m.addColumn(tickets, tickets.technicianStartAt);
+            await m.addColumn(tickets, tickets.partsArriveAt);
+            await m.addColumn(tickets, tickets.customerContactedAt);
+            await customStatement(
+              'UPDATE tickets SET drop_off_at = created_at '
+              'WHERE drop_off_at IS NULL',
             );
           }
         },
@@ -1284,6 +1303,11 @@ class AppDatabase extends _$AppDatabase {
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
+    DateTime? dropOffAt,
+    DateTime? technicianStartAt,
+    DateTime? partsArriveAt,
+    DateTime? customerContactedAt,
+    DateTime? pickedUpAt,
     required String complaint,
   }) {
     return transaction(() async {
@@ -1369,6 +1393,9 @@ class AppDatabase extends _$AppDatabase {
       }
 
       final number = await _allocateTicketNumber();
+      DateTime dateOnly(DateTime? date) => date == null
+          ? DateTime.now()
+          : DateTime(date.year, date.month, date.day);
       // A missing sticker always gets a shop-applied serial, even if the
       // caller only ticked the box and sent no value.
       final typedSerial = (serial ?? '').trim();
@@ -1452,6 +1479,19 @@ class AppDatabase extends _$AppDatabase {
           serialMissing: Value(serialMissing),
           complaint: complaint.trim(),
           photoTemplateKey: Value(templateKey),
+          dropOffAt: Value(dateOnly(dropOffAt)),
+          technicianStartAt: Value(
+            technicianStartAt == null ? null : dateOnly(technicianStartAt),
+          ),
+          partsArriveAt: Value(
+            partsArriveAt == null ? null : dateOnly(partsArriveAt),
+          ),
+          customerContactedAt: Value(
+            customerContactedAt == null ? null : dateOnly(customerContactedAt),
+          ),
+          pickedUpAt: Value(
+            pickedUpAt == null ? null : dateOnly(pickedUpAt),
+          ),
           status: TicketStatus.received,
         ),
       );
@@ -1931,6 +1971,30 @@ class AppDatabase extends _$AppDatabase {
         pickedUpAt: Value(
           status == TicketStatus.pickedUp ? DateTime.now() : null,
         ),
+      ),
+    );
+  }
+
+  Future<void> setTicketDates({
+    required int ticketId,
+    required DateTime? dropOffAt,
+    required DateTime? technicianStartAt,
+    required DateTime? partsArriveAt,
+    required DateTime? customerContactedAt,
+    required DateTime? pickedUpAt,
+  }) async {
+    DateTime? dateOnly(DateTime? date) =>
+        date == null ? null : DateTime(date.year, date.month, date.day);
+
+    await (update(tickets)..where((ticket) => ticket.id.equals(ticketId)))
+        .write(
+      TicketsCompanion(
+        dropOffAt: Value(dateOnly(dropOffAt)),
+        technicianStartAt: Value(dateOnly(technicianStartAt)),
+        partsArriveAt: Value(dateOnly(partsArriveAt)),
+        customerContactedAt: Value(dateOnly(customerContactedAt)),
+        pickedUpAt: Value(dateOnly(pickedUpAt)),
+        updatedAt: Value(DateTime.now()),
       ),
     );
   }

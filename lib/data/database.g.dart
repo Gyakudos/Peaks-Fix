@@ -2830,6 +2830,30 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
   late final GeneratedColumn<DateTime> report1CompletedAt =
       GeneratedColumn<DateTime>('report1_completed_at', aliasedName, true,
           type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _dropOffAtMeta =
+      const VerificationMeta('dropOffAt');
+  @override
+  late final GeneratedColumn<DateTime> dropOffAt = GeneratedColumn<DateTime>(
+      'drop_off_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _technicianStartAtMeta =
+      const VerificationMeta('technicianStartAt');
+  @override
+  late final GeneratedColumn<DateTime> technicianStartAt =
+      GeneratedColumn<DateTime>('technician_start_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _partsArriveAtMeta =
+      const VerificationMeta('partsArriveAt');
+  @override
+  late final GeneratedColumn<DateTime> partsArriveAt =
+      GeneratedColumn<DateTime>('parts_arrive_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _customerContactedAtMeta =
+      const VerificationMeta('customerContactedAt');
+  @override
+  late final GeneratedColumn<DateTime> customerContactedAt =
+      GeneratedColumn<DateTime>('customer_contacted_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _photoTemplateKeyMeta =
       const VerificationMeta('photoTemplateKey');
   @override
@@ -2929,6 +2953,10 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
         diagnosis,
         intakeNotes,
         report1CompletedAt,
+        dropOffAt,
+        technicianStartAt,
+        partsArriveAt,
+        customerContactedAt,
         photoTemplateKey,
         status,
         priority,
@@ -3035,6 +3063,30 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
           report1CompletedAt.isAcceptableOrUnknown(
               data['report1_completed_at']!, _report1CompletedAtMeta));
     }
+    if (data.containsKey('drop_off_at')) {
+      context.handle(
+          _dropOffAtMeta,
+          dropOffAt.isAcceptableOrUnknown(
+              data['drop_off_at']!, _dropOffAtMeta));
+    }
+    if (data.containsKey('technician_start_at')) {
+      context.handle(
+          _technicianStartAtMeta,
+          technicianStartAt.isAcceptableOrUnknown(
+              data['technician_start_at']!, _technicianStartAtMeta));
+    }
+    if (data.containsKey('parts_arrive_at')) {
+      context.handle(
+          _partsArriveAtMeta,
+          partsArriveAt.isAcceptableOrUnknown(
+              data['parts_arrive_at']!, _partsArriveAtMeta));
+    }
+    if (data.containsKey('customer_contacted_at')) {
+      context.handle(
+          _customerContactedAtMeta,
+          customerContactedAt.isAcceptableOrUnknown(
+              data['customer_contacted_at']!, _customerContactedAtMeta));
+    }
     if (data.containsKey('photo_template_key')) {
       context.handle(
           _photoTemplateKeyMeta,
@@ -3129,6 +3181,15 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
       report1CompletedAt: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime,
           data['${effectivePrefix}report1_completed_at']),
+      dropOffAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}drop_off_at']),
+      technicianStartAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}technician_start_at']),
+      partsArriveAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}parts_arrive_at']),
+      customerContactedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime,
+          data['${effectivePrefix}customer_contacted_at']),
       photoTemplateKey: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}photo_template_key']),
       status: $TicketsTable.$converterstatus.fromSql(attachedDatabase
@@ -3214,6 +3275,13 @@ class Ticket extends DataClass implements Insertable<Ticket> {
   /// set; reopening Report 1 clears it.
   final DateTime? report1CompletedAt;
 
+  /// Shop workflow dates. Drop-off falls back to the ticket creation date on
+  /// older records; pickup reuses [pickedUpAt].
+  final DateTime? dropOffAt;
+  final DateTime? technicianStartAt;
+  final DateTime? partsArriveAt;
+  final DateTime? customerContactedAt;
+
   /// Report 1 checklist family this job was booked under, e.g. `hinged`. The
   /// slots themselves are copied into [TicketPhotoSlots] at intake.
   final String? photoTemplateKey;
@@ -3244,6 +3312,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       this.diagnosis,
       this.intakeNotes,
       this.report1CompletedAt,
+      this.dropOffAt,
+      this.technicianStartAt,
+      this.partsArriveAt,
+      this.customerContactedAt,
       this.photoTemplateKey,
       required this.status,
       required this.priority,
@@ -3293,6 +3365,18 @@ class Ticket extends DataClass implements Insertable<Ticket> {
     }
     if (!nullToAbsent || report1CompletedAt != null) {
       map['report1_completed_at'] = Variable<DateTime>(report1CompletedAt);
+    }
+    if (!nullToAbsent || dropOffAt != null) {
+      map['drop_off_at'] = Variable<DateTime>(dropOffAt);
+    }
+    if (!nullToAbsent || technicianStartAt != null) {
+      map['technician_start_at'] = Variable<DateTime>(technicianStartAt);
+    }
+    if (!nullToAbsent || partsArriveAt != null) {
+      map['parts_arrive_at'] = Variable<DateTime>(partsArriveAt);
+    }
+    if (!nullToAbsent || customerContactedAt != null) {
+      map['customer_contacted_at'] = Variable<DateTime>(customerContactedAt);
     }
     if (!nullToAbsent || photoTemplateKey != null) {
       map['photo_template_key'] = Variable<String>(photoTemplateKey);
@@ -3362,6 +3446,18 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       report1CompletedAt: report1CompletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(report1CompletedAt),
+      dropOffAt: dropOffAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dropOffAt),
+      technicianStartAt: technicianStartAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(technicianStartAt),
+      partsArriveAt: partsArriveAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(partsArriveAt),
+      customerContactedAt: customerContactedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerContactedAt),
       photoTemplateKey: photoTemplateKey == null && nullToAbsent
           ? const Value.absent()
           : Value(photoTemplateKey),
@@ -3405,6 +3501,12 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       intakeNotes: serializer.fromJson<String?>(json['intakeNotes']),
       report1CompletedAt:
           serializer.fromJson<DateTime?>(json['report1CompletedAt']),
+      dropOffAt: serializer.fromJson<DateTime?>(json['dropOffAt']),
+      technicianStartAt:
+          serializer.fromJson<DateTime?>(json['technicianStartAt']),
+      partsArriveAt: serializer.fromJson<DateTime?>(json['partsArriveAt']),
+      customerContactedAt:
+          serializer.fromJson<DateTime?>(json['customerContactedAt']),
       photoTemplateKey: serializer.fromJson<String?>(json['photoTemplateKey']),
       status: $TicketsTable.$converterstatus
           .fromJson(serializer.fromJson<int>(json['status'])),
@@ -3441,6 +3543,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       'diagnosis': serializer.toJson<String?>(diagnosis),
       'intakeNotes': serializer.toJson<String?>(intakeNotes),
       'report1CompletedAt': serializer.toJson<DateTime?>(report1CompletedAt),
+      'dropOffAt': serializer.toJson<DateTime?>(dropOffAt),
+      'technicianStartAt': serializer.toJson<DateTime?>(technicianStartAt),
+      'partsArriveAt': serializer.toJson<DateTime?>(partsArriveAt),
+      'customerContactedAt': serializer.toJson<DateTime?>(customerContactedAt),
       'photoTemplateKey': serializer.toJson<String?>(photoTemplateKey),
       'status':
           serializer.toJson<int>($TicketsTable.$converterstatus.toJson(status)),
@@ -3475,6 +3581,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           Value<String?> diagnosis = const Value.absent(),
           Value<String?> intakeNotes = const Value.absent(),
           Value<DateTime?> report1CompletedAt = const Value.absent(),
+          Value<DateTime?> dropOffAt = const Value.absent(),
+          Value<DateTime?> technicianStartAt = const Value.absent(),
+          Value<DateTime?> partsArriveAt = const Value.absent(),
+          Value<DateTime?> customerContactedAt = const Value.absent(),
           Value<String?> photoTemplateKey = const Value.absent(),
           TicketStatus? status,
           int? priority,
@@ -3509,6 +3619,15 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         report1CompletedAt: report1CompletedAt.present
             ? report1CompletedAt.value
             : this.report1CompletedAt,
+        dropOffAt: dropOffAt.present ? dropOffAt.value : this.dropOffAt,
+        technicianStartAt: technicianStartAt.present
+            ? technicianStartAt.value
+            : this.technicianStartAt,
+        partsArriveAt:
+            partsArriveAt.present ? partsArriveAt.value : this.partsArriveAt,
+        customerContactedAt: customerContactedAt.present
+            ? customerContactedAt.value
+            : this.customerContactedAt,
         photoTemplateKey: photoTemplateKey.present
             ? photoTemplateKey.value
             : this.photoTemplateKey,
@@ -3555,6 +3674,16 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       report1CompletedAt: data.report1CompletedAt.present
           ? data.report1CompletedAt.value
           : this.report1CompletedAt,
+      dropOffAt: data.dropOffAt.present ? data.dropOffAt.value : this.dropOffAt,
+      technicianStartAt: data.technicianStartAt.present
+          ? data.technicianStartAt.value
+          : this.technicianStartAt,
+      partsArriveAt: data.partsArriveAt.present
+          ? data.partsArriveAt.value
+          : this.partsArriveAt,
+      customerContactedAt: data.customerContactedAt.present
+          ? data.customerContactedAt.value
+          : this.customerContactedAt,
       photoTemplateKey: data.photoTemplateKey.present
           ? data.photoTemplateKey.value
           : this.photoTemplateKey,
@@ -3598,6 +3727,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ..write('diagnosis: $diagnosis, ')
           ..write('intakeNotes: $intakeNotes, ')
           ..write('report1CompletedAt: $report1CompletedAt, ')
+          ..write('dropOffAt: $dropOffAt, ')
+          ..write('technicianStartAt: $technicianStartAt, ')
+          ..write('partsArriveAt: $partsArriveAt, ')
+          ..write('customerContactedAt: $customerContactedAt, ')
           ..write('photoTemplateKey: $photoTemplateKey, ')
           ..write('status: $status, ')
           ..write('priority: $priority, ')
@@ -3631,6 +3764,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         diagnosis,
         intakeNotes,
         report1CompletedAt,
+        dropOffAt,
+        technicianStartAt,
+        partsArriveAt,
+        customerContactedAt,
         photoTemplateKey,
         status,
         priority,
@@ -3663,6 +3800,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           other.diagnosis == this.diagnosis &&
           other.intakeNotes == this.intakeNotes &&
           other.report1CompletedAt == this.report1CompletedAt &&
+          other.dropOffAt == this.dropOffAt &&
+          other.technicianStartAt == this.technicianStartAt &&
+          other.partsArriveAt == this.partsArriveAt &&
+          other.customerContactedAt == this.customerContactedAt &&
           other.photoTemplateKey == this.photoTemplateKey &&
           other.status == this.status &&
           other.priority == this.priority &&
@@ -3693,6 +3834,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
   final Value<String?> diagnosis;
   final Value<String?> intakeNotes;
   final Value<DateTime?> report1CompletedAt;
+  final Value<DateTime?> dropOffAt;
+  final Value<DateTime?> technicianStartAt;
+  final Value<DateTime?> partsArriveAt;
+  final Value<DateTime?> customerContactedAt;
   final Value<String?> photoTemplateKey;
   final Value<TicketStatus> status;
   final Value<int> priority;
@@ -3721,6 +3866,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.diagnosis = const Value.absent(),
     this.intakeNotes = const Value.absent(),
     this.report1CompletedAt = const Value.absent(),
+    this.dropOffAt = const Value.absent(),
+    this.technicianStartAt = const Value.absent(),
+    this.partsArriveAt = const Value.absent(),
+    this.customerContactedAt = const Value.absent(),
     this.photoTemplateKey = const Value.absent(),
     this.status = const Value.absent(),
     this.priority = const Value.absent(),
@@ -3750,6 +3899,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.diagnosis = const Value.absent(),
     this.intakeNotes = const Value.absent(),
     this.report1CompletedAt = const Value.absent(),
+    this.dropOffAt = const Value.absent(),
+    this.technicianStartAt = const Value.absent(),
+    this.partsArriveAt = const Value.absent(),
+    this.customerContactedAt = const Value.absent(),
     this.photoTemplateKey = const Value.absent(),
     required TicketStatus status,
     this.priority = const Value.absent(),
@@ -3782,6 +3935,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     Expression<String>? diagnosis,
     Expression<String>? intakeNotes,
     Expression<DateTime>? report1CompletedAt,
+    Expression<DateTime>? dropOffAt,
+    Expression<DateTime>? technicianStartAt,
+    Expression<DateTime>? partsArriveAt,
+    Expression<DateTime>? customerContactedAt,
     Expression<String>? photoTemplateKey,
     Expression<int>? status,
     Expression<int>? priority,
@@ -3812,6 +3969,11 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       if (intakeNotes != null) 'intake_notes': intakeNotes,
       if (report1CompletedAt != null)
         'report1_completed_at': report1CompletedAt,
+      if (dropOffAt != null) 'drop_off_at': dropOffAt,
+      if (technicianStartAt != null) 'technician_start_at': technicianStartAt,
+      if (partsArriveAt != null) 'parts_arrive_at': partsArriveAt,
+      if (customerContactedAt != null)
+        'customer_contacted_at': customerContactedAt,
       if (photoTemplateKey != null) 'photo_template_key': photoTemplateKey,
       if (status != null) 'status': status,
       if (priority != null) 'priority': priority,
@@ -3845,6 +4007,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       Value<String?>? diagnosis,
       Value<String?>? intakeNotes,
       Value<DateTime?>? report1CompletedAt,
+      Value<DateTime?>? dropOffAt,
+      Value<DateTime?>? technicianStartAt,
+      Value<DateTime?>? partsArriveAt,
+      Value<DateTime?>? customerContactedAt,
       Value<String?>? photoTemplateKey,
       Value<TicketStatus>? status,
       Value<int>? priority,
@@ -3873,6 +4039,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       diagnosis: diagnosis ?? this.diagnosis,
       intakeNotes: intakeNotes ?? this.intakeNotes,
       report1CompletedAt: report1CompletedAt ?? this.report1CompletedAt,
+      dropOffAt: dropOffAt ?? this.dropOffAt,
+      technicianStartAt: technicianStartAt ?? this.technicianStartAt,
+      partsArriveAt: partsArriveAt ?? this.partsArriveAt,
+      customerContactedAt: customerContactedAt ?? this.customerContactedAt,
       photoTemplateKey: photoTemplateKey ?? this.photoTemplateKey,
       status: status ?? this.status,
       priority: priority ?? this.priority,
@@ -3937,6 +4107,19 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       map['report1_completed_at'] =
           Variable<DateTime>(report1CompletedAt.value);
     }
+    if (dropOffAt.present) {
+      map['drop_off_at'] = Variable<DateTime>(dropOffAt.value);
+    }
+    if (technicianStartAt.present) {
+      map['technician_start_at'] = Variable<DateTime>(technicianStartAt.value);
+    }
+    if (partsArriveAt.present) {
+      map['parts_arrive_at'] = Variable<DateTime>(partsArriveAt.value);
+    }
+    if (customerContactedAt.present) {
+      map['customer_contacted_at'] =
+          Variable<DateTime>(customerContactedAt.value);
+    }
     if (photoTemplateKey.present) {
       map['photo_template_key'] = Variable<String>(photoTemplateKey.value);
     }
@@ -3997,6 +4180,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
           ..write('diagnosis: $diagnosis, ')
           ..write('intakeNotes: $intakeNotes, ')
           ..write('report1CompletedAt: $report1CompletedAt, ')
+          ..write('dropOffAt: $dropOffAt, ')
+          ..write('technicianStartAt: $technicianStartAt, ')
+          ..write('partsArriveAt: $partsArriveAt, ')
+          ..write('customerContactedAt: $customerContactedAt, ')
           ..write('photoTemplateKey: $photoTemplateKey, ')
           ..write('status: $status, ')
           ..write('priority: $priority, ')
@@ -14369,6 +14556,10 @@ typedef $$TicketsTableCreateCompanionBuilder = TicketsCompanion Function({
   Value<String?> diagnosis,
   Value<String?> intakeNotes,
   Value<DateTime?> report1CompletedAt,
+  Value<DateTime?> dropOffAt,
+  Value<DateTime?> technicianStartAt,
+  Value<DateTime?> partsArriveAt,
+  Value<DateTime?> customerContactedAt,
   Value<String?> photoTemplateKey,
   required TicketStatus status,
   Value<int> priority,
@@ -14398,6 +14589,10 @@ typedef $$TicketsTableUpdateCompanionBuilder = TicketsCompanion Function({
   Value<String?> diagnosis,
   Value<String?> intakeNotes,
   Value<DateTime?> report1CompletedAt,
+  Value<DateTime?> dropOffAt,
+  Value<DateTime?> technicianStartAt,
+  Value<DateTime?> partsArriveAt,
+  Value<DateTime?> customerContactedAt,
   Value<String?> photoTemplateKey,
   Value<TicketStatus> status,
   Value<int> priority,
@@ -14606,6 +14801,20 @@ class $$TicketsTableFilterComposer
 
   ColumnFilters<DateTime> get report1CompletedAt => $composableBuilder(
       column: $table.report1CompletedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get dropOffAt => $composableBuilder(
+      column: $table.dropOffAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get technicianStartAt => $composableBuilder(
+      column: $table.technicianStartAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get partsArriveAt => $composableBuilder(
+      column: $table.partsArriveAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get customerContactedAt => $composableBuilder(
+      column: $table.customerContactedAt,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get photoTemplateKey => $composableBuilder(
@@ -14906,6 +15115,21 @@ class $$TicketsTableOrderingComposer
       column: $table.report1CompletedAt,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get dropOffAt => $composableBuilder(
+      column: $table.dropOffAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get technicianStartAt => $composableBuilder(
+      column: $table.technicianStartAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get partsArriveAt => $composableBuilder(
+      column: $table.partsArriveAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get customerContactedAt => $composableBuilder(
+      column: $table.customerContactedAt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get photoTemplateKey => $composableBuilder(
       column: $table.photoTemplateKey,
       builder: (column) => ColumnOrderings(column));
@@ -15051,6 +15275,18 @@ class $$TicketsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get report1CompletedAt => $composableBuilder(
       column: $table.report1CompletedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dropOffAt =>
+      $composableBuilder(column: $table.dropOffAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get technicianStartAt => $composableBuilder(
+      column: $table.technicianStartAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get partsArriveAt => $composableBuilder(
+      column: $table.partsArriveAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get customerContactedAt => $composableBuilder(
+      column: $table.customerContactedAt, builder: (column) => column);
 
   GeneratedColumn<String> get photoTemplateKey => $composableBuilder(
       column: $table.photoTemplateKey, builder: (column) => column);
@@ -15345,6 +15581,10 @@ class $$TicketsTableTableManager extends RootTableManager<
             Value<String?> diagnosis = const Value.absent(),
             Value<String?> intakeNotes = const Value.absent(),
             Value<DateTime?> report1CompletedAt = const Value.absent(),
+            Value<DateTime?> dropOffAt = const Value.absent(),
+            Value<DateTime?> technicianStartAt = const Value.absent(),
+            Value<DateTime?> partsArriveAt = const Value.absent(),
+            Value<DateTime?> customerContactedAt = const Value.absent(),
             Value<String?> photoTemplateKey = const Value.absent(),
             Value<TicketStatus> status = const Value.absent(),
             Value<int> priority = const Value.absent(),
@@ -15375,6 +15615,10 @@ class $$TicketsTableTableManager extends RootTableManager<
             diagnosis: diagnosis,
             intakeNotes: intakeNotes,
             report1CompletedAt: report1CompletedAt,
+            dropOffAt: dropOffAt,
+            technicianStartAt: technicianStartAt,
+            partsArriveAt: partsArriveAt,
+            customerContactedAt: customerContactedAt,
             photoTemplateKey: photoTemplateKey,
             status: status,
             priority: priority,
@@ -15404,6 +15648,10 @@ class $$TicketsTableTableManager extends RootTableManager<
             Value<String?> diagnosis = const Value.absent(),
             Value<String?> intakeNotes = const Value.absent(),
             Value<DateTime?> report1CompletedAt = const Value.absent(),
+            Value<DateTime?> dropOffAt = const Value.absent(),
+            Value<DateTime?> technicianStartAt = const Value.absent(),
+            Value<DateTime?> partsArriveAt = const Value.absent(),
+            Value<DateTime?> customerContactedAt = const Value.absent(),
             Value<String?> photoTemplateKey = const Value.absent(),
             required TicketStatus status,
             Value<int> priority = const Value.absent(),
@@ -15434,6 +15682,10 @@ class $$TicketsTableTableManager extends RootTableManager<
             diagnosis: diagnosis,
             intakeNotes: intakeNotes,
             report1CompletedAt: report1CompletedAt,
+            dropOffAt: dropOffAt,
+            technicianStartAt: technicianStartAt,
+            partsArriveAt: partsArriveAt,
+            customerContactedAt: customerContactedAt,
             photoTemplateKey: photoTemplateKey,
             status: status,
             priority: priority,

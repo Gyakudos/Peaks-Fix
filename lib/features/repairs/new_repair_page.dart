@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/photo_templates.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../calendar/date_picker_field.dart';
 import '../capture/phone_capture_dialog.dart';
 import '../tickets/ticket_detail_page.dart';
 
@@ -17,6 +18,7 @@ class NewRepairPage extends StatefulWidget {
 
 class _NewRepairPageState extends State<NewRepairPage> {
   final TextEditingController _customer = TextEditingController();
+  final FocusNode _customerFocus = FocusNode();
   final TextEditingController _phone = TextEditingController();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _serial = TextEditingController();
@@ -35,12 +37,23 @@ class _NewRepairPageState extends State<NewRepairPage> {
   bool _serialMissing = false;
   bool _serialPending = false;
   int _serialRequest = 0;
+  DateTime? _dropOffAt = _today();
+  DateTime? _technicianStartAt;
+  DateTime? _partsArriveAt;
+  DateTime? _customerContactedAt;
+  DateTime? _pickedUpAt;
 
   bool _saving = false;
   String? _error;
   int? _customerId;
+  String? _selectedCustomerName;
   int? _customerDeviceId;
   List<CustomerDeviceEntry> _customerDevices = const [];
+
+  static DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
 
   @override
   void didChangeDependencies() {
@@ -61,6 +74,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
   @override
   void dispose() {
     _customer.dispose();
+    _customerFocus.dispose();
     _phone.dispose();
     _email.dispose();
     _serial.dispose();
@@ -196,16 +210,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
         ),
       );
       if (selected == null || !mounted) return;
-      final devices = await repository.watchCustomerDevices(selected.id).first;
-      if (!mounted) return;
-      setState(() {
-        _customerId = selected.id;
-        _customerDeviceId = null;
-        _customer.text = selected.name;
-        _phone.text = selected.phone ?? '';
-        _email.text = selected.email ?? '';
-        _customerDevices = devices;
-      });
+      await _selectCustomer(selected);
     } catch (error) {
       if (mounted) {
         setState(() => _error = 'Could not search customer records: $error');
@@ -213,6 +218,47 @@ class _NewRepairPageState extends State<NewRepairPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _selectCustomer(CustomerRecord customer) async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final devices =
+          await ShopScope.of(context).watchCustomerDevices(customer.id).first;
+      if (!mounted) return;
+      setState(() {
+        _customerId = customer.id;
+        _selectedCustomerName = customer.name;
+        _customerDeviceId = null;
+        _customer.text = customer.name;
+        _phone.text = customer.phone ?? '';
+        _email.text = customer.email ?? '';
+        _customerDevices = devices;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Could not load customer records: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _onCustomerNameChanged(String value) {
+    if (_customerId == null ||
+        value.trim().toLowerCase() ==
+            (_selectedCustomerName ?? '').toLowerCase()) {
+      return;
+    }
+    setState(() {
+      _customerId = null;
+      _selectedCustomerName = null;
+      _customerDeviceId = null;
+      _customerDevices = const [];
+    });
   }
 
   void _selectCustomerDevice(
@@ -316,6 +362,13 @@ class _NewRepairPageState extends State<NewRepairPage> {
         photoTemplateKey: _photoTemplateKey,
         serial: _serial.text,
         serialMissing: _serialMissing,
+        dates: TicketDates(
+          dropOffAt: _dropOffAt,
+          technicianStartAt: _technicianStartAt,
+          partsArriveAt: _partsArriveAt,
+          customerContactedAt: _customerContactedAt,
+          pickedUpAt: _pickedUpAt,
+        ),
         complaint: _complaint.text,
       );
       if (!mounted) return;
@@ -377,20 +430,74 @@ class _NewRepairPageState extends State<NewRepairPage> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 780),
               child: ListView(
+                key: const Key('intake-form-scroll'),
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
                 children: [
                   _Section(
                     title: 'Customer',
                     children: [
-                      TextField(
-                        key: const Key('intake-customer'),
-                        controller: _customer,
-                        autofocus: true,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          hintText: 'Customer name',
-                          border: OutlineInputBorder(),
+                      Autocomplete<CustomerRecord>(
+                        textEditingController: _customer,
+                        focusNode: _customerFocus,
+                        displayStringForOption: (customer) => customer.name,
+                        optionsBuilder: (value) {
+                          final query = value.text.trim();
+                          if (query.length < 2) {
+                            return const <CustomerRecord>[];
+                          }
+                          return ShopScope.of(context)
+                              .searchCustomersByName(query);
+                        },
+                        onSelected: _selectCustomer,
+                        optionsViewBuilder: (context, onSelected, options) =>
+                            Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxHeight: 240,
+                                maxWidth: 600,
+                              ),
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                children: [
+                                  for (final customer in options)
+                                    ListTile(
+                                      key: Key(
+                                        'intake-customer-suggestion-${customer.id}',
+                                      ),
+                                      title: Text(customer.name),
+                                      subtitle: Text([
+                                        if (customer.phone?.isNotEmpty == true)
+                                          customer.phone!,
+                                        if (customer.email?.isNotEmpty == true)
+                                          customer.email!,
+                                      ].join(' · ')),
+                                      onTap: () => onSelected(customer),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        fieldViewBuilder:
+                            (context, controller, focusNode, onSubmitted) =>
+                                TextField(
+                          key: const Key('intake-customer'),
+                          controller: controller,
+                          focusNode: focusNode,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.words,
+                          onChanged: _onCustomerNameChanged,
+                          decoration: const InputDecoration(
+                            labelText: 'Name',
+                            hintText: 'Customer name',
+                            helperText:
+                                'Start typing to find an existing customer.',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -639,6 +746,78 @@ class _NewRepairPageState extends State<NewRepairPage> {
                               'What the customer says is wrong, in their words.',
                           border: OutlineInputBorder(),
                         ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _Section(
+                    title: 'Repair dates',
+                    children: [
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final fieldWidth = constraints.maxWidth >= 600
+                              ? (constraints.maxWidth - 12) / 2
+                              : constraints.maxWidth;
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              for (final field in <({
+                                String label,
+                                DateTime? value,
+                                ValueChanged<DateTime?> onChanged,
+                                bool required,
+                              })>[
+                                (
+                                  label: 'Drop Off',
+                                  value: _dropOffAt,
+                                  onChanged: (value) =>
+                                      setState(() => _dropOffAt = value),
+                                  required: true,
+                                ),
+                                (
+                                  label: 'Technician Start Date',
+                                  value: _technicianStartAt,
+                                  onChanged: (value) => setState(
+                                        () => _technicianStartAt = value,
+                                      ),
+                                  required: false,
+                                ),
+                                (
+                                  label: 'Parts Arrive',
+                                  value: _partsArriveAt,
+                                  onChanged: (value) =>
+                                      setState(() => _partsArriveAt = value),
+                                  required: false,
+                                ),
+                                (
+                                  label: 'Customer Contacted',
+                                  value: _customerContactedAt,
+                                  onChanged: (value) => setState(
+                                        () => _customerContactedAt = value,
+                                      ),
+                                  required: false,
+                                ),
+                                (
+                                  label: 'Date of Pick Up',
+                                  value: _pickedUpAt,
+                                  onChanged: (value) =>
+                                      setState(() => _pickedUpAt = value),
+                                  required: false,
+                                ),
+                              ])
+                                SizedBox(
+                                  width: fieldWidth,
+                                  child: DatePickerField(
+                                    label: field.label,
+                                    value: field.value,
+                                    onChanged: field.onChanged,
+                                    required: field.required,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),

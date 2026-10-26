@@ -14,6 +14,11 @@ class TicketBoardEntry {
     required this.device,
     required this.complaint,
     required this.createdAt,
+    this.dropOffAt,
+    this.technicianStartAt,
+    this.partsArriveAt,
+    this.customerContactedAt,
+    this.pickedUpAt,
     this.shopTag,
     this.serial,
     this.serialMissing = false,
@@ -28,6 +33,11 @@ class TicketBoardEntry {
   final String device;
   final String complaint;
   final DateTime createdAt;
+  final DateTime? dropOffAt;
+  final DateTime? technicianStartAt;
+  final DateTime? partsArriveAt;
+  final DateTime? customerContactedAt;
+  final DateTime? pickedUpAt;
   final String? shopTag;
   final String? serial;
   final bool serialMissing;
@@ -82,6 +92,30 @@ class TicketDetailEntry {
   final int estimateCents;
   final DateTime? dueAt;
   final DateTime? completedAt;
+  final DateTime? pickedUpAt;
+
+  TicketDates get dates => TicketDates(
+        dropOffAt: summary.dropOffAt,
+        technicianStartAt: summary.technicianStartAt,
+        partsArriveAt: summary.partsArriveAt,
+        customerContactedAt: summary.customerContactedAt,
+        pickedUpAt: summary.pickedUpAt,
+      );
+}
+
+class TicketDates {
+  const TicketDates({
+    this.dropOffAt,
+    this.technicianStartAt,
+    this.partsArriveAt,
+    this.customerContactedAt,
+    this.pickedUpAt,
+  });
+
+  final DateTime? dropOffAt;
+  final DateTime? technicianStartAt;
+  final DateTime? partsArriveAt;
+  final DateTime? customerContactedAt;
   final DateTime? pickedUpAt;
 }
 
@@ -358,6 +392,8 @@ abstract class TicketsRepository {
 
   Future<List<CustomerRecord>> findCustomersByContact(String phoneOrEmail);
 
+  Future<List<CustomerRecord>> searchCustomersByName(String query);
+
   Future<int> saveCustomer({
     int? customerId,
     required String name,
@@ -512,10 +548,13 @@ abstract class TicketsRepository {
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
+    TicketDates? dates,
     required String complaint,
   });
 
   Future<void> updateStatus(int ticketId, TicketStatus status);
+
+  Future<void> updateTicketDates(int ticketId, TicketDates dates);
 }
 
 class TicketPhotoCleanupException implements Exception {
@@ -560,6 +599,18 @@ class DriftTicketsRepository implements TicketsRepository {
                     .contains(normalizedInput)))
           _customer(row),
     ];
+  }
+
+  @override
+  Future<List<CustomerRecord>> searchCustomersByName(String query) async {
+    final input = query.trim().toLowerCase();
+    if (input.isEmpty) return [];
+    final rows = await (_db.select(_db.customers)
+          ..where((customer) => customer.name.lower().like('%$input%'))
+          ..orderBy([(customer) => OrderingTerm.asc(customer.name)])
+          ..limit(8))
+        .get();
+    return [for (final row in rows) _customer(row)];
   }
 
   @override
@@ -1087,6 +1138,7 @@ class DriftTicketsRepository implements TicketsRepository {
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
+    TicketDates? dates,
     required String complaint,
   }) {
     return _db.createTicket(
@@ -1102,6 +1154,11 @@ class DriftTicketsRepository implements TicketsRepository {
       serial: serial,
       serialMissing: serialMissing,
       photoTemplateKey: photoTemplateKey,
+      dropOffAt: dates?.dropOffAt,
+      technicianStartAt: dates?.technicianStartAt,
+      partsArriveAt: dates?.partsArriveAt,
+      customerContactedAt: dates?.customerContactedAt,
+      pickedUpAt: dates?.pickedUpAt,
       complaint: complaint,
     );
   }
@@ -1109,6 +1166,17 @@ class DriftTicketsRepository implements TicketsRepository {
   @override
   Future<void> updateStatus(int ticketId, TicketStatus status) =>
       _db.setTicketStatus(ticketId, status);
+
+  @override
+  Future<void> updateTicketDates(int ticketId, TicketDates dates) =>
+      _db.setTicketDates(
+        ticketId: ticketId,
+        dropOffAt: dates.dropOffAt,
+        technicianStartAt: dates.technicianStartAt,
+        partsArriveAt: dates.partsArriveAt,
+        customerContactedAt: dates.customerContactedAt,
+        pickedUpAt: dates.pickedUpAt,
+      );
 
   Stream<List<TicketBoardEntry>> _watchBoard() {
     return _ticketQuery().watch().map(
@@ -1142,6 +1210,11 @@ class DriftTicketsRepository implements TicketsRepository {
       device: model?.name ?? ticket.deviceName ?? 'Unlisted device',
       complaint: ticket.complaint,
       createdAt: ticket.createdAt,
+      dropOffAt: ticket.dropOffAt ?? ticket.createdAt,
+      technicianStartAt: ticket.technicianStartAt,
+      partsArriveAt: ticket.partsArriveAt,
+      customerContactedAt: ticket.customerContactedAt,
+      pickedUpAt: ticket.pickedUpAt,
       shopTag: ticket.shopTag,
       serial: ticket.serial,
       serialMissing: ticket.serialMissing,

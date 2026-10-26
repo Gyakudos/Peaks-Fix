@@ -10,6 +10,7 @@ import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../capture/phone_capture_dialog.dart';
+import 'ticket_dates_panel.dart';
 import 'technical_report_editor.dart';
 import 'ticket_widgets.dart';
 
@@ -81,6 +82,7 @@ class _TicketBody extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 860),
         child: ListView(
+          key: const Key('ticket-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
           children: [
             Card(
@@ -505,6 +507,10 @@ class _ReportsCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                    TicketDatesPanel(
+                      ticketId: ticketId,
+                      title: 'Report 1 dates',
+                    ),
                     if (checklist != null && checklist.slots.isNotEmpty) ...[
                       if (defaultTargetPlatform == TargetPlatform.windows)
                         Align(
@@ -657,11 +663,19 @@ class _ReportsCard extends StatelessWidget {
                             ],
                           ),
                         )
-                      : TechnicalReportEditor(
-                          ticketId: ticketId,
-                          ticketNumber: ticketNumber,
-                          device: device,
-                          repository: repository,
+                      : Column(
+                          children: [
+                            TicketDatesPanel(
+                              ticketId: ticketId,
+                              title: 'Technical report dates',
+                            ),
+                            TechnicalReportEditor(
+                              ticketId: ticketId,
+                              ticketNumber: ticketNumber,
+                              device: device,
+                              repository: repository,
+                            ),
+                          ],
                         ),
                 ),
                 const Divider(height: 1),
@@ -673,12 +687,20 @@ class _ReportsCard extends StatelessWidget {
                   status: 'Draft',
                   expandKey: const Key('report3-expand'),
                   startKey: const Key('report3-start'),
-                  child: ClientReportDraftEditor(
-                    ticketId: ticketId,
-                    ticketNumber: ticketNumber,
-                    customerName: customerName,
-                    device: device,
-                    repository: repository,
+                  child: Column(
+                    children: [
+                      TicketDatesPanel(
+                        ticketId: ticketId,
+                        title: 'Client report dates',
+                      ),
+                      ClientReportDraftEditor(
+                        ticketId: ticketId,
+                        ticketNumber: ticketNumber,
+                        customerName: customerName,
+                        device: device,
+                        repository: repository,
+                      ),
+                    ],
                   ),
                 ),
               ],

@@ -1,14 +1,15 @@
 # App structure
 
-## Tabs (5)
+## Tabs (6)
 
 | # | Tab | Contains |
 | --- | --- | --- |
 | 1 | **Tickets** | Default screen. Job board grouped by status, plus the *New repair* button. |
-| 2 | **Customers** | Contact records, devices owned, repair and merch history. |
-| 3 | **Merch** | Retail products and variants, quick sell + cart, stock and sales. |
-| 4 | **Parts** | Repair components, consumed from tickets. |
-| 5 | **Settings** | Shop info, ticket numbering, device catalog, backup. |
+| 2 | **Calendar** | Monthly view of drop-off, technician start, parts arrival, customer contact and pickup dates. |
+| 3 | **Customers** | Contact records, devices owned, repair and merch history. |
+| 4 | **Merch** | Retail products and variants, quick sell + cart, stock and sales. |
+| 5 | **Parts** | Repair components, consumed from tickets. |
+| 6 | **Settings** | Shop info, ticket numbering, device catalog, backup. |
 
 Deliberately **not** tabs:
 
@@ -23,7 +24,7 @@ Deliberately **not** tabs:
 One destination list (`lib/shell/shop_destination.dart`) drives both navs:
 
 - **Wide (>= 900 px, i.e. any normal Windows window):** `NavigationRail`.
-- **Narrow (Android, small Windows window):** `NavigationBar` with all 5 items.
+- **Narrow (Android, small Windows window):** `NavigationBar` with all 6 items.
 
 The Windows title bar is rendered by Flutter above the navigator
 (`lib/app.dart`), so pushed routes such as intake never cover the window
@@ -85,6 +86,10 @@ Merging them would corrupt both stock counts and revenue reporting.
   v5 added `tickets.device_side` for devices booked one half at a time, then v6
   added `tickets.intake_notes` for the Report 1 condition notes. Upgrading in
   place never loses data.
+- Schema v12 adds Drop Off, Technician Start, Parts Arrive and Customer
+  Contacted dates to tickets; the existing pickup date is reused. Old tickets
+  use their creation date for Drop Off. The Calendar tab shows all five
+  milestones, and each report section uses the same saved ticket dates.
 - A **single Joy-Con** is a catalog row of its own (`Joy-Con (single)`), and
   intake asks **Left / Right** as a follow-up. The side is stored on the ticket
   (`device_side`) and shown on the board and the ticket page. A pair remains one

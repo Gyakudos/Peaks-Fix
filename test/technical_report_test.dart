@@ -15,6 +15,44 @@ void main() {
     await database.close();
   });
 
+  test('ticket workflow dates persist as date-only values', () async {
+    final ticket = await database.createTicket(
+      customerName: 'Date Test',
+      customerPhone: '555-0199',
+      customerEmail: 'dates@example.com',
+      deviceName: 'Test console',
+      complaint: 'Does not power on',
+      dropOffAt: DateTime(2026, 4, 2, 16, 30),
+      technicianStartAt: DateTime(2026, 4, 3, 8, 15),
+    );
+
+    var row = await (database.select(database.tickets)
+          ..where((ticketRow) => ticketRow.id.equals(ticket.id)))
+        .getSingle();
+    expect(row.dropOffAt, DateTime(2026, 4, 2));
+    expect(row.technicianStartAt, DateTime(2026, 4, 3));
+    expect(row.partsArriveAt, null);
+    expect(row.customerContactedAt, null);
+
+    await database.setTicketDates(
+      ticketId: ticket.id,
+      dropOffAt: DateTime(2026, 4, 4, 10),
+      technicianStartAt: null,
+      partsArriveAt: DateTime(2026, 4, 5, 18),
+      customerContactedAt: DateTime(2026, 4, 6, 12),
+      pickedUpAt: DateTime(2026, 4, 7, 15),
+    );
+
+    row = await (database.select(database.tickets)
+          ..where((ticketRow) => ticketRow.id.equals(ticket.id)))
+        .getSingle();
+    expect(row.dropOffAt, DateTime(2026, 4, 4));
+    expect(row.technicianStartAt, null);
+    expect(row.partsArriveAt, DateTime(2026, 4, 5));
+    expect(row.customerContactedAt, DateTime(2026, 4, 6));
+    expect(row.pickedUpAt, DateTime(2026, 4, 7));
+  });
+
   test('technical entries sync into the client draft without overwriting edits',
       () async {
     final ticket = await database.createTicket(
@@ -350,6 +388,31 @@ void main() {
       (await repository.watchCustomers().first).single.notes,
       'Prefers text',
     );
+  });
+
+  test('customer name search returns case-insensitive partial matches',
+      () async {
+    final repository = DriftTicketsRepository(database);
+    final returningId = await repository.saveCustomer(
+      name: 'Morgan Lee-Smith',
+      phone: '555-0123',
+      email: 'morgan@example.com',
+      notes: '',
+    );
+    await repository.saveCustomer(
+      name: 'Alex Morgan',
+      phone: '555-0124',
+      email: 'alex@example.com',
+      notes: '',
+    );
+
+    final results = await repository.searchCustomersByName('lee-sm');
+    expect(results.map((customer) => customer.id), [returningId]);
+    expect(
+      await repository.searchCustomersByName('  MORGAN '),
+      hasLength(2),
+    );
+    expect(await repository.searchCustomersByName('   '), isEmpty);
   });
 
   test('device catalog includes common vacuum models by brand', () async {

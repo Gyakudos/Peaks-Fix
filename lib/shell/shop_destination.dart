@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/calendar/calendar_page.dart';
 import '../features/customers/customers_page.dart';
 import '../features/merch/merch_page.dart';
 import '../features/parts/parts_page.dart';
@@ -29,6 +30,12 @@ class ShopDestination {
       icon: Icons.receipt_long_outlined,
       selectedIcon: Icons.receipt_long,
       page: TicketsPage(),
+    ),
+    ShopDestination(
+      label: 'Calendar',
+      icon: Icons.calendar_month_outlined,
+      selectedIcon: Icons.calendar_month,
+      page: CalendarPage(),
     ),
     ShopDestination(
       label: 'Customers',

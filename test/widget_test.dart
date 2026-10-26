@@ -114,6 +114,16 @@ class FakeTicketsRepository implements TicketsRepository {
   }
 
   @override
+  Future<List<CustomerRecord>> searchCustomersByName(String query) async {
+    final input = query.trim().toLowerCase();
+    if (input.isEmpty) return [];
+    return customers
+        .where((customer) => customer.name.toLowerCase().contains(input))
+        .take(8)
+        .toList();
+  }
+
+  @override
   Future<int> saveCustomer({
     int? customerId,
     required String name,
@@ -481,6 +491,7 @@ class FakeTicketsRepository implements TicketsRepository {
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
+    TicketDates? dates,
     required String complaint,
   }) async {
     creations.add(
@@ -497,6 +508,7 @@ class FakeTicketsRepository implements TicketsRepository {
         serial: serial,
         serialMissing: serialMissing,
         photoTemplateKey: photoTemplateKey,
+        dates: dates,
         complaint: complaint,
       ),
     );
@@ -517,6 +529,11 @@ class FakeTicketsRepository implements TicketsRepository {
         device: deviceName ?? 'Sony PlayStation 5',
         complaint: complaint,
         createdAt: DateTime(2026, 1, 2, 9, 30),
+        dropOffAt: dates?.dropOffAt ?? DateTime(2026, 1, 2),
+        technicianStartAt: dates?.technicianStartAt,
+        partsArriveAt: dates?.partsArriveAt,
+        customerContactedAt: dates?.customerContactedAt,
+        pickedUpAt: dates?.pickedUpAt,
         shopTag: result.shopTag,
         serial: serial,
         serialMissing: serialMissing,
@@ -548,6 +565,37 @@ class FakeTicketsRepository implements TicketsRepository {
 
   @override
   Future<void> updateStatus(int ticketId, TicketStatus status) async {}
+
+  @override
+  Future<void> updateTicketDates(int ticketId, TicketDates dates) async {
+    final ticket = boardTickets.singleWhere((entry) => entry.id == ticketId);
+    final updated = TicketBoardEntry(
+      id: ticket.id,
+      number: ticket.number,
+      status: ticket.status,
+      customerName: ticket.customerName,
+      device: ticket.device,
+      complaint: ticket.complaint,
+      createdAt: ticket.createdAt,
+      dropOffAt: dates.dropOffAt,
+      technicianStartAt: dates.technicianStartAt,
+      partsArriveAt: dates.partsArriveAt,
+      customerContactedAt: dates.customerContactedAt,
+      pickedUpAt: dates.pickedUpAt,
+      shopTag: ticket.shopTag,
+      serial: ticket.serial,
+      serialMissing: ticket.serialMissing,
+      deviceVariant: ticket.deviceVariant,
+      deviceSide: ticket.deviceSide,
+    );
+    boardTickets[boardTickets.indexOf(ticket)] = updated;
+    final detail = _detail;
+    if (detail != null) {
+      _detail = TicketDetailEntry(summary: updated);
+      _detailUpdates.add(_detail);
+    }
+    _boardUpdates.add(List.unmodifiable(boardTickets));
+  }
 }
 
 class CreateCall {
@@ -565,6 +613,7 @@ class CreateCall {
     this.serial,
     this.serialMissing = false,
     this.photoTemplateKey,
+    this.dates,
   });
 
   final String customerName;
@@ -579,6 +628,7 @@ class CreateCall {
   final String? serial;
   final bool serialMissing;
   final String? photoTemplateKey;
+  final TicketDates? dates;
   final String complaint;
 }
 
@@ -588,11 +638,21 @@ Future<void> _openIntake(WidgetTester tester) async {
 }
 
 Future<void> _selectDevice(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('intake-category')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
   await tester.tap(find.byKey(const Key('intake-category')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Consoles').last);
   await tester.pumpAndSettle();
 
+  await tester.scrollUntilVisible(
+    find.byKey(const Key('intake-model')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
   await tester.tap(find.byKey(const Key('intake-model')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Sony PlayStation 5').last);
@@ -793,15 +853,59 @@ void main() {
     expect(find.text('PF-000001 deleted'), findsOneWidget);
   });
 
-  testWidgets('app builds with all five tabs', (WidgetTester tester) async {
+  testWidgets('app builds with all six tabs', (WidgetTester tester) async {
     await tester.pumpWidget(VolaFixApp(tickets: FakeTicketsRepository()));
 
     expect(find.text('Peaks Fix'), findsWidgets);
     expect(find.text('Tickets'), findsWidgets);
+    expect(find.text('Calendar'), findsWidgets);
     expect(find.text('Customers'), findsWidgets);
     expect(find.text('Merch'), findsWidgets);
     expect(find.text('Parts'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
+  });
+
+  testWidgets('calendar shows all ticket workflow dates and opens tickets',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    final today = DateTime.now();
+    final date = DateTime(today.year, today.month, today.day);
+    await repository.createTicket(
+      customerName: 'Calendar Customer',
+      customerPhone: '555-0123',
+      customerEmail: 'calendar@example.com',
+      deviceName: 'Test console',
+      complaint: 'Calendar test',
+      dates: TicketDates(
+        dropOffAt: date,
+        technicianStartAt: date,
+        partsArriveAt: date,
+        customerContactedAt: date,
+        pickedUpAt: date,
+      ),
+    );
+
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.tap(find.text('Calendar').last);
+    await tester.pumpAndSettle();
+
+    for (final label in [
+      'Drop Off',
+      'Technician Start',
+      'Parts Arrive',
+      'Customer Contacted',
+      'Date of Pick Up',
+    ]) {
+      expect(find.textContaining(label), findsOneWidget);
+    }
+    await tester.tap(find.byKey(const Key('calendar-event-7-Drop Off')));
+    await tester.pumpAndSettle();
+    expect(find.text('Calendar test'), findsOneWidget);
   });
 
   testWidgets('wide layout uses a rail and switches tabs',
@@ -820,7 +924,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-    expect(rail.selectedIndex, 2);
+    expect(rail.selectedIndex, 3);
   });
 
   testWidgets('narrow layout uses the bottom bar', (WidgetTester tester) async {
@@ -961,8 +1065,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('intake-save')),
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('intake-form-scroll')),
+        matching: find.byType(Scrollable).first,
+      ),
     );
+    await tester.ensureVisible(find.byKey(const Key('intake-save')));
     await tester.tap(find.byKey(const Key('intake-save')));
     await tester.pumpAndSettle();
 
@@ -987,8 +1095,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('intake-save')),
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('intake-form-scroll')),
+        matching: find.byType(Scrollable).first,
+      ),
     );
+    await tester.ensureVisible(find.byKey(const Key('intake-save')));
     await tester.tap(find.byKey(const Key('intake-save')));
     await tester.pumpAndSettle();
 
@@ -1084,6 +1196,7 @@ void main() {
       'No HDMI output',
     );
     await _selectDevice(tester);
+    expect(find.byKey(const Key('date-picker-Drop Off')), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('intake-save')),
@@ -1102,6 +1215,12 @@ void main() {
     expect(created.serial, 'XKW1000123');
     expect(created.serialMissing, isFalse);
     expect(created.complaint, 'No HDMI output');
+    final intakeDate = DateTime.now();
+    expect(
+      created.dates?.dropOffAt,
+      DateTime(intakeDate.year, intakeDate.month, intakeDate.day),
+    );
+    expect(created.dates?.technicianStartAt, isNull);
 
     // The intake route is replaced by the new ticket.
     expect(find.text('PF-000001'), findsWidgets);
@@ -1172,7 +1291,11 @@ void main() {
       find.byKey(const Key('intake-complaint')),
       'Intermittent HDMI',
     );
-    await tester.ensureVisible(find.byKey(const Key('intake-save')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('intake-save')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('intake-save')));
     await tester.pumpAndSettle();
 
@@ -1181,6 +1304,74 @@ void main() {
     expect(repository.creations.single.customerDeviceId, 42);
     expect(repository.creations.single.deviceModelId, 1);
     expect(repository.creations.single.serial, 'XKW1000123');
+  });
+
+  testWidgets('customer name suggestions select and load a returning customer',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.saveCustomer(
+      name: 'Morgan Lee-Smith',
+      phone: '555-0123',
+      email: 'morgan@example.com',
+      notes: '',
+    );
+    repository.customerDevices[1] = const [
+      CustomerDeviceEntry(
+        id: 73,
+        label: 'Sony PlayStation 5',
+        serial: 'XKW-73',
+        serialMissing: false,
+        modelId: 1,
+        category: 'Consoles',
+        modelName: 'PlayStation 5',
+      ),
+    ];
+
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await _openIntake(tester);
+    await tester.enterText(
+      find.byKey(const Key('intake-customer')),
+      'lee-sm',
+    );
+    await tester.pumpAndSettle();
+
+    final suggestion = find.byKey(const Key('intake-customer-suggestion-1'));
+    expect(suggestion, findsOneWidget);
+    expect(find.text('555-0123 · morgan@example.com'), findsOneWidget);
+    await tester.tap(suggestion);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('intake-customer')))
+          .controller!
+          .text,
+      'Morgan Lee-Smith',
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('intake-phone')))
+          .controller!
+          .text,
+      '555-0123',
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('intake-email')))
+          .controller!
+          .text,
+      'morgan@example.com',
+    );
+    expect(find.text('Existing customer selected'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('intake-saved-device')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Sony PlayStation 5'), findsWidgets);
   });
 
   testWidgets('intake records a model number below the model',
@@ -1233,7 +1424,7 @@ void main() {
 
   testWidgets('intake saves a device with no serial sticker',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.physicalSize = const Size(1400, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1251,6 +1442,7 @@ void main() {
       find.byKey(const Key('intake-email')),
       'ana@example.com',
     );
+    await _selectDevice(tester);
     await tester.enterText(
       find.byKey(const Key('intake-complaint')),
       'Will not power on',
@@ -1258,13 +1450,12 @@ void main() {
     await tester.ensureVisible(find.text('No serial number sticker'));
     await tester.tap(find.text('No serial number sticker'));
     await tester.pumpAndSettle();
-    await _selectDevice(tester);
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('intake-save')),
-      250,
-      scrollable: find.byType(Scrollable).first,
+    await tester.drag(
+      find.byKey(const Key('intake-form-scroll')),
+      const Offset(0, -300),
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('intake-save')));
     await tester.pumpAndSettle();
 
@@ -1765,7 +1956,7 @@ void main() {
 
   testWidgets('client report Start button opens the editable draft',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 1800);
+    tester.view.physicalSize = const Size(1400, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1790,6 +1981,17 @@ void main() {
         ),
         findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('client-report-open-invoice')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('ticket-detail-scroll')),
+        matching: find.byType(Scrollable).first,
+      ),
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('client-report-open-invoice')),
+    );
     await tester.tap(find.byKey(const Key('client-report-open-invoice')));
     await tester.pumpAndSettle();
     expect(find.text('Invoice · PF-000001'), findsOneWidget);
@@ -1840,6 +2042,12 @@ void main() {
     await tester.tap(find.byKey(const Key('report2-expand')));
     await tester.pumpAndSettle();
     expect(addNote, findsOneWidget);
+    await tester.scrollUntilVisible(
+      addNote,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(addNote);
     await tester.tap(addNote);
     await tester.pumpAndSettle();
 
@@ -1849,6 +2057,14 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('technical-required-parts')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('technical-required-parts')),
+    );
     await tester.tap(find.byKey(const Key('technical-required-parts')));
     await tester.pumpAndSettle();
     expect(find.textContaining('No inventory parts yet.'), findsOneWidget);

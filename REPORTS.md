@@ -10,6 +10,11 @@ stages, not staff roles.
 Produced by the **New repair** wizard, so the checklist is never typed twice.
 Purpose: liability and a baseline for the client report.
 
+The intake tracks five workflow dates: **Drop Off** (defaults to intake day),
+**Technician Start Date**, **Parts Arrive**, **Customer Contacted**, and **Date
+of Pick Up**. These dates can be edited in each report section and appear as
+events in the Calendar tab. Pick Up reuses the ticket's existing pickup date.
+
 - Device identity: category → brand → model, serial/IMEI, accessories received,
   and the **shop tag** issued at intake (`G-482913057`).
 - Serial field plus a **`No serial number sticker` checkbox** — the single
@@ -123,6 +128,10 @@ is separate from the internal log.
 The current editor covers this notes-and-photos workflow. The structured
 diagnostic and estimate fields below are still planned.
 
+The Technical section also exposes the shared five-date workflow for the job;
+changes are saved to the ticket and are visible in the other report sections
+and Calendar.
+
 - Header: ticket number, shop tag and device, so the bench matches paper to
   hardware at a glance.
 - Complaint (carried from report 1).
@@ -155,6 +164,9 @@ here, all included by default. The technician can rewrite note text or captions
 and choose which entries to include. Those changes are preserved when Report 2
 syncs new or updated content. Sending, printing and the full two-page warranty
 report are still planned.
+
+The Client report section includes the same ticket dates as Report 1 and
+Technical, so milestone updates remain consistent across all three.
 
 ### Page 1 — Job summary
 
