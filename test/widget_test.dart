@@ -922,9 +922,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('report1-checklist')));
+    final ticketScroll = find.descendant(
+      of: find.byKey(const Key('ticket-detail-scroll')),
+      matching: find.byType(Scrollable).first,
+    );
+    final intakeReport = find.byKey(const Key('report1-checklist'));
+    await tester.scrollUntilVisible(
+      intakeReport,
+      200,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(intakeReport);
     await tester.pumpAndSettle();
     final selector = find.byKey(const Key('report-staff-intake-7'));
+    await tester.scrollUntilVisible(selector, 200, scrollable: ticketScroll);
     await tester.tap(selector);
     await tester.pumpAndSettle();
     expect(find.text('Alex Tech · Tech 2'), findsOneWidget);
@@ -2095,23 +2106,27 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+    final ticketScroll = find.descendant(
+      of: find.byKey(const Key('ticket-detail-scroll')),
+      matching: find.byType(Scrollable).first,
+    );
 
     final complete = find.byKey(const Key('complete-report1'));
     await tester.scrollUntilVisible(
       complete,
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: ticketScroll,
     );
     await tester.tap(complete);
     await tester.pumpAndSettle();
 
-    final report2 = find.byKey(const Key('report2-row'));
+    final report2Start = find.byKey(const Key('report2-start'));
     await tester.scrollUntilVisible(
-      report2,
+      report2Start,
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: ticketScroll,
     );
-    await tester.tap(find.byKey(const Key('report2-start')));
+    await tester.tap(report2Start);
     await tester.pumpAndSettle();
 
     final addNote = find.byKey(const Key('technical-add-note'));
@@ -2129,7 +2144,7 @@ void main() {
     await tester.scrollUntilVisible(
       addNote,
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: ticketScroll,
     );
     await tester.ensureVisible(addNote);
     await tester.tap(addNote);
@@ -2144,7 +2159,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('technical-required-parts')),
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: ticketScroll,
     );
     await tester.ensureVisible(
       find.byKey(const Key('technical-required-parts')),
