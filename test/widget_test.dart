@@ -889,6 +889,11 @@ void main() {
 
   testWidgets('ticket staff selector offers signed-in staff only',
       (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final repository = FakeTicketsRepository();
     await repository.createTicket(
       customerName: 'Test Customer',
@@ -1645,7 +1650,7 @@ void main() {
 
   testWidgets('ticket report 1 keeps the 3DS shot list',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 1800);
+    tester.view.physicalSize = const Size(1400, 2200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
