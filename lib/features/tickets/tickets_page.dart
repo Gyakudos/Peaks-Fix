@@ -44,7 +44,7 @@ class TicketsPage extends StatelessWidget {
                         'Start with New repair. The device, its serial (or shop '
                         'tag) and the customer go on one ticket.',
                   ),
-                _ => _Board(tickets: tickets),
+                _ => _Board(tickets: tickets, repository: repository),
               },
             ),
           ],
@@ -113,9 +113,10 @@ class _Header extends StatelessWidget {
 }
 
 class _Board extends StatelessWidget {
-  const _Board({required this.tickets});
+  const _Board({required this.tickets, required this.repository});
 
   final List<TicketBoardEntry> tickets;
+  final TicketsRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -130,10 +131,18 @@ class _Board extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
           children: [
-            _Group(label: 'In the shop', tickets: active),
+            _Group(
+              label: 'In the shop',
+              tickets: active,
+              repository: repository,
+            ),
             if (finished.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _Group(label: 'Finished', tickets: finished),
+              _Group(
+                label: 'Finished',
+                tickets: finished,
+                repository: repository,
+              ),
             ],
           ],
         ),
@@ -143,10 +152,15 @@ class _Board extends StatelessWidget {
 }
 
 class _Group extends StatelessWidget {
-  const _Group({required this.label, required this.tickets});
+  const _Group({
+    required this.label,
+    required this.tickets,
+    required this.repository,
+  });
 
   final String label;
   final List<TicketBoardEntry> tickets;
+  final TicketsRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -174,16 +188,72 @@ class _Group extends StatelessWidget {
               ),
             ),
           ),
-        for (final ticket in tickets) _TicketCard(ticket: ticket),
+        for (final ticket in tickets)
+          _TicketCard(ticket: ticket, repository: repository),
       ],
     );
   }
 }
 
 class _TicketCard extends StatelessWidget {
-  const _TicketCard({required this.ticket});
+  const _TicketCard({required this.ticket, required this.repository});
 
   final TicketBoardEntry ticket;
+  final TicketsRepository repository;
+
+  Future<void> _deleteTicket(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete ticket?'),
+        content: Text(
+          'Delete ${ticket.number} and its reports, payment records, and '
+          'attached photos? Customer records and issued shop-tag history '
+          'will be kept. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            key: Key('cancel-delete-ticket-${ticket.id}'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: Key('confirm-delete-ticket-${ticket.id}'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete ticket'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await repository.deleteTicket(ticket.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${ticket.number} deleted')),
+      );
+    } on TicketPhotoCleanupException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${ticket.number} was deleted, but its photos could not be '
+            'removed: $error',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete ${ticket.number}: $error')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -206,19 +276,32 @@ class _TicketCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
-                    ticket.number,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
+                  Expanded(
+                    child: Wrap(
+                      spacing: 10,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          ticket.number,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        TicketStatusChip(status: ticket.status),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  TicketStatusChip(status: ticket.status),
-                  const Spacer(),
                   Text(
                     ageLabel(ticket.createdAt),
                     style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                  IconButton(
+                    key: Key('delete-ticket-${ticket.id}'),
+                    tooltip: 'Delete ${ticket.number}',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteTicket(context),
                   ),
                 ],
               ),

@@ -1,8 +1,16 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../capture/phone_capture_dialog.dart';
+import 'technical_report_editor.dart';
 import 'ticket_widgets.dart';
 
 /// One job: identity, fault, status and the three report stages.
@@ -171,10 +179,115 @@ class _TicketBody extends StatelessWidget {
               _TextCard(title: 'Notes', body: entry.notes!),
             ],
             const SizedBox(height: 16),
-            _ReportsCard(ticketId: summary.id),
+            _ReportsCard(
+              ticketId: summary.id,
+              ticketNumber: summary.number,
+              customerName: summary.customerName,
+              device: summary.deviceWithVariant,
+              intakeNotes: entry.intakeNotes,
+              report1CompletedAt: entry.report1CompletedAt,
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReportSection extends StatefulWidget {
+  const _ReportSection({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.status,
+    required this.child,
+    required this.expandKey,
+    this.startKey,
+    this.locked = false,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final String status;
+  final Widget child;
+  final Key expandKey;
+  final Key? startKey;
+  final bool locked;
+
+  @override
+  State<_ReportSection> createState() => _ReportSectionState();
+}
+
+class _ReportSectionState extends State<_ReportSection> {
+  bool _expanded = false;
+
+  void _toggle() => setState(() => _expanded = !_expanded);
+
+  void _open() => setState(() => _expanded = true);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(
+            widget.icon,
+            color: widget.locked
+                ? theme.colorScheme.onSurfaceVariant
+                : theme.colorScheme.primary,
+          ),
+          title: Text(widget.title),
+          subtitle: Text(widget.subtitle),
+          onTap: _toggle,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Chip(
+                avatar: widget.locked ? const Icon(Icons.lock, size: 14) : null,
+                label: Text(widget.status),
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                key: widget.expandKey,
+                tooltip: _expanded
+                    ? 'Collapse ${widget.title}'
+                    : 'Expand ${widget.title}',
+                onPressed: _toggle,
+                icon: AnimatedRotation(
+                  turns: _expanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: const Icon(Icons.expand_more),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (widget.startKey != null && !_expanded)
+          Padding(
+            padding: const EdgeInsets.only(left: 40, right: 8, bottom: 12),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                key: widget.startKey,
+                onPressed: widget.locked ? null : _open,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Start'),
+              ),
+            ),
+          ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: _expanded
+              ? SizedBox(width: double.infinity, child: widget.child)
+              : const SizedBox(width: double.infinity, height: 0),
+        ),
+      ],
     );
   }
 }
@@ -306,14 +419,21 @@ class _TextCard extends StatelessWidget {
 }
 
 class _ReportsCard extends StatelessWidget {
-  const _ReportsCard({required this.ticketId});
+  const _ReportsCard({
+    required this.ticketId,
+    required this.ticketNumber,
+    required this.customerName,
+    required this.device,
+    required this.intakeNotes,
+    required this.report1CompletedAt,
+  });
 
   final int ticketId;
-
-  static const _stages = <(String, String)>[
-    ('Technical', 'Findings, parts and contact log · made while diagnosing'),
-    ('Client report', 'Auto-filled summary · sent at completion'),
-  ];
+  final String ticketNumber;
+  final String customerName;
+  final String device;
+  final String? intakeNotes;
+  final DateTime? report1CompletedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -339,8 +459,8 @@ class _ReportsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'The three stages of this job. Editors are next; nothing is '
-                  'required to move the ticket.',
+                  'Drafts save automatically. No report is required to move '
+                  'the ticket.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -354,11 +474,15 @@ class _ReportsCard extends StatelessWidget {
                     Icons.checklist_rtl_outlined,
                     color: theme.colorScheme.primary,
                   ),
-                  title: const Row(
+                  title: Row(
                     children: [
-                      Expanded(child: Text('Intake / cosmetic')),
+                      const Expanded(child: Text('Intake / cosmetic')),
                       Chip(
-                        label: Text('Not started'),
+                        label: Text(
+                          report1CompletedAt == null
+                              ? _progressLabel(checklist)
+                              : 'Completed',
+                        ),
                         visualDensity: VisualDensity.compact,
                       ),
                     ],
@@ -380,9 +504,30 @@ class _ReportsCard extends StatelessWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                      )
-                    else
-                      for (final slot in checklist.slots)
+                      ),
+                    if (checklist != null && checklist.slots.isNotEmpty) ...[
+                      if (defaultTargetPlatform == TargetPlatform.windows)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 10, bottom: 6),
+                            child: FilledButton.tonalIcon(
+                              key: const Key('capture-with-phone'),
+                              onPressed: () => showPhoneCaptureDialog(
+                                context,
+                                repository: repository,
+                                ticketId: ticketId,
+                                ticketNumber: ticketNumber,
+                                device: device,
+                                checklist: checklist,
+                              ),
+                              icon: const Icon(Icons.qr_code_2, size: 20),
+                              label: const Text('Capture with phone'),
+                            ),
+                          ),
+                        ),
+                      for (final slot
+                          in checklist.slots.where((slot) => slot.required))
                         ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
@@ -395,32 +540,147 @@ class _ReportsCard extends StatelessWidget {
                           ),
                           title: Text(slot.label),
                           subtitle: slot.hint == null ? null : Text(slot.hint!),
-                          trailing: Text(
-                            slot.captured ? 'saved' : 'not captured',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: slot.captured
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurfaceVariant,
-                            ),
+                          trailing: _SlotTrailing(
+                            slot: slot,
+                            onTap: () => _showFullPhoto(context, slot),
                           ),
                         ),
+                    ],
+                    if (checklist != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Optional Photos',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            key: const Key('add-optional-photo'),
+                            onPressed: () => _addOptionalPhoto(
+                              context,
+                              repository,
+                              ticketId,
+                            ),
+                            icon: const Icon(Icons.add_a_photo_outlined),
+                            label: const Text('Add Optional Photos'),
+                          ),
+                        ],
+                      ),
+                      for (final slot
+                          in checklist.slots.where((slot) => !slot.required))
+                        ListTile(
+                          key: Key('optional-photo-${slot.sortOrder}'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.photo_outlined),
+                          title: Text(slot.label),
+                          subtitle:
+                              Text(slot.hint ?? 'Optional reference photo'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!slot.captured)
+                                IconButton(
+                                  key: Key(
+                                    'attach-optional-photo-${slot.sortOrder}',
+                                  ),
+                                  tooltip: 'Attach ${slot.label}',
+                                  onPressed: () => _attachOptionalPhoto(
+                                    context,
+                                    repository,
+                                    ticketId,
+                                    slot.sortOrder,
+                                  ),
+                                  icon: const Icon(Icons.upload_file_outlined),
+                                ),
+                              _SlotTrailing(
+                                slot: slot,
+                                onTap: () => _showFullPhoto(context, slot),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 10),
+                    const Divider(height: 1),
+                    _IntakeNotesField(
+                      ticketId: ticketId,
+                      repository: repository,
+                      initialNotes: intakeNotes,
+                    ),
+                    _ReportOneFooter(
+                      ticketId: ticketId,
+                      checklist: checklist,
+                      completedAt: report1CompletedAt,
+                      repository: repository,
+                    ),
                   ],
                 ),
                 const Divider(height: 1),
-                for (final (title, subtitle) in _stages)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.description_outlined,
-                      color: theme.colorScheme.primary,
-                    ),
-                    title: Text(title),
-                    subtitle: Text(subtitle),
-                    trailing: const Chip(
-                      label: Text('Not started'),
-                      visualDensity: VisualDensity.compact,
-                    ),
+                _ReportSection(
+                  key: const Key('report2-row'),
+                  title: 'Technical',
+                  subtitle: report1CompletedAt == null
+                      ? 'Complete report 1 to unlock'
+                      : 'Bench notes and photos · internal',
+                  icon: report1CompletedAt == null
+                      ? Icons.lock_outline
+                      : Icons.description_outlined,
+                  status: report1CompletedAt == null ? 'Locked' : 'Draft',
+                  locked: report1CompletedAt == null,
+                  expandKey: const Key('report2-expand'),
+                  startKey: const Key('report2-start'),
+                  child: report1CompletedAt == null
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(40, 8, 8, 16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.lock_outline,
+                                size: 18,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Complete Report 1 above to unlock the '
+                                  'technical bench log. Your notes and photos '
+                                  'will be added here.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : TechnicalReportEditor(
+                          ticketId: ticketId,
+                          ticketNumber: ticketNumber,
+                          device: device,
+                          repository: repository,
+                        ),
+                ),
+                const Divider(height: 1),
+                _ReportSection(
+                  key: const Key('report3-row'),
+                  title: 'Client report',
+                  subtitle: 'Editable draft · review before sharing',
+                  icon: Icons.description_outlined,
+                  status: 'Draft',
+                  expandKey: const Key('report3-expand'),
+                  startKey: const Key('report3-start'),
+                  child: ClientReportDraftEditor(
+                    ticketId: ticketId,
+                    ticketNumber: ticketNumber,
+                    customerName: customerName,
+                    device: device,
+                    repository: repository,
                   ),
+                ),
               ],
             );
           },
@@ -429,15 +689,568 @@ class _ReportsCard extends StatelessWidget {
     );
   }
 
+  String _progressLabel(PhotoChecklist? checklist) {
+    if (checklist == null || checklist.slots.isEmpty) return 'Not started';
+    final required = checklist.slots.where((slot) => slot.required).toList();
+    final captured = required.where((slot) => slot.captured).length;
+    if (required.isEmpty) return 'Optional photos';
+    if (captured == 0) return 'Not started';
+    if (captured >= required.length) return 'Photos done';
+    return '$captured/${required.length}';
+  }
+
   String _intakeSummary(PhotoChecklist? checklist) {
     if (checklist == null) return 'Checklist · made at intake';
     if (checklist.isEmpty) {
       return 'Checklist + photos · made at intake';
     }
+    final required = checklist.slots.where((slot) => slot.required).length;
+    final captured =
+        checklist.slots.where((slot) => slot.required && slot.captured).length;
     final family = checklist.templateName ?? checklist.templateKey;
-    return 'Checklist + ${checklist.slots.length} photos'
+    return '$captured of $required required photos'
         '${family == null ? '' : ' · $family'}';
   }
+
+  Future<void> _addOptionalPhoto(
+    BuildContext context,
+    TicketsRepository repository,
+    int ticketId,
+  ) async {
+    final label = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => const _OptionalPhotoDialog(),
+    );
+    if (label == null || !context.mounted) return;
+    try {
+      await repository.addOptionalPhotoSlot(ticketId: ticketId, label: label);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not add optional photo: $error')),
+      );
+    }
+  }
+
+  Future<void> _attachOptionalPhoto(
+    BuildContext context,
+    TicketsRepository repository,
+    int ticketId,
+    int sortOrder,
+  ) async {
+    try {
+      final file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'Images',
+            extensions: ['jpg', 'jpeg', 'png', 'webp'],
+          ),
+        ],
+      );
+      if (file == null) return;
+      if (await file.length() > 12 * 1024 * 1024) {
+        throw const FormatException('Choose a photo smaller than 12 MB.');
+      }
+      await repository.savePhotoSlot(
+        ticketId: ticketId,
+        sortOrder: sortOrder,
+        bytes: await file.readAsBytes(),
+        extension: p.extension(file.name).replaceFirst('.', ''),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not attach optional photo: $error')),
+      );
+    }
+  }
+}
+
+class _OptionalPhotoDialog extends StatefulWidget {
+  const _OptionalPhotoDialog();
+
+  @override
+  State<_OptionalPhotoDialog> createState() => _OptionalPhotoDialogState();
+}
+
+class _OptionalPhotoDialogState extends State<_OptionalPhotoDialog> {
+  final _labelController = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final label = _labelController.text.trim();
+    if (label.isEmpty) {
+      setState(() => _error = 'Enter a label for this photo.');
+      return;
+    }
+    if (label.length > 80) {
+      setState(() => _error = 'Keep the label to 80 characters or fewer.');
+      return;
+    }
+    Navigator.of(context).pop(label);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add optional photo'),
+      content: SizedBox(
+        width: 360,
+        child: TextField(
+          key: const Key('optional-photo-label'),
+          controller: _labelController,
+          autofocus: true,
+          maxLength: 80,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(
+            labelText: 'Photo label',
+            hintText: 'e.g. Damage close-up',
+            errorText: _error,
+          ),
+          onSubmitted: (_) => _save(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('optional-photo-save'),
+          onPressed: _save,
+          child: const Text('Add photo'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Complete / reopen control at the bottom of Report 1.
+///
+/// Completion needs every required photo, so the button stays disabled until
+/// the checklist is done. Legacy jobs with no photo template can be completed
+/// straight away; notes are optional.
+class _ReportOneFooter extends StatelessWidget {
+  const _ReportOneFooter({
+    required this.ticketId,
+    required this.checklist,
+    required this.completedAt,
+    required this.repository,
+  });
+
+  final int ticketId;
+  final PhotoChecklist? checklist;
+  final DateTime? completedAt;
+  final TicketsRepository repository;
+
+  bool get _canComplete =>
+      checklist != null && (checklist!.isEmpty || checklist!.isComplete);
+
+  int get _missingCount => checklist == null
+      ? 0
+      : checklist!.slots
+          .where((slot) => slot.required && !slot.captured)
+          .length;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (completedAt != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 6),
+        child: Row(
+          children: [
+            Icon(Icons.task_alt, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Report 1 complete',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '${_dateTimeLabel(completedAt!)} · report 2 unlocked',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              key: const Key('reopen-report1'),
+              onPressed: () => _confirmReopen(context),
+              child: const Text('Reopen'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final String hint;
+    if (checklist == null) {
+      hint = 'Loading the photo checklist…';
+    } else if (checklist!.isEmpty) {
+      hint = 'This job has no photo checklist, so it can be completed now.';
+    } else if (_canComplete) {
+      hint = 'This unlocks report 2.';
+    } else {
+      hint = _missingCount == 1
+          ? '1 photo still needed.'
+          : '$_missingCount photos still needed.';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FilledButton.icon(
+            key: const Key('complete-report1'),
+            onPressed: _canComplete
+                ? () => repository.setReport1Completed(ticketId, true)
+                : null,
+            icon: const Icon(Icons.task_alt, size: 18),
+            label: const Text('Complete report 1'),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 9),
+              child: Text(
+                hint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmReopen(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reopen report 1?'),
+        content: const Text(
+          'Report 2 locks again until report 1 is completed. Photos and notes '
+          'are kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-reopen-report1'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reopen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await repository.setReport1Completed(ticketId, false);
+    }
+  }
+}
+
+String _dateTimeLabel(DateTime time) {
+  final hour = time.hour.toString().padLeft(2, '0');
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '${shortDate(time)} at $hour:$minute';
+}
+
+class _IntakeNotesField extends StatefulWidget {
+  const _IntakeNotesField({
+    required this.ticketId,
+    required this.repository,
+    required this.initialNotes,
+  });
+
+  final int ticketId;
+  final TicketsRepository repository;
+  final String? initialNotes;
+
+  @override
+  State<_IntakeNotesField> createState() => _IntakeNotesFieldState();
+}
+
+class _IntakeNotesFieldState extends State<_IntakeNotesField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focus;
+  Timer? _timer;
+  late String _savedText;
+  bool _dirty = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _savedText = widget.initialNotes ?? '';
+    _controller = TextEditingController(text: _savedText);
+    _controller.addListener(_onChanged);
+    _focus = FocusNode()..addListener(_onFocus);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    if (_dirty) {
+      // Leaving the ticket mid-sentence still keeps the note.
+      unawaited(
+        widget.repository.saveIntakeNotes(widget.ticketId, _controller.text),
+      );
+    }
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onFocus() {
+    if (!_focus.hasFocus && _dirty) _save();
+  }
+
+  void _onChanged() {
+    final dirty = _controller.text != _savedText;
+    setState(() {
+      _dirty = dirty;
+      _error = null;
+    });
+    _timer?.cancel();
+    if (!dirty) return;
+    _timer = Timer(const Duration(milliseconds: 800), _save);
+  }
+
+  Future<void> _save() async {
+    _timer?.cancel();
+    if (!_dirty || _saving) return;
+    final text = _controller.text;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.repository.saveIntakeNotes(widget.ticketId, text);
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _savedText = text;
+        _dirty = _controller.text != text;
+      });
+      if (_dirty) {
+        _timer = Timer(const Duration(milliseconds: 800), _save);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Not saved. Keep typing to retry.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, right: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            key: const Key('intake-notes'),
+            controller: _controller,
+            focusNode: _focus,
+            minLines: 3,
+            maxLines: 8,
+            keyboardType: TextInputType.multiline,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Condition notes',
+              hintText: 'Scratches, cracks, stickers, missing parts — anything '
+                  'the photos do not show.',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _status(theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _status(ThemeData theme) {
+    final style = theme.textTheme.bodySmall;
+    if (_error != null) {
+      return Row(
+        children: [
+          Icon(Icons.error_outline, size: 15, color: theme.colorScheme.error),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              _error!,
+              style: style?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+        ],
+      );
+    }
+    if (_saving) {
+      return Row(
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            'Saving…',
+            style: style?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      );
+    }
+    if (_dirty) {
+      return Text(
+        'Not saved yet',
+        style: style?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      );
+    }
+    if (_savedText.trim().isNotEmpty) {
+      return Row(
+        children: [
+          Icon(Icons.check_circle_outline,
+              size: 15, color: theme.colorScheme.primary),
+          const SizedBox(width: 5),
+          Text(
+            'Saved to this ticket',
+            style: style?.copyWith(color: theme.colorScheme.primary),
+          ),
+        ],
+      );
+    }
+    return Text(
+      'Saves automatically',
+      style: style?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+    );
+  }
+}
+
+class _SlotTrailing extends StatelessWidget {
+  const _SlotTrailing({required this.slot, required this.onTap});
+
+  final TicketPhotoSlotEntry slot;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final path = slot.photoPath;
+    if (path == null) {
+      return Text(
+        'not captured',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: 'View photo',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            File(path),
+            width: 52,
+            height: 52,
+            fit: BoxFit.cover,
+            cacheWidth: 104,
+            errorBuilder: (_, __, ___) => Container(
+              width: 52,
+              height: 52,
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.broken_image_outlined,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _showFullPhoto(BuildContext context, TicketPhotoSlotEntry slot) {
+  final path = slot.photoPath;
+  if (path == null) return;
+  showDialog<void>(
+    context: context,
+    builder: (context) {
+      final theme = Theme.of(context);
+      return Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 900,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(slot.label),
+                subtitle: slot.hint == null ? null : Text(slot.hint!),
+                trailing: IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+              Flexible(
+                child: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: InteractiveViewer(
+                    maxScale: 4,
+                    child: Image.file(
+                      File(path),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Icon(Icons.broken_image_outlined, size: 48),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _Missing extends StatelessWidget {

@@ -13,8 +13,9 @@
 Deliberately **not** tabs:
 
 - **New repair** — a button on the Tickets page that opens the intake form.
-- **Devices** — a device is recorded on the ticket. The catalog that feeds the
-  pickers (categories, brands, models, service templates) lives in Settings.
+- **Devices** — owned-device records live under each customer and link to all
+  matching repair tickets. The category / brand / model catalog that feeds
+  intake remains in Settings.
 - **Reports** — three per-ticket documents; see `REPORTS.md`.
 
 ## Layout
@@ -81,8 +82,9 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Schema is versioned and migrated on open: v2 added `tickets.device_variant`
   for that model number, v3 added the Report 1 photo-checklist tables and a
   template key on models and tickets, v4 added `device_models.sort_order`, and
-  v5 added `tickets.device_side` for devices booked one half at a time, so
-  upgrading in place never loses data.
+  v5 added `tickets.device_side` for devices booked one half at a time, then v6
+  added `tickets.intake_notes` for the Report 1 condition notes. Upgrading in
+  place never loses data.
 - A **single Joy-Con** is a catalog row of its own (`Joy-Con (single)`), and
   intake asks **Left / Right** as a follow-up. The side is stored on the ticket
   (`device_side`) and shown on the board and the ticket page. A pair remains one
@@ -92,11 +94,46 @@ Merging them would corrupt both stock counts and revenue reporting.
   puts newer hardware first (`PlayStation 5` before `PlayStation 4`). Anything
   added outside the seed list is parked after the seeded models for its brand.
 - Report 1 checklists are **templates per device family** (`hinged`, `slab`,
-  `console`, `pc`, `controller`) stored in `photo_templates` /
+  `console`, `pc`, `controller`, `vacuum`, `general_electronics`) stored in `photo_templates` /
   `photo_template_slots`. At intake the chosen family is resolved from the
   model, and its slots are copied into `ticket_photo_slots` on the ticket. A
   later template edit therefore never rewrites an open job, and each ticket can
   gain its own captured photo paths.
+- Vacuum tickets require only Front, Back and Charge Port. The ticket page can
+  add labeled optional slots; these accept phone or local photo uploads and do
+  not block Report 1 completion.
+- General Electronics is available for devices outside the specialized
+  categories and uses the standard unlisted-device, model-number, serial, and
+  fault fields. Its general photo checklist is labeled with the entered device
+  name rather than “Home console”.
+- On Windows, **Capture with phone** is available for any Report 1 checklist,
+  including Vacuum and General Electronics.
+- Report 1 photo **files** live under
+  `%APPDATA%\com.example\vola_fix\photos\ticket_<id>\`; the database stores only
+  the current path and capture time on `ticket_photo_slots`. Every capture gets
+  a new file name, so a retake cannot be served from Flutter's image cache, and
+  the older file for that slot is deleted once the new one is safely written.
+- Report 1 **condition notes** are `tickets.intake_notes`, a nullable text field.
+  The ticket page debounces typing by 800 ms, saves on focus loss, and flushes
+  on dispose, so a solo operator never has to press Save. Whitespace-only text
+  is stored as null rather than an empty string.
+- **Phone capture** is a short-lived local HTTP server
+  (`lib/data/capture_server.dart`) opened from the ticket page. It binds to the
+  PC's LAN IPv4 address, puts a random 24-byte token in the URL, and serves only
+  `/c/<token>/` routes: the phone page, status, the current photo, and
+  per-slot uploads. The server closes with the dialog, and a 30-minute timer is
+  a backstop if the window is left open.
+  - Uploads are checked by declared MIME type, magic bytes and a 12 MB cap; a
+    slot number outside the ticket's checklist is refused. The phone page
+    downscales to a 2000 px JPEG before sending, so a 48 MP photo does not
+    cross the Wi-Fi at full size.
+  - The phone page uses `<input type="file" capture="environment">` rather than
+    `getUserMedia`, because phone browsers only grant camera access on HTTPS or
+    localhost, while this link is plain HTTP on the LAN.
+  - The PC dialog watches the same `ticket_photo_slots` stream as the ticket
+    page, so progress and thumbnails update live without polling SQLite.
+  - Only Report 1 photos are in scope today. The server is ticket-shaped
+    (slots, saver callback) so phone intake can reuse it later.
 - Ticket numbers come from a stored counter (`PF-000001`), so they are never
   reused even if a ticket is deleted.
 - When the factory sticker is missing, intake ticks **No serial number sticker**
@@ -107,20 +144,32 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Shop tags are random nine-digit numbers (`G-482913057`), recorded permanently
   and never issued twice; two stickers per tag, one outside the device and one
   inside.
-- A customer record needs **name, phone and email**; the intake form refuses to
-  save without them. Returning customers are matched by name (case-insensitive)
-  and their phone/email are updated to whatever the newest job supplies.
+- A customer record needs **name, phone and email** for repair intake.
+  Customers can be selected by phone or email; the newest ticket updates their
+  contact details while preserving profile notes.
+- Each customer device stores its catalog model or free-text name, variant,
+  side, and serial. Intake can reuse a saved device; a serial match also links
+  future repair tickets to that device. Existing ticket device records are
+  migrated into the customer device registry.
 
 ## Current state
 
 - **Shell** — done: persisted window geometry, custom Flutter title bar, tray
   icon, single instance, rail/bottom-bar navigation.
-- **Data** — drift/SQLite, seeded catalog, ticket numbering, shop tags and
+- **Data** — drift/SQLite, seeded console, handheld, controller and vacuum
+  catalog, ticket numbering, shop tags and
   shop-applied serials.
 - **Tickets** — real board, working intake (saves a ticket and issues its tag)
   and a ticket page where the status can be moved. Intake previews the Report 1
   photo checklist for the selected device, and the ticket keeps its own copy.
-- **Reports** — specified in `REPORTS.md`, including the client report's
-  warranty page. Report 1's device-specific shot list is stored per ticket;
-  photo capture and the report editors are next.
-- **Customers, Merch, Parts, Settings** — still placeholders.
+- **Report 1 photos** — the shop PC shows a QR, the phone fills slots over the
+  LAN, and captured shots appear as tappable thumbnails on the ticket.
+- **Report 1 notes** — a per-ticket condition box that saves itself while
+  typing, for scratches, cracks, stickers and missing parts.
+- **Reports** — Report 2 has an ordered internal bench log for notes and photos.
+  Entries sync into an editable Report 3 draft while unedited content stays
+  linked. Structured estimates, the two-page client report and printing remain
+  to be built; see `REPORTS.md`.
+- **Customers** — searchable and editable profiles with devices and repair
+  history. Intake can select existing customers and devices.
+- **Merch, Settings** — still placeholders.

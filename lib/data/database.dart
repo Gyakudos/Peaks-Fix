@@ -60,6 +60,8 @@ enum Severity { low, medium, high }
 
 enum TicketItemKind { service, part, custom }
 
+enum InvoiceDiscountKind { none, percentage, fixed }
+
 enum PaymentKind { deposit, balance, refund }
 
 enum PaymentMethod { cash, card, other }
@@ -70,12 +72,29 @@ enum ContactOutcome { contacted, approved, declined, noAnswer }
 
 enum ReportOutcome { repaired, unrepairable, declined, noFaultFound }
 
+enum TechnicalEntryKind { note, photo }
+
 class Customers extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 120)();
   TextColumn get phone => text().nullable()();
   TextColumn get email => text().nullable()();
   TextColumn get notes => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class CustomerDevices extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get customerId => integer().references(Customers, #id)();
+  IntColumn get deviceModelId =>
+      integer().nullable().references(DeviceModels, #id)();
+  TextColumn get deviceName => text().nullable()();
+  TextColumn get deviceVariant => text().nullable()();
+  TextColumn get deviceSide => text().nullable()();
+  TextColumn get serial => text().nullable()();
+  BoolColumn get serialMissing =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -128,9 +147,9 @@ class DeviceModels extends Table {
       ];
 }
 
-/// Report 1 photo checklists, one per device family (hinged handheld, slab,
-/// console, PC, controller). Templates are seeded and can be edited; each
-/// ticket copies its slots at intake so later edits never rewrite an open job.
+/// Report 1 photo checklists, one per device family. Templates are seeded and
+/// can be edited; each ticket copies its slots at intake so later edits never
+/// rewrite an open job.
 class PhotoTemplates extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get key => text().withLength(min: 1, max: 40)();
@@ -173,6 +192,8 @@ class Tickets extends Table {
   TextColumn get number => text().withLength(min: 1, max: 24)();
 
   IntColumn get customerId => integer().references(Customers, #id)();
+  IntColumn get customerDeviceId =>
+      integer().nullable().references(CustomerDevices, #id)();
 
   /// Null when the device is not in the catalog yet; [deviceName] is then the
   /// free-text description.
@@ -205,6 +226,14 @@ class Tickets extends Table {
   TextColumn get complaint => text()();
   TextColumn get diagnosis => text().nullable()();
 
+  /// Report 1 condition notes: scratches, cracks, stickers, missing parts and
+  /// anything else the photos do not make obvious.
+  TextColumn get intakeNotes => text().nullable()();
+
+  /// When Report 1 was marked complete. Report 2 stays locked until this is
+  /// set; reopening Report 1 clears it.
+  DateTimeColumn get report1CompletedAt => dateTime().nullable()();
+
   /// Report 1 checklist family this job was booked under, e.g. `hinged`. The
   /// slots themselves are copied into [TicketPhotoSlots] at intake.
   TextColumn get photoTemplateKey => text().nullable()();
@@ -212,6 +241,10 @@ class Tickets extends Table {
   IntColumn get status => intEnum<TicketStatus>()();
   IntColumn get priority => integer().withDefault(const Constant(0))();
   IntColumn get estimateCents => integer().withDefault(const Constant(0))();
+  IntColumn get invoiceDiscountKind =>
+      intEnum<InvoiceDiscountKind>().withDefault(const Constant(0))();
+  IntColumn get invoiceDiscountValue =>
+      integer().withDefault(const Constant(0))();
   TextColumn get notes => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -351,6 +384,38 @@ class ReportFindings extends Table {
   TextColumn get proposedFix => text().nullable()();
 }
 
+/// Ordered technical notes and photos. Photo rows can be children of a note,
+/// or standalone entries in the bench log.
+class TechnicalReportEntries extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get reportId => integer().references(TicketReports, #id)();
+  IntColumn get sortOrder => integer()();
+  IntColumn get kind => intEnum<TechnicalEntryKind>()();
+  IntColumn get parentEntryId => integer().nullable()();
+  TextColumn get body => text().nullable()();
+  TextColumn get photoPath => text().nullable()();
+  TextColumn get caption => text().nullable()();
+}
+
+/// Editable client-facing copies of technical entries. The source link lets
+/// draft sync update untouched content without overwriting client edits.
+class ClientReportEntries extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get reportId => integer().references(TicketReports, #id)();
+  IntColumn get sourceEntryId => integer().nullable()();
+  IntColumn get parentSourceEntryId => integer().nullable()();
+  IntColumn get sortOrder => integer()();
+  IntColumn get kind => intEnum<TechnicalEntryKind>()();
+  TextColumn get body => text().nullable()();
+  TextColumn get photoPath => text().nullable()();
+  TextColumn get caption => text().nullable()();
+  BoolColumn get contentEdited =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get inclusionEdited =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get included => boolean().withDefault(const Constant(true))();
+}
+
 class ReportContactLog extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get reportId => integer().references(TicketReports, #id)();
@@ -365,6 +430,7 @@ class Parts extends Table {
   TextColumn get name => text().withLength(min: 1, max: 120)();
   TextColumn get sku => text().nullable()();
   TextColumn get category => text().nullable()();
+  TextColumn get location => text().nullable()();
   IntColumn get stock => integer().withDefault(const Constant(0))();
   IntColumn get costCents => integer().withDefault(const Constant(0))();
   IntColumn get priceCents => integer().withDefault(const Constant(0))();
@@ -453,6 +519,7 @@ class Settings extends Table {
 
 @DriftDatabase(tables: [
   Customers,
+  CustomerDevices,
   DeviceCategories,
   DeviceBrands,
   DeviceModels,
@@ -467,6 +534,8 @@ class Settings extends Table {
   TicketReports,
   ReportCosmeticItems,
   ReportFindings,
+  TechnicalReportEntries,
+  ClientReportEntries,
   ReportContactLog,
   Parts,
   PartMovements,
@@ -500,7 +569,7 @@ class AppDatabase extends _$AppDatabase {
   static final Random _random = Random.secure();
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 11;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -509,6 +578,12 @@ class AppDatabase extends _$AppDatabase {
   /// own order (controllers 1 → 5) rather than the alphabet.
   /// v5 added `tickets.device_side` for devices booked one half at a time,
   /// starting with the single Joy-Con.
+  /// v6 added `tickets.intake_notes` for the Report 1 condition notes.
+  /// v7 added `tickets.report1_completed_at`, which unlocks Report 2.
+  /// v8 added ordered Report 2 entries and separately editable Report 3 copies.
+  /// v9 added the inventory part location.
+  /// v10 added saved invoice discounts and backfilled Required Parts prices.
+  /// v11 added customer-owned device records and linked tickets to them.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -528,6 +603,65 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 5) {
             await m.addColumn(tickets, tickets.deviceSide);
+          }
+          if (from < 6) {
+            await m.addColumn(tickets, tickets.intakeNotes);
+          }
+          if (from < 7) {
+            await m.addColumn(tickets, tickets.report1CompletedAt);
+          }
+          if (from < 8) {
+            await m.createTable(technicalReportEntries);
+            await m.createTable(clientReportEntries);
+          }
+          if (from < 9) {
+            await m.addColumn(parts, parts.location);
+          }
+          if (from < 10) {
+            await m.addColumn(tickets, tickets.invoiceDiscountKind);
+            await m.addColumn(tickets, tickets.invoiceDiscountValue);
+            await customStatement(
+              'UPDATE ticket_items '
+              'SET unit_price_cents = COALESCE(('
+              'SELECT price_cents FROM parts '
+              'WHERE parts.id = ticket_items.part_id), 0), '
+              'unit_cost_cents = ('
+              'SELECT cost_cents FROM parts '
+              'WHERE parts.id = ticket_items.part_id) '
+              'WHERE kind = ${TicketItemKind.part.index} '
+              'AND part_id IS NOT NULL',
+            );
+          }
+          if (from < 11) {
+            await m.createTable(customerDevices);
+            await m.addColumn(tickets, tickets.customerDeviceId);
+            await customStatement(
+              'INSERT INTO customer_devices '
+              '(customer_id, device_model_id, device_name, device_variant, '
+              'device_side, serial, serial_missing, created_at, updated_at) '
+              'SELECT customer_id, device_model_id, device_name, '
+              'device_variant, device_side, serial, serial_missing, '
+              'MIN(created_at), MAX(updated_at) FROM tickets '
+              'GROUP BY customer_id, CASE '
+              'WHEN serial IS NOT NULL AND TRIM(serial) != \'\' '
+              'THEN LOWER(serial) ELSE \'ticket:\' || id END',
+            );
+            await customStatement(
+              'UPDATE tickets SET customer_device_id = ('
+              'SELECT customer_devices.id FROM customer_devices '
+              'WHERE customer_devices.customer_id = tickets.customer_id '
+              'AND ((tickets.serial IS NOT NULL AND '
+              'LOWER(customer_devices.serial) = LOWER(tickets.serial)) OR '
+              '(tickets.serial IS NULL AND customer_devices.serial IS NULL '
+              'AND customer_devices.device_model_id IS '
+              'tickets.device_model_id '
+              'AND customer_devices.device_name IS tickets.device_name '
+              'AND customer_devices.device_variant IS '
+              'tickets.device_variant '
+              'AND customer_devices.device_side IS tickets.device_side '
+              'AND customer_devices.serial_missing = tickets.serial_missing)) '
+              'LIMIT 1)',
+            );
           }
         },
       );
@@ -688,6 +822,8 @@ class AppDatabase extends _$AppDatabase {
       final portables = await category('Portable Consoles', 2);
       final handhelds = await category('Handheld PCs', 3);
       final controllers = await category('Controllers', 4);
+      final vacuums = await category('Vacuum', 5);
+      await category('General Electronics', 6);
 
       // Built-in categories moved down when new ones were inserted ahead of
       // them (Handheld PCs was 1, then 2; Controllers was 3). Only values below
@@ -897,6 +1033,52 @@ class AppDatabase extends _$AppDatabase {
           '8BitDo',
           ['Pro 2', 'Ultimate'],
         ),
+        (
+          vacuums,
+          'Dyson',
+          [
+            'V8',
+            'V10',
+            'V11',
+            'V15 Detect',
+            'Ball Animal 3',
+            'Gen5detect',
+          ],
+        ),
+        (
+          vacuums,
+          'Kirby',
+          [
+            'Avalir 2',
+            'Avalir Platinum',
+            'Sentria II',
+            'Sentria',
+            'Ultimate G',
+            'Generation 3',
+          ],
+        ),
+        (
+          vacuums,
+          'Dirt Devil',
+          [
+            'Scorpion',
+            'Endura Reach',
+            'Power Express',
+            'Vibe',
+          ],
+        ),
+        (
+          vacuums,
+          'Shark',
+          [
+            'Navigator Lift-Away',
+            'Rotator',
+            'Rocket',
+            'Vertex',
+            'Stratos',
+            'Detect Pro',
+          ],
+        ),
       ];
 
       // Renames of seeded rows, applied before the catalog below so the new
@@ -1090,6 +1272,7 @@ class AppDatabase extends _$AppDatabase {
   /// Phone and email are required: the shop has to be able to reach the owner
   /// of a device it is holding, and the client report is sent by email.
   Future<NewTicket> createTicket({
+    int? existingCustomerId,
     required String customerName,
     required String customerPhone,
     required String customerEmail,
@@ -1097,6 +1280,7 @@ class AppDatabase extends _$AppDatabase {
     String? deviceName,
     String? deviceVariant,
     String? deviceSide,
+    int? customerDeviceId,
     String? serial,
     bool serialMissing = false,
     String? photoTemplateKey,
@@ -1148,10 +1332,21 @@ class AppDatabase extends _$AppDatabase {
         }
       }
 
-      final existing = await (select(customers)
-            ..where((c) => c.name.lower().equals(name.toLowerCase())))
-          .getSingleOrNull();
-      final customerId = existing?.id ??
+      final existing = existingCustomerId == null
+          ? await (select(customers)
+                ..where((c) => c.name.lower().equals(name.toLowerCase())))
+              .getSingleOrNull()
+          : await (select(customers)
+                ..where((c) => c.id.equals(existingCustomerId)))
+              .getSingleOrNull();
+      if (existingCustomerId != null && existing == null) {
+        throw ArgumentError.value(
+          existingCustomerId,
+          'customerId',
+          'not found',
+        );
+      }
+      final resolvedCustomerId = existing?.id ??
           await into(customers).insert(
             CustomersCompanion.insert(
               name: name,
@@ -1165,6 +1360,7 @@ class AppDatabase extends _$AppDatabase {
       if (existing != null) {
         await (update(customers)..where((c) => c.id.equals(existing.id))).write(
           CustomersCompanion(
+            name: Value(name),
             phone: Value(phone),
             email: Value(email),
             updatedAt: Value(DateTime.now()),
@@ -1181,10 +1377,69 @@ class AppDatabase extends _$AppDatabase {
           : serialMissing
               ? await _allocateShopSerial()
               : '';
+      final device = customerDeviceId == null
+          ? typedSerial.isEmpty
+              ? null
+              : await (select(customerDevices)
+                    ..where((row) =>
+                        row.customerId.equals(resolvedCustomerId) &
+                        row.serial.lower().equals(typedSerial.toLowerCase())))
+                  .getSingleOrNull()
+          : await (select(customerDevices)
+                ..where((row) =>
+                    row.id.equals(customerDeviceId) &
+                    row.customerId.equals(resolvedCustomerId)))
+              .getSingleOrNull();
+      if (customerDeviceId != null && device == null) {
+        throw ArgumentError.value(
+          customerDeviceId,
+          'customerDeviceId',
+          'not found for this customer',
+        );
+      }
+      final deviceValues = CustomerDevicesCompanion(
+        customerId: Value(resolvedCustomerId),
+        deviceModelId: Value(deviceModelId),
+        deviceName: Value(
+          (deviceName ?? '').trim().isEmpty ? null : deviceName!.trim(),
+        ),
+        deviceVariant: Value(
+          (deviceVariant ?? '').trim().isEmpty ? null : deviceVariant!.trim(),
+        ),
+        deviceSide: Value(side.isEmpty ? null : side),
+        serial: Value(effectiveSerial.isEmpty ? null : effectiveSerial),
+        serialMissing: Value(serialMissing),
+        updatedAt: Value(DateTime.now()),
+      );
+      final resolvedDeviceId = device == null
+          ? await into(customerDevices).insert(
+              CustomerDevicesCompanion.insert(
+                customerId: resolvedCustomerId,
+                deviceModelId: Value(deviceModelId),
+                deviceName: Value(
+                  (deviceName ?? '').trim().isEmpty ? null : deviceName!.trim(),
+                ),
+                deviceVariant: Value(
+                  (deviceVariant ?? '').trim().isEmpty
+                      ? null
+                      : deviceVariant!.trim(),
+                ),
+                deviceSide: Value(side.isEmpty ? null : side),
+                serial: Value(effectiveSerial.isEmpty ? null : effectiveSerial),
+                serialMissing: Value(serialMissing),
+              ),
+            )
+          : device.id;
+      if (device != null) {
+        await (update(customerDevices)
+              ..where((row) => row.id.equals(device.id)))
+            .write(deviceValues);
+      }
       final ticketId = await into(tickets).insert(
         TicketsCompanion.insert(
           number: number,
-          customerId: customerId,
+          customerId: resolvedCustomerId,
+          customerDeviceId: Value(resolvedDeviceId),
           deviceModelId: Value(deviceModelId),
           deviceName: Value(
             (deviceName ?? '').trim().isEmpty ? null : deviceName!.trim(),
@@ -1231,9 +1486,434 @@ class AppDatabase extends _$AppDatabase {
         id: ticketId,
         number: number,
         shopTag: tag,
-        customerId: customerId,
+        customerId: resolvedCustomerId,
+        customerDeviceId: resolvedDeviceId,
       );
     });
+  }
+
+  Future<int> saveCustomer({
+    int? customerId,
+    required String name,
+    required String phone,
+    required String email,
+    required String notes,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
+    final companion = CustomersCompanion(
+      name: Value(cleanName),
+      phone: Value(_clean(phone)),
+      email: Value(_clean(email)),
+      notes: Value(_clean(notes)),
+      updatedAt: Value(DateTime.now()),
+    );
+    if (customerId == null) {
+      return into(customers).insert(
+        CustomersCompanion.insert(
+          name: cleanName,
+          phone: Value(_clean(phone)),
+          email: Value(_clean(email)),
+          notes: Value(_clean(notes)),
+        ),
+      );
+    }
+    final updated = await (update(customers)
+          ..where((row) => row.id.equals(customerId)))
+        .write(companion);
+    if (updated == 0) {
+      throw ArgumentError.value(customerId, 'customerId', 'not found');
+    }
+    return customerId;
+  }
+
+  /// Records a capture against one Report 1 slot. The file has already been
+  /// written by the photo store; this only points the ticket at it.
+  Future<void> setTicketPhotoPath({
+    required int ticketId,
+    required int sortOrder,
+    required String path,
+  }) async {
+    await transaction(() async {
+      await (update(ticketPhotoSlots)
+            ..where(
+              (s) =>
+                  s.ticketId.equals(ticketId) & s.sortOrder.equals(sortOrder),
+            ))
+          .write(
+        TicketPhotoSlotsCompanion(
+          photoPath: Value(path),
+          capturedAt: Value(DateTime.now()),
+        ),
+      );
+      await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
+        TicketsCompanion(updatedAt: Value(DateTime.now())),
+      );
+    });
+  }
+
+  Future<void> addOptionalPhotoSlot({
+    required int ticketId,
+    required String label,
+  }) async {
+    final cleanLabel = label.trim();
+    if (cleanLabel.isEmpty || cleanLabel.length > 80) {
+      throw ArgumentError.value(
+        label,
+        'label',
+        'must be between 1 and 80 characters',
+      );
+    }
+    await transaction(() async {
+      final ticket = await (select(tickets)
+            ..where((row) => row.id.equals(ticketId)))
+          .getSingleOrNull();
+      if (ticket == null) {
+        throw ArgumentError.value(ticketId, 'ticketId', 'not found');
+      }
+      final last = await (select(ticketPhotoSlots)
+            ..where((slot) => slot.ticketId.equals(ticketId))
+            ..orderBy([(slot) => OrderingTerm.desc(slot.sortOrder)])
+            ..limit(1))
+          .getSingleOrNull();
+      await into(ticketPhotoSlots).insert(
+        TicketPhotoSlotsCompanion.insert(
+          ticketId: ticketId,
+          sortOrder: (last?.sortOrder ?? 0) + 1,
+          label: cleanLabel,
+          hint: const Value('Optional reference photo'),
+          required: const Value(false),
+        ),
+      );
+      await (update(tickets)..where((row) => row.id.equals(ticketId))).write(
+        TicketsCompanion(updatedAt: Value(DateTime.now())),
+      );
+    });
+  }
+
+  /// Saves the free-text Report 1 condition notes. Whitespace-only input is
+  /// stored as null so the report shows "not noted" rather than an empty box.
+  Future<void> setTicketIntakeNotes(int ticketId, String notes) async {
+    final trimmed = notes.trim();
+    await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
+      TicketsCompanion(
+        intakeNotes: Value(trimmed.isEmpty ? null : trimmed),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Marks Report 1 complete or reopens it. The timestamp is the record; report
+  /// 2 is unlocked whenever it is non-null.
+  Future<void> setReport1Completed(int ticketId, bool completed) async {
+    await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
+      TicketsCompanion(
+        report1CompletedAt: Value(completed ? DateTime.now() : null),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> ensureTechnicalReports(int ticketId) async {
+    await transaction(() async {
+      final ticket = await (select(tickets)
+            ..where((t) => t.id.equals(ticketId)))
+          .getSingle();
+      final technicalId =
+          await _draftReportId(ticketId, ReportKind.technical) ??
+              await into(ticketReports).insert(
+                TicketReportsCompanion.insert(
+                  ticketId: ticketId,
+                  kind: ReportKind.technical,
+                  status: ReportStatus.draft,
+                  author: 'Shop',
+                  shopTag: Value(ticket.shopTag),
+                ),
+              );
+      final clientId = await _draftReportId(ticketId, ReportKind.client) ??
+          await into(ticketReports).insert(
+            TicketReportsCompanion.insert(
+              ticketId: ticketId,
+              kind: ReportKind.client,
+              status: ReportStatus.draft,
+              author: 'Shop',
+              shopTag: Value(ticket.shopTag),
+            ),
+          );
+      await _syncClientDraft(technicalId, clientId);
+    });
+  }
+
+  Future<int> addTechnicalEntry({
+    required int ticketId,
+    required TechnicalEntryKind kind,
+    int? parentEntryId,
+    String? text,
+    String? photoPath,
+    String? caption,
+  }) async {
+    return transaction(() async {
+      final reportId = await _draftReportId(ticketId, ReportKind.technical);
+      if (reportId == null) {
+        throw StateError('Technical report has not been initialized.');
+      }
+      if (parentEntryId != null) {
+        if (kind != TechnicalEntryKind.photo) {
+          throw ArgumentError.value(
+            kind,
+            'kind',
+            'only photos can be attached to a note',
+          );
+        }
+        final parent = await (select(technicalReportEntries)
+              ..where((entry) =>
+                  entry.id.equals(parentEntryId) &
+                  entry.reportId.equals(reportId) &
+                  entry.kind.equals(TechnicalEntryKind.note.index)))
+            .getSingleOrNull();
+        if (parent == null) {
+          throw ArgumentError.value(
+            parentEntryId,
+            'parentEntryId',
+            'must identify a note in this technical report',
+          );
+        }
+      }
+      final entries = await (select(technicalReportEntries)
+            ..where((entry) => entry.reportId.equals(reportId))
+            ..orderBy([(entry) => OrderingTerm.desc(entry.sortOrder)])
+            ..limit(1))
+          .get();
+      final sortOrder = entries.isEmpty ? 0 : entries.first.sortOrder + 1;
+      final id = await into(technicalReportEntries).insert(
+        TechnicalReportEntriesCompanion.insert(
+          reportId: reportId,
+          sortOrder: sortOrder,
+          kind: kind,
+          parentEntryId: Value(parentEntryId),
+          body: Value(_clean(text)),
+          photoPath: Value(photoPath),
+          caption: Value(_clean(caption)),
+        ),
+      );
+      await _syncClientDraftForTechnicalReport(reportId);
+      await _touchReport(reportId);
+      await _touchTicket(ticketId);
+      return id;
+    });
+  }
+
+  Future<void> updateTechnicalEntry({
+    required int ticketId,
+    required int entryId,
+    required TechnicalEntryKind kind,
+    String? text,
+    String? caption,
+  }) async {
+    await transaction(() async {
+      final entry = await (select(technicalReportEntries)
+            ..where((row) => row.id.equals(entryId)))
+          .getSingle();
+      final report = await (select(ticketReports)
+            ..where((row) => row.id.equals(entry.reportId)))
+          .getSingle();
+      if (report.ticketId != ticketId ||
+          report.kind != ReportKind.technical ||
+          report.status != ReportStatus.draft ||
+          entry.kind != kind) {
+        throw ArgumentError.value(entryId, 'entryId', 'not a matching entry');
+      }
+      await (update(technicalReportEntries)
+            ..where((row) => row.id.equals(entryId)))
+          .write(
+        TechnicalReportEntriesCompanion(
+          body: kind == TechnicalEntryKind.note
+              ? Value(_clean(text))
+              : const Value.absent(),
+          caption: kind == TechnicalEntryKind.photo
+              ? Value(_clean(caption))
+              : const Value.absent(),
+        ),
+      );
+      await _syncClientDraftForTechnicalReport(entry.reportId);
+      await _touchReport(entry.reportId);
+      await _touchTicket(ticketId);
+    });
+  }
+
+  Future<void> deleteTechnicalEntry({
+    required int ticketId,
+    required int entryId,
+  }) async {
+    await transaction(() async {
+      final entry = await (select(technicalReportEntries)
+            ..where((row) => row.id.equals(entryId)))
+          .getSingle();
+      final report = await (select(ticketReports)
+            ..where((row) => row.id.equals(entry.reportId)))
+          .getSingle();
+      if (report.ticketId != ticketId ||
+          report.kind != ReportKind.technical ||
+          report.status != ReportStatus.draft) {
+        throw ArgumentError.value(entryId, 'entryId', 'not in this ticket');
+      }
+      await (delete(technicalReportEntries)
+            ..where((row) =>
+                row.id.equals(entryId) | row.parentEntryId.equals(entryId)))
+          .go();
+      await _syncClientDraftForTechnicalReport(entry.reportId);
+      await _touchReport(entry.reportId);
+      await _touchTicket(ticketId);
+    });
+  }
+
+  Future<void> updateClientReportEntry({
+    required int entryId,
+    required TechnicalEntryKind kind,
+    String? text,
+    String? caption,
+    bool? included,
+  }) async {
+    await transaction(() async {
+      final entry = await (select(clientReportEntries)
+            ..where((row) => row.id.equals(entryId)))
+          .getSingle();
+      final report = await (select(ticketReports)
+            ..where((row) => row.id.equals(entry.reportId)))
+          .getSingle();
+      if (entry.kind != kind ||
+          report.kind != ReportKind.client ||
+          report.status != ReportStatus.draft) {
+        throw ArgumentError.value(entryId, 'entryId', 'wrong entry kind');
+      }
+      await (update(clientReportEntries)
+            ..where((row) => row.id.equals(entryId)))
+          .write(
+        ClientReportEntriesCompanion(
+          body: kind == TechnicalEntryKind.note
+              ? Value(_clean(text))
+              : const Value.absent(),
+          caption: kind == TechnicalEntryKind.photo
+              ? Value(_clean(caption))
+              : const Value.absent(),
+          included: included == null ? const Value.absent() : Value(included),
+          contentEdited: text != null || caption != null
+              ? const Value(true)
+              : const Value.absent(),
+          inclusionEdited:
+              included == null ? const Value.absent() : const Value(true),
+        ),
+      );
+      await (update(ticketReports)
+            ..where((report) => report.id.equals(entry.reportId)))
+          .write(TicketReportsCompanion(updatedAt: Value(DateTime.now())));
+    });
+  }
+
+  Future<void> _syncClientDraftForTechnicalReport(int technicalReportId) async {
+    final technicalReport = await (select(ticketReports)
+          ..where((report) => report.id.equals(technicalReportId)))
+        .getSingle();
+    final clientReportId =
+        await _draftReportId(technicalReport.ticketId, ReportKind.client);
+    if (clientReportId == null) return;
+    await _syncClientDraft(technicalReportId, clientReportId);
+  }
+
+  Future<void> _syncClientDraft(
+      int technicalReportId, int clientReportId) async {
+    final sourceEntries = await (select(technicalReportEntries)
+          ..where((entry) => entry.reportId.equals(technicalReportId))
+          ..orderBy([(entry) => OrderingTerm.asc(entry.sortOrder)]))
+        .get();
+    final copiedEntries = await (select(clientReportEntries)
+          ..where((entry) => entry.reportId.equals(clientReportId)))
+        .get();
+    final copiedBySource = {
+      for (final entry in copiedEntries)
+        if (entry.sourceEntryId != null) entry.sourceEntryId!: entry,
+    };
+    final sourceIds = sourceEntries.map((entry) => entry.id).toSet();
+
+    for (final source in sourceEntries) {
+      final copied = copiedBySource[source.id];
+      if (copied == null) {
+        await into(clientReportEntries).insert(
+          ClientReportEntriesCompanion.insert(
+            reportId: clientReportId,
+            sourceEntryId: Value(source.id),
+            parentSourceEntryId: Value(source.parentEntryId),
+            sortOrder: source.sortOrder,
+            kind: source.kind,
+            body: Value(source.body),
+            photoPath: Value(source.photoPath),
+            caption: Value(source.caption),
+          ),
+        );
+      } else if (!copied.contentEdited) {
+        await (update(clientReportEntries)
+              ..where((entry) => entry.id.equals(copied.id)))
+            .write(
+          ClientReportEntriesCompanion(
+            sortOrder: Value(source.sortOrder),
+            parentSourceEntryId: Value(source.parentEntryId),
+            kind: Value(source.kind),
+            body: Value(source.body),
+            photoPath: Value(source.photoPath),
+            caption: Value(source.caption),
+            included: copied.inclusionEdited
+                ? const Value.absent()
+                : const Value(true),
+          ),
+        );
+      }
+    }
+
+    for (final copied in copiedEntries) {
+      final sourceId = copied.sourceEntryId;
+      if (sourceId != null &&
+          !sourceIds.contains(sourceId) &&
+          !copied.inclusionEdited) {
+        await (update(clientReportEntries)
+              ..where((entry) => entry.id.equals(copied.id)))
+            .write(const ClientReportEntriesCompanion(included: Value(false)));
+      }
+    }
+
+    await (update(ticketReports)
+          ..where((report) => report.id.equals(clientReportId)))
+        .write(TicketReportsCompanion(updatedAt: Value(DateTime.now())));
+  }
+
+  Future<int?> _draftReportId(int ticketId, ReportKind kind) async {
+    final report = await (select(ticketReports)
+          ..where((row) =>
+              row.ticketId.equals(ticketId) &
+              row.kind.equals(kind.index) &
+              row.status.equals(ReportStatus.draft.index))
+          ..orderBy([(row) => OrderingTerm.desc(row.revision)])
+          ..limit(1))
+        .getSingleOrNull();
+    return report?.id;
+  }
+
+  Future<void> _touchTicket(int ticketId) async {
+    await (update(tickets)..where((ticket) => ticket.id.equals(ticketId)))
+        .write(
+      TicketsCompanion(updatedAt: Value(DateTime.now())),
+    );
+  }
+
+  Future<void> _touchReport(int reportId) async {
+    await (update(ticketReports)..where((report) => report.id.equals(reportId)))
+        .write(TicketReportsCompanion(updatedAt: Value(DateTime.now())));
+  }
+
+  String? _clean(String? text) {
+    final trimmed = text?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   /// Moves a ticket along the workflow. Never blocked: a solo shop works out of
@@ -1254,6 +1934,294 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
+
+  Future<int> createInventoryPart({
+    required String name,
+    String? sku,
+    String? category,
+    String? location,
+    required int startingStock,
+    int rawCostCents = 0,
+    int retailPriceCents = 0,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
+    if (startingStock < 0) {
+      throw ArgumentError.value(
+        startingStock,
+        'startingStock',
+        'must not be negative',
+      );
+    }
+    if (rawCostCents < 0 || retailPriceCents < 0) {
+      throw ArgumentError('Part costs must not be negative.');
+    }
+    return transaction(() async {
+      final partId = await into(parts).insert(
+        PartsCompanion.insert(
+          name: cleanName,
+          sku: Value(_clean(sku)),
+          category: Value(_clean(category)),
+          location: Value(_clean(location)),
+          stock: Value(startingStock),
+          costCents: Value(rawCostCents),
+          priceCents: Value(retailPriceCents),
+        ),
+      );
+      if (startingStock > 0) {
+        await into(partMovements).insert(
+          PartMovementsCompanion.insert(
+            partId: partId,
+            delta: startingStock,
+            note: const Value('Initial stock'),
+          ),
+        );
+      }
+      return partId;
+    });
+  }
+
+  Future<void> updateInventoryPart({
+    required int partId,
+    required String name,
+    String? sku,
+    String? category,
+    String? location,
+    required int stock,
+    required int rawCostCents,
+    required int retailPriceCents,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
+    if (stock < 0) {
+      throw ArgumentError.value(stock, 'stock', 'must not be negative');
+    }
+    if (rawCostCents < 0 || retailPriceCents < 0) {
+      throw ArgumentError('Part costs must not be negative.');
+    }
+    await transaction(() async {
+      final existing = await (select(parts)
+            ..where((part) => part.id.equals(partId)))
+          .getSingleOrNull();
+      if (existing == null) {
+        throw StateError('The inventory part was not found.');
+      }
+
+      await (update(parts)..where((part) => part.id.equals(partId))).write(
+        PartsCompanion(
+          name: Value(cleanName),
+          sku: Value(_clean(sku)),
+          category: Value(_clean(category)),
+          location: Value(_clean(location)),
+          stock: Value(stock),
+          costCents: Value(rawCostCents),
+          priceCents: Value(retailPriceCents),
+        ),
+      );
+      final stockDelta = stock - existing.stock;
+      if (stockDelta != 0) {
+        await into(partMovements).insert(
+          PartMovementsCompanion.insert(
+            partId: partId,
+            delta: stockDelta,
+            note: const Value('Stock adjustment'),
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> removeInventoryPart(int partId) async {
+    await (update(parts)..where((part) => part.id.equals(partId))).write(
+      const PartsCompanion(isActive: Value(false)),
+    );
+  }
+
+  Future<void> addRequiredPart({
+    required int ticketId,
+    required int partId,
+    required int quantity,
+  }) async {
+    if (quantity < 1) {
+      throw ArgumentError.value(quantity, 'quantity', 'must be at least 1');
+    }
+    await transaction(() async {
+      final part = await (select(parts)
+            ..where((row) => row.id.equals(partId) & row.isActive.equals(true)))
+          .getSingleOrNull();
+      if (part == null) throw StateError('The inventory part is unavailable.');
+      final existing = await (select(ticketItems)
+            ..where(
+              (item) =>
+                  item.ticketId.equals(ticketId) &
+                  item.partId.equals(partId) &
+                  item.kind.equals(TicketItemKind.part.index),
+            ))
+          .getSingleOrNull();
+      if (existing == null) {
+        await into(ticketItems).insert(
+          TicketItemsCompanion.insert(
+            ticketId: ticketId,
+            kind: TicketItemKind.part,
+            partId: Value(partId),
+            description: part.name,
+            quantity: Value(quantity),
+            unitPriceCents: Value(part.priceCents),
+            unitCostCents: Value(part.costCents),
+          ),
+        );
+      } else {
+        await (update(ticketItems)
+              ..where((item) => item.id.equals(existing.id)))
+            .write(
+          TicketItemsCompanion(
+            quantity: Value(existing.quantity + quantity),
+            description: Value(part.name),
+            unitPriceCents: Value(part.priceCents),
+            unitCostCents: Value(part.costCents),
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> addInvoiceLaborLine({
+    required int ticketId,
+    required String description,
+    required int quantity,
+    required int unitPriceCents,
+  }) async {
+    final cleanDescription = description.trim();
+    if (cleanDescription.isEmpty) {
+      throw ArgumentError.value(
+          description, 'description', 'must not be empty');
+    }
+    if (quantity < 1) {
+      throw ArgumentError.value(quantity, 'quantity', 'must be at least 1');
+    }
+    if (unitPriceCents < 0) {
+      throw ArgumentError.value(
+        unitPriceCents,
+        'unitPriceCents',
+        'must not be negative',
+      );
+    }
+    await into(ticketItems).insert(
+      TicketItemsCompanion.insert(
+        ticketId: ticketId,
+        kind: TicketItemKind.custom,
+        description: cleanDescription,
+        quantity: Value(quantity),
+        unitPriceCents: Value(unitPriceCents),
+      ),
+    );
+  }
+
+  Future<void> removeInvoiceLaborLine({
+    required int ticketId,
+    required int ticketItemId,
+  }) async {
+    await (delete(ticketItems)
+          ..where(
+            (item) =>
+                item.id.equals(ticketItemId) &
+                item.ticketId.equals(ticketId) &
+                item.kind.equals(TicketItemKind.custom.index),
+          ))
+        .go();
+  }
+
+  Future<void> setInvoiceDiscount({
+    required int ticketId,
+    required InvoiceDiscountKind kind,
+    required int value,
+  }) async {
+    if (kind == InvoiceDiscountKind.percentage && (value < 0 || value > 100)) {
+      throw ArgumentError.value(value, 'value', 'must be between 0 and 100');
+    }
+    if (value < 0) {
+      throw ArgumentError.value(value, 'value', 'must not be negative');
+    }
+    await (update(tickets)..where((ticket) => ticket.id.equals(ticketId)))
+        .write(
+      TicketsCompanion(
+        invoiceDiscountKind: Value(kind),
+        invoiceDiscountValue: Value(value),
+      ),
+    );
+  }
+
+  Future<void> removeRequiredPart({
+    required int ticketId,
+    required int ticketItemId,
+  }) async {
+    await (delete(ticketItems)
+          ..where(
+            (item) =>
+                item.id.equals(ticketItemId) &
+                item.ticketId.equals(ticketId) &
+                item.kind.equals(TicketItemKind.part.index),
+          ))
+        .go();
+  }
+
+  /// Deletes a ticket and its dependent records while preserving shared
+  /// customer records and the history of issued shop tags and part movements.
+  Future<bool> deleteTicket(int ticketId) => transaction(() async {
+        final ticket = await (select(tickets)
+              ..where((t) => t.id.equals(ticketId)))
+            .getSingleOrNull();
+        if (ticket == null) return false;
+
+        final reportIds = await (select(ticketReports)
+              ..where((report) => report.ticketId.equals(ticketId)))
+            .map((report) => report.id)
+            .get();
+        if (reportIds.isNotEmpty) {
+          await (delete(reportCosmeticItems)
+                ..where((item) => item.reportId.isIn(reportIds)))
+              .go();
+          await (delete(reportFindings)
+                ..where((finding) => finding.reportId.isIn(reportIds)))
+              .go();
+          await (delete(technicalReportEntries)
+                ..where((entry) => entry.reportId.isIn(reportIds)))
+              .go();
+          await (delete(clientReportEntries)
+                ..where((entry) => entry.reportId.isIn(reportIds)))
+              .go();
+          await (delete(reportContactLog)
+                ..where((log) => log.reportId.isIn(reportIds)))
+              .go();
+        }
+
+        await (update(shopTags)..where((tag) => tag.ticketId.equals(ticketId)))
+            .write(const ShopTagsCompanion(ticketId: Value(null)));
+        await (update(partMovements)
+              ..where((movement) => movement.ticketId.equals(ticketId)))
+            .write(const PartMovementsCompanion(ticketId: Value(null)));
+        await (delete(ticketItems)
+              ..where((item) => item.ticketId.equals(ticketId)))
+            .go();
+        await (delete(ticketPhotos)
+              ..where((photo) => photo.ticketId.equals(ticketId)))
+            .go();
+        await (delete(ticketPhotoSlots)
+              ..where((slot) => slot.ticketId.equals(ticketId)))
+            .go();
+        await (delete(payments)
+              ..where((payment) => payment.ticketId.equals(ticketId)))
+            .go();
+        await (delete(ticketReports)
+              ..where((report) => report.ticketId.equals(ticketId)))
+            .go();
+        await (delete(tickets)..where((t) => t.id.equals(ticketId))).go();
+        return true;
+      });
 }
 
 /// What [AppDatabase.createTicket] hands back: enough to open the new ticket
@@ -1264,10 +2232,12 @@ class NewTicket {
     required this.number,
     required this.shopTag,
     required this.customerId,
+    this.customerDeviceId,
   });
 
   final int id;
   final String number;
   final String shopTag;
   final int customerId;
+  final int? customerDeviceId;
 }

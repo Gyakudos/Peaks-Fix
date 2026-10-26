@@ -3,8 +3,8 @@
 /// The list is seeded into the database and copied onto each ticket at intake,
 /// so editing a template later never rewrites a job that is already open.
 ///
-/// Every template ends with the serial / shop-tag shot: the five-photo rule is
-/// still five photos, just the first four change with the hardware.
+/// Most templates include a serial-label shot. Vacuum and General Electronics
+/// have shorter, category-specific checklists.
 library;
 
 /// One numbered shot in a checklist.
@@ -125,6 +125,29 @@ const List<PhotoTemplateSeed> photoTemplateSeeds = <PhotoTemplateSeed>[
       ),
     ],
   ),
+  PhotoTemplateSeed(
+    key: 'vacuum',
+    name: 'Vacuum',
+    slots: [
+      PhotoSlotSeed('Front', 'Front of the vacuum, straight on'),
+      PhotoSlotSeed('Back', 'Back of the vacuum, straight on'),
+      PhotoSlotSeed('Charge Port', 'Charging port and connector'),
+    ],
+  ),
+  PhotoTemplateSeed(
+    key: 'general_electronics',
+    name: 'General Electronics',
+    slots: [
+      PhotoSlotSeed('Front', 'Front of the device, straight on'),
+      PhotoSlotSeed('Back', 'Back of the device, straight on'),
+      PhotoSlotSeed(
+          'Details', 'Ports, controls, damage or other notable areas'),
+      PhotoSlotSeed(
+        'Serial / model label',
+        'Device identification label, if present',
+      ),
+    ],
+  ),
 ];
 
 /// Which checklist a model gets. Category decides by default; clamshell models
@@ -134,6 +157,8 @@ String photoTemplateKeyFor(String category, String modelName) {
     'Controllers' => 'controller',
     'Handheld PCs' => 'pc',
     'Portable Consoles' => hingedModels.contains(modelName) ? 'hinged' : 'slab',
+    'Vacuum' => 'vacuum',
+    'General Electronics' => 'general_electronics',
     _ => 'console',
   };
 }

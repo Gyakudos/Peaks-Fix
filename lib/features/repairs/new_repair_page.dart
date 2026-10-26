@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../../data/photo_templates.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../capture/phone_capture_dialog.dart';
 import '../tickets/ticket_detail_page.dart';
 
-/// Intake: customer, device, identity, fault — and the shop tag, issued on
-/// save. Everything lands on one ticket; there is no separate device list.
+/// Intake reuses customer and device records while keeping a snapshot on the
+/// repair ticket.
 class NewRepairPage extends StatefulWidget {
   const NewRepairPage({super.key});
 
@@ -23,7 +24,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
   final TextEditingController _deviceVariant = TextEditingController();
   final TextEditingController _complaint = TextEditingController();
 
-  late Future<List<DeviceOption>> _catalogFuture;
+  late Future<(List<DeviceOption>, List<String>)> _catalogFuture;
   bool _catalogRequested = false;
 
   String? _category;
@@ -37,14 +38,24 @@ class _NewRepairPageState extends State<NewRepairPage> {
 
   bool _saving = false;
   String? _error;
+  int? _customerId;
+  int? _customerDeviceId;
+  List<CustomerDeviceEntry> _customerDevices = const [];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_catalogRequested) {
       _catalogRequested = true;
-      _catalogFuture = ShopScope.of(context).deviceCatalog();
+      _catalogFuture = _loadIntakeCatalog();
     }
+  }
+
+  Future<(List<DeviceOption>, List<String>)> _loadIntakeCatalog() async {
+    final repository = ShopScope.of(context);
+    final catalog = await repository.deviceCatalog();
+    final categories = await repository.deviceCategories();
+    return (catalog, categories);
   }
 
   @override
@@ -103,6 +114,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
 
   void _selectCategory(String? category) {
     setState(() {
+      _customerDeviceId = null;
       _category = category;
       _modelId = null;
       _modelName = null;
@@ -113,6 +125,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
 
   void _selectModel(int? value, List<DeviceOption> models) {
     setState(() {
+      _customerDeviceId = null;
       _modelId = value == -1 ? null : value;
       _otherDevice = value == -1;
       _modelName = _otherDevice
@@ -125,6 +138,111 @@ class _NewRepairPageState extends State<NewRepairPage> {
 
   /// A single Joy-Con is booked on its own, so intake asks which half it is.
   bool get _needsSide => deviceSideRequired(_modelName);
+
+  Future<void> _findExistingCustomer() async {
+    final repository = ShopScope.of(context);
+    final contacts = [_phone.text.trim(), _email.text.trim()]
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    if (contacts.isEmpty) {
+      setState(() => _error = 'Enter a phone number or email to search.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final matches = <int, CustomerRecord>{};
+      for (final contact in contacts) {
+        for (final customer
+            in await repository.findCustomersByContact(contact)) {
+          matches[customer.id] = customer;
+        }
+      }
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        setState(() => _error = 'No customer matches that phone or email.');
+        return;
+      }
+      final selected = await showDialog<CustomerRecord>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Select customer'),
+          content: SizedBox(
+            width: 480,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final customer in matches.values)
+                  ListTile(
+                    key: Key('intake-customer-result-${customer.id}'),
+                    title: Text(customer.name),
+                    subtitle: Text([
+                      if (customer.phone?.isNotEmpty == true) customer.phone!,
+                      if (customer.email?.isNotEmpty == true) customer.email!,
+                    ].join(' · ')),
+                    onTap: () => Navigator.of(dialogContext).pop(customer),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      if (selected == null || !mounted) return;
+      final devices = await repository.watchCustomerDevices(selected.id).first;
+      if (!mounted) return;
+      setState(() {
+        _customerId = selected.id;
+        _customerDeviceId = null;
+        _customer.text = selected.name;
+        _phone.text = selected.phone ?? '';
+        _email.text = selected.email ?? '';
+        _customerDevices = devices;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Could not search customer records: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _selectCustomerDevice(
+    int? deviceId,
+    List<DeviceOption> catalog,
+  ) {
+    final device = _customerDevices
+        .where((candidate) => candidate.id == deviceId)
+        .firstOrNull;
+    if (deviceId == null || device == null) {
+      setState(() => _customerDeviceId = null);
+      return;
+    }
+    final catalogModel = catalog
+        .where((candidate) => candidate.modelId == device.modelId)
+        .firstOrNull;
+    setState(() {
+      _customerDeviceId = device.id;
+      _category = device.category ?? catalogModel?.category;
+      _modelId = device.modelId;
+      _modelName = device.modelName ?? catalogModel?.modelName;
+      _otherDevice = device.modelId == null;
+      _deviceOther.text = device.modelId == null ? device.label : '';
+      _deviceVariant.text = device.deviceVariant ?? '';
+      _side = device.deviceSide;
+      _serial.text = device.serial ?? '';
+      _serialMissing = device.serialMissing;
+      _serialPending = false;
+    });
+  }
 
   /// Which Report 1 checklist this device will get. The ticket stores its own
   /// copy on save; this is only the preview inside the form.
@@ -171,7 +289,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
     return null;
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool importPhotos = false}) async {
     final problem = _validate();
     if (problem != null) {
       setState(() => _error = problem);
@@ -184,7 +302,9 @@ class _NewRepairPageState extends State<NewRepairPage> {
     });
 
     try {
-      final created = await ShopScope.of(context).createTicket(
+      final repository = ShopScope.of(context);
+      final created = await repository.createTicket(
+        customerId: _customerId,
         customerName: _customer.text,
         customerPhone: _phone.text,
         customerEmail: _email.text,
@@ -192,12 +312,29 @@ class _NewRepairPageState extends State<NewRepairPage> {
         deviceName: _otherDevice ? _deviceOther.text : null,
         deviceVariant: _deviceVariant.text,
         deviceSide: _side,
+        customerDeviceId: _customerDeviceId,
         photoTemplateKey: _photoTemplateKey,
         serial: _serial.text,
         serialMissing: _serialMissing,
         complaint: _complaint.text,
       );
       if (!mounted) return;
+      if (importPhotos) {
+        final checklist =
+            await repository.watchPhotoChecklist(created.id).first;
+        if (!mounted) return;
+        await showPhoneCaptureDialog(
+          context,
+          repository: repository,
+          ticketId: created.id,
+          ticketNumber: created.number,
+          device: _otherDevice
+              ? _deviceOther.text.trim()
+              : (_modelName ?? _category ?? 'Device'),
+          checklist: checklist,
+        );
+        if (!mounted) return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -223,16 +360,14 @@ class _NewRepairPageState extends State<NewRepairPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('New repair')),
-      body: FutureBuilder<List<DeviceOption>>(
+      body: FutureBuilder<(List<DeviceOption>, List<String>)>(
         future: _catalogFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final catalog = snapshot.data ?? const <DeviceOption>[];
-          final categories = <String>{
-            for (final option in catalog) option.category,
-          }.toList();
+          final catalog = snapshot.data?.$1 ?? const <DeviceOption>[];
+          final categories = snapshot.data?.$2 ?? const <String>[];
           final models = [
             for (final option in catalog)
               if (option.category == _category) option,
@@ -254,7 +389,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
                         textCapitalization: TextCapitalization.words,
                         decoration: const InputDecoration(
                           labelText: 'Name',
-                          hintText: 'Existing customers are reused by name',
+                          hintText: 'Customer name',
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -281,12 +416,66 @@ class _NewRepairPageState extends State<NewRepairPage> {
                           border: OutlineInputBorder(),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            key: const Key('intake-find-customer'),
+                            onPressed: _saving ? null : _findExistingCustomer,
+                            icon: const Icon(Icons.person_search_outlined),
+                            label: const Text('Find by phone/email'),
+                          ),
+                          if (_customerId != null)
+                            Chip(
+                              avatar: const Icon(Icons.link, size: 16),
+                              label: const Text('Existing customer selected'),
+                              onDeleted: _saving
+                                  ? null
+                                  : () => setState(() {
+                                        _customerId = null;
+                                        _customerDevices = const [];
+                                        _customerDeviceId = null;
+                                      }),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   _Section(
                     title: 'Device',
                     children: [
+                      if (_customerId != null &&
+                          _customerDevices.isNotEmpty) ...[
+                        DropdownButtonFormField<int>(
+                          key: const Key('intake-saved-device'),
+                          initialValue: _customerDeviceId,
+                          decoration: const InputDecoration(
+                            labelText: 'Existing customer device',
+                            helperText:
+                                'Choose a device already recorded for this customer.',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final device in _customerDevices)
+                              DropdownMenuItem(
+                                value: device.id,
+                                child: Text(
+                                  '${device.label} · '
+                                  '${device.serial ?? 'no serial recorded'}',
+                                ),
+                              ),
+                          ],
+                          onChanged: _saving
+                              ? null
+                              : (value) =>
+                                  _selectCustomerDevice(value, catalog),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       DropdownButtonFormField<String>(
                         key: const Key('intake-category'),
                         initialValue: _category,
@@ -366,7 +555,13 @@ class _NewRepairPageState extends State<NewRepairPage> {
                         ),
                       ],
                       if (_photoTemplateKey != null)
-                        _ChecklistPreview(templateKey: _photoTemplateKey!),
+                        _ChecklistPreview(
+                          templateKey: _photoTemplateKey!,
+                          deviceName:
+                              _otherDevice ? _deviceOther.text.trim() : null,
+                          onImportPhotos:
+                              _saving ? null : () => _save(importPhotos: true),
+                        ),
                       const SizedBox(height: 12),
                       TextField(
                         key: const Key('intake-device-variant'),
@@ -530,9 +725,15 @@ class _Section extends StatelessWidget {
 /// Shows the Report 1 shot list the chosen device will get, so the checklist is
 /// visible before the ticket exists. The real copy is taken at save time.
 class _ChecklistPreview extends StatelessWidget {
-  const _ChecklistPreview({required this.templateKey});
+  const _ChecklistPreview({
+    required this.templateKey,
+    this.deviceName,
+    this.onImportPhotos,
+  });
 
   final String templateKey;
+  final String? deviceName;
+  final VoidCallback? onImportPhotos;
 
   @override
   Widget build(BuildContext context) {
@@ -546,34 +747,70 @@ class _ChecklistPreview extends StatelessWidget {
         border: Border.all(color: theme.colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: ExpansionTile(
-        key: const Key('intake-checklist'),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        title: Text('Report 1 · ${seed.slots.length} photos'),
-        subtitle: Text(seed.name),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          for (var index = 0; index < seed.slots.length; index++)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 22,
-                    child: Text(
-                      '${index + 1}.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
+          ExpansionTile(
+            key: const Key('intake-checklist'),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            title: Text('Report 1 · ${seed.slots.length} photos'),
+            subtitle: Text(
+              templateKey == 'general_electronics' &&
+                      (deviceName ?? '').isNotEmpty
+                  ? deviceName!
+                  : seed.name,
+            ),
+            children: [
+              for (var index = 0; index < seed.slots.length; index++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        child: Text(
+                          '${index + 1}.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Text(seed.slots[index].label)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          if (onImportPhotos != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FilledButton.tonalIcon(
+                      key: const Key('intake-import-photos-qr'),
+                      onPressed: onImportPhotos,
+                      icon: const Icon(Icons.qr_code_2),
+                      label: const Text('Create & import with QR'),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Saves the ticket first, then opens the phone photo link.',
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                  Expanded(child: Text(seed.slots[index].label)),
-                ],
+                  ],
+                ),
               ),
             ),
+          ],
         ],
       ),
     );

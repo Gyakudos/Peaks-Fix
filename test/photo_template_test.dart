@@ -5,8 +5,19 @@ void main() {
   test('every photo template ends with the serial label', () {
     expect(photoTemplateSeeds, isNotEmpty);
     for (final template in photoTemplateSeeds) {
-      expect(template.slots, hasLength(5), reason: template.key);
-      expect(template.slots.last.label, 'Serial label', reason: template.key);
+      if (template.key == 'vacuum') {
+        expect(template.slots, hasLength(3), reason: template.key);
+        expect(
+          template.slots.map((slot) => slot.label),
+          ['Front', 'Back', 'Charge Port'],
+        );
+      } else if (template.key == 'general_electronics') {
+        expect(template.slots, hasLength(4), reason: template.key);
+        expect(template.slots.last.label, 'Serial / model label');
+      } else {
+        expect(template.slots, hasLength(5), reason: template.key);
+        expect(template.slots.last.label, 'Serial label', reason: template.key);
+      }
     }
   });
 
@@ -44,6 +55,15 @@ void main() {
     expect(photoTemplateKeyFor('Handheld PCs', 'Steam Deck OLED'), 'pc');
     expect(
         photoTemplateKeyFor('Controllers', 'DualSense 5 (PS5)'), 'controller');
+    expect(photoTemplateKeyFor('Vacuum', 'V15 Detect'), 'vacuum');
+    expect(
+      photoTemplateKeyFor('General Electronics', 'Ninja Grill'),
+      'general_electronics',
+    );
+    expect(
+      photoTemplateSeed('general_electronics')!.slots.map((slot) => slot.label),
+      ['Front', 'Back', 'Details', 'Serial / model label'],
+    );
   });
 
   test('a future category falls back to the console checklist', () {

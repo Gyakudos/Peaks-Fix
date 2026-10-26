@@ -20,6 +20,10 @@ Purpose: liability and a baseline for the client report.
   is still issued as well, because every device gets one.
 - Cosmetic checklist by area: screen, bezel, front shell, back shell, corners,
   ports, buttons, hinge/stand, vents.
+- **Condition notes** — one free-text box for anything the photos will not make
+  obvious: scratches, cracks, worn or added stickers, missing parts, prior
+  repairs. It saves automatically with the ticket, so a quick thought is never
+  lost to a save button; leaving the page flushes it too.
 - Condition scale: `good / scuffed / scratched / cracked / missing`.
 - **Required photos — 5 slots, in this order.** The last slot is always the
   serial / shop-tag shot; the first four depend on the **device family**, which
@@ -41,9 +45,28 @@ Purpose: liability and a baseline for the client report.
   On a **Nintendo 3DS**, for example, the checklist is: `Top screen (closed)`,
   `Back (closed)`, `Charger port`, `Open (both screens)`, `Serial label`.
 
-  Each slot is a labelled tile; tapping it opens the camera (Android) or file
-  picker (Windows). Retaking replaces the slot rather than adding a duplicate.
-  A counter shows `4 of 5 required`.
+  Each slot is a labelled row. A captured slot shows a thumbnail; tap it to
+  view the photo full size. On the shop PC, **Capture with phone** opens a QR
+  code so the phone camera can fill these slots while the ticket stays open.
+  On the phone each slot reads `Needed` or `Saved`, and **Retake photo**
+  replaces that slot rather than adding a duplicate. A counter shows
+  `4 of 5 required`.
+- **Phone capture** keeps the camera where it belongs without a cloud service:
+
+  - The PC starts a small HTTP server on its LAN address, only while the QR
+    dialog is open. The URL carries a random one-time token, and any other path
+    or token gets a 404. The server expires after 30 minutes.
+  - The phone page is plain HTML/JS over local Wi-Fi. It uses the browser's
+    `file` input with `capture="environment"`, so it needs no app, account or
+    camera permission beyond the normal browser prompt.
+  - The phone downscales to a 2000 px JPEG before upload. The server accepts
+    only JPEG, PNG or WebP, checks the file's magic bytes, and caps a photo at
+    12 MB. Slots are addressable only if they belong to this ticket.
+  - Each capture is a new file under `photos\ticket_<id>\` beside the database;
+    the ticket stores the path and capture time. The previous file for that
+    slot is removed, but a viewer that still has it open never blocks the save.
+  - The PC progress bar and thumbnails update as uploads arrive. Closing the
+    dialog stops the server; the link is dead immediately.
 - **Checklists seeded today:** `hinged`, `slab`, `console`, `pc`, `controller`
   (five templates, 25 slots). A free-text device booked under a category uses
   that category's family; a catalog model can override its family in the
@@ -87,6 +110,19 @@ Purpose: liability and a baseline for the client report.
 
 Internal. Drives the estimate. Optional for simple jobs.
 
+**Implemented now:** the Technical section explains the Report 1 requirement
+when opened while locked, and exposes the bench log after Report 1 is complete.
+The technician can add ordered text notes, attach multiple photos to a note, or
+insert standalone photos between notes. Notes and photo captions autosave;
+photos are stored beside the ticket's other local photos. All entries are
+copied into the editable Report 3 draft. While that report is a draft,
+technical changes update entries whose customer copy has not been edited;
+customer wording and photo inclusion choices are preserved. The Report 3 copy
+is separate from the internal log.
+
+The current editor covers this notes-and-photos workflow. The structured
+diagnostic and estimate fields below are still planned.
+
 - Header: ticket number, shop tag and device, so the bench matches paper to
   hardware at a glance.
 - Complaint (carried from report 1).
@@ -113,6 +149,12 @@ diagnosis document.
 The customer-facing deliverable. **Auto-filled** from reports 1 and 2, with an
 editable plain-language summary; staff never retype the job. It prints as **two
 pages**: the job summary, then the warranty page.
+
+**Implemented now:** Report 2 notes and photos appear as editable draft entries
+here, all included by default. The technician can rewrite note text or captions
+and choose which entries to include. Those changes are preserved when Report 2
+syncs new or updated content. Sending, printing and the full two-page warranty
+report are still planned.
 
 ### Page 1 — Job summary
 
@@ -198,11 +240,17 @@ page leads back to exactly one unit:
   "estimate not approved"); it never blocks a status change.
 - **Author recorded, not enforced.** One field, defaulted to the shop name.
 
-## Data model (planned)
+## Data model
 
 - `ticket_reports` — ticket, kind (`intake` / `technical` / `client`), status,
   author, revision, created/updated/finalized timestamps, and the `shopTag`
-  printed on that revision.
+  printed on that revision. The table exists; report creation and finalization
+  flows are still being built.
+- `technical_report_entries` — ordered note/photo blocks, with an optional
+  parent note for attached photos.
+- `client_report_entries` — editable copies of technical entries. Content edits
+  and include/exclude choices are tracked separately so syncing the bench log
+  preserves both kinds of customer-facing edits.
 - `report_cosmetic_items` — report, area, condition, note.
 - `report_findings` — report, area, symptom, cause, severity, fix.
 - `report_contact_log` — report, timestamp, method, outcome, note.

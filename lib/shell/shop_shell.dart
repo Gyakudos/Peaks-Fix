@@ -30,38 +30,40 @@ class _ShopShellState extends State<ShopShell> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= _railBreakpoint;
 
-        final content = IndexedStack(
-          index: _selected,
-          children: [for (final destination in destinations) destination.page],
-        );
-
         return Scaffold(
           // Android has no native window chrome to show the app name.
           appBar: WindowChrome.isSupported
               ? null
               : AppBar(title: const Text('Peaks Fix')),
-          body: wide
-              ? Row(
-                  children: [
-                    NavigationRail(
-                      selectedIndex: _selected,
-                      onDestinationSelected: (index) =>
-                          setState(() => _selected = index),
-                      labelType: NavigationRailLabelType.all,
-                      destinations: [
-                        for (final destination in destinations)
-                          NavigationRailDestination(
-                            icon: Icon(destination.icon),
-                            selectedIcon: Icon(destination.selectedIcon),
-                            label: Text(destination.label),
-                          ),
-                      ],
-                    ),
-                    const VerticalDivider(width: 1, thickness: 1),
-                    Expanded(child: content),
+          body: Row(
+            children: [
+              if (wide) ...[
+                NavigationRail(
+                  selectedIndex: _selected,
+                  onDestinationSelected: (index) =>
+                      setState(() => _selected = index),
+                  labelType: NavigationRailLabelType.all,
+                  destinations: [
+                    for (final destination in destinations)
+                      NavigationRailDestination(
+                        icon: Icon(destination.icon),
+                        selectedIcon: Icon(destination.selectedIcon),
+                        label: Text(destination.label),
+                      ),
                   ],
-                )
-              : content,
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+              ],
+              Expanded(
+                child: Navigator(
+                  key: ValueKey(_selected),
+                  onGenerateRoute: (_) => MaterialPageRoute<void>(
+                    builder: (_) => destinations[_selected].page,
+                  ),
+                ),
+              ),
+            ],
+          ),
           bottomNavigationBar: wide
               ? null
               : NavigationBar(
