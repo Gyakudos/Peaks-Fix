@@ -12,7 +12,7 @@ import 'window_chrome.dart';
 class WindowTitleBar extends StatelessWidget {
   const WindowTitleBar({
     super.key,
-    this.title = 'Vola Fix',
+    this.title = 'Peaks Fix',
     this.height = 36,
     this.leading,
   });

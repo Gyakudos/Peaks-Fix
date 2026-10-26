@@ -23,7 +23,7 @@ class VolaFixApp extends StatelessWidget {
     final repository = tickets ?? _defaultRepository;
 
     return MaterialApp(
-      title: 'Vola Fix',
+      title: 'Peaks Fix',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),

@@ -60,7 +60,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   // The window restores the placement saved by the previous session, or opens
   // centered on the primary monitor at this size when there is none.
-  if (!window.Create(L"Vola Fix", Win32Window::Size(1280, 720))) {
+  if (!window.Create(L"Peaks Fix", Win32Window::Size(1280, 720))) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

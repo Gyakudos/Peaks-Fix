@@ -33,7 +33,7 @@ constexpr int kMinimumWidth = 480;
 constexpr int kMinimumHeight = 360;
 
 constexpr UINT kTrayCallbackMessage = WM_APP + 1;
-constexpr wchar_t kTrayTooltip[] = L"Vola Fix";
+constexpr wchar_t kTrayTooltip[] = L"Peaks Fix";
 
 // Converts a logical pixel value to physical pixels for |window|'s monitor.
 int ScaleForWindow(HWND window, int value) {

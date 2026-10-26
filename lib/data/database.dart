@@ -550,7 +550,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> ensureSeeded() async {
     await transaction(() async {
       const defaults = <(String, String)>[
-        ('shop_name', 'Vola Fix'),
+        ('shop_name', 'Peaks Fix'),
         ('ticket_prefix', 'VF'),
         ('tag_prefix', 'G'),
         ('ticket_seq', '0'),
@@ -571,6 +571,14 @@ class AppDatabase extends _$AppDatabase {
           mode: InsertMode.insertOrIgnore,
         );
       }
+
+      // The app was renamed from Vola Fix. Carry the old default across, but
+      // never overwrite a shop name the operator has already changed.
+      await (update(settings)
+            ..where(
+              (s) => s.key.equals('shop_name') & s.value.equals('Vola Fix'),
+            ))
+          .write(const SettingsCompanion(value: Value('Peaks Fix')));
 
       Future<void> photoTemplate(PhotoTemplateSeed seed) async {
         final row = await (select(photoTemplates)

@@ -237,7 +237,7 @@ void main() {
   testWidgets('app builds with all five tabs', (WidgetTester tester) async {
     await tester.pumpWidget(VolaFixApp(tickets: FakeTicketsRepository()));
 
-    expect(find.text('Vola Fix'), findsWidgets);
+    expect(find.text('Peaks Fix'), findsWidgets);
     expect(find.text('Tickets'), findsWidgets);
     expect(find.text('Customers'), findsWidgets);
     expect(find.text('Merch'), findsWidgets);

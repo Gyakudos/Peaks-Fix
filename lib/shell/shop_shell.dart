@@ -39,7 +39,7 @@ class _ShopShellState extends State<ShopShell> {
           // Android has no native window chrome to show the app name.
           appBar: WindowChrome.isSupported
               ? null
-              : AppBar(title: const Text('Vola Fix')),
+              : AppBar(title: const Text('Peaks Fix')),
           body: wide
               ? Row(
                   children: [

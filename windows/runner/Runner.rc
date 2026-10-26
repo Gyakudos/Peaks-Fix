@@ -89,7 +89,7 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "vola_fix" "\0"
+            VALUE "FileDescription", "Peaks Fix" "\0"
             VALUE "FileVersion", VALUE_AS_STRING "\0"
             VALUE "InternalName", "vola_fix" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026. All rights reserved." "\0"
