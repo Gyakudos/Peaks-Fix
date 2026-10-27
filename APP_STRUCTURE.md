@@ -79,7 +79,8 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Seeded on first launch: five device categories (Consoles, Retro consoles,
   Portable Consoles, Handheld PCs, Controllers) with 78 pickable models, 12
   services, and settings (shop name, `PF` ticket prefix, `PFS` shop-serial
-  prefix, `G` tag prefix, 90-day warranty default and terms). Seeding is
+  prefix, `G` tag prefix, 90-day warranty default and terms, 5% GST on, 7% PST
+  off). Seeding is
   additive and matched by name:
   later launches only add rows that are missing, so shop edits, custom models
   and added categories survive, and an existing database never needs to be wiped
@@ -102,13 +103,20 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Schema v13 adds `tickets.report2_completed_at` and `report3_completed_at`.
   Report 1 completion already unlocked Report 2; completing Report 3 also moves
   the ticket to **Ready** so it appears in Checkout.
+- Schema v14 adds `tickets.gst_cents` and `pst_cents`, the tax snapshot written
+  when a paid ticket closes. Invoices calculate GST/PST on the discounted
+  subtotal; settings store the enabled flags and rates in basis points (500 =
+  5%). The first-run seed turns GST on at 5% and leaves PST off at 7%.
 - **Financial** is calculated from existing records, not a separate ledger.
-  Revenue is each closed ticket's invoice subtotal minus its saved discount;
-  cost is the recorded `ticket_items.unit_cost_cents` for parts and
-  merchandise. Gross profit is revenue minus that cost, and net profit is an
+  Revenue is each closed ticket's invoice subtotal minus its saved discount and
+  before tax; cost is the recorded `ticket_items.unit_cost_cents` for parts and
+  merchandise. GST and PST are reported separately from the stored snapshots,
+  so later rate changes do not rewrite old tickets. Gross profit is revenue
+  minus that cost, and net profit is an
   estimate after subtracting tracked staff time × hourly rate. Labour lines
   carry no cost, so staff pay is not double-counted. The period chips filter
-  both closed tickets (by close date) and shifts (clipped to the period).
+  both closed tickets (by close date) and shifts (clipped to the period); the
+  tab opens on **This month** with a **Yearly view** button.
 - **Reopen** on a closed ticket sends it back to the board in a chosen active
   status (default **In repair**). Reports, invoice lines and payments stay
   attached; because the status is no longer `closed`, the ticket leaves the

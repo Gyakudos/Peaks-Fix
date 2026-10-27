@@ -2915,6 +2915,22 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
       'notes', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _gstCentsMeta =
+      const VerificationMeta('gstCents');
+  @override
+  late final GeneratedColumn<int> gstCents = GeneratedColumn<int>(
+      'gst_cents', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _pstCentsMeta =
+      const VerificationMeta('pstCents');
+  @override
+  late final GeneratedColumn<int> pstCents = GeneratedColumn<int>(
+      'pst_cents', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -2978,6 +2994,8 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
         invoiceDiscountKind,
         invoiceDiscountValue,
         notes,
+        gstCents,
+        pstCents,
         createdAt,
         updatedAt,
         dueAt,
@@ -3139,6 +3157,14 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
       context.handle(
           _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
     }
+    if (data.containsKey('gst_cents')) {
+      context.handle(_gstCentsMeta,
+          gstCents.isAcceptableOrUnknown(data['gst_cents']!, _gstCentsMeta));
+    }
+    if (data.containsKey('pst_cents')) {
+      context.handle(_pstCentsMeta,
+          pstCents.isAcceptableOrUnknown(data['pst_cents']!, _pstCentsMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -3238,6 +3264,10 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
           DriftSqlType.int, data['${effectivePrefix}invoice_discount_value'])!,
       notes: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      gstCents: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}gst_cents'])!,
+      pstCents: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}pst_cents'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -3331,6 +3361,11 @@ class Ticket extends DataClass implements Insertable<Ticket> {
   final InvoiceDiscountKind invoiceDiscountKind;
   final int invoiceDiscountValue;
   final String? notes;
+
+  /// Tax snapshot taken when the ticket is closed, so later rate changes never
+  /// rewrite an old invoice. Revenue stays pre-tax on Financial.
+  final int gstCents;
+  final int pstCents;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? dueAt;
@@ -3365,6 +3400,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       required this.invoiceDiscountKind,
       required this.invoiceDiscountValue,
       this.notes,
+      required this.gstCents,
+      required this.pstCents,
       required this.createdAt,
       required this.updatedAt,
       this.dueAt,
@@ -3444,6 +3481,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
+    map['gst_cents'] = Variable<int>(gstCents);
+    map['pst_cents'] = Variable<int>(pstCents);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || dueAt != null) {
@@ -3522,6 +3561,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       invoiceDiscountValue: Value(invoiceDiscountValue),
       notes:
           notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      gstCents: Value(gstCents),
+      pstCents: Value(pstCents),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       dueAt:
@@ -3575,6 +3616,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       invoiceDiscountValue:
           serializer.fromJson<int>(json['invoiceDiscountValue']),
       notes: serializer.fromJson<String?>(json['notes']),
+      gstCents: serializer.fromJson<int>(json['gstCents']),
+      pstCents: serializer.fromJson<int>(json['pstCents']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       dueAt: serializer.fromJson<DateTime?>(json['dueAt']),
@@ -3617,6 +3660,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           .toJson(invoiceDiscountKind)),
       'invoiceDiscountValue': serializer.toJson<int>(invoiceDiscountValue),
       'notes': serializer.toJson<String?>(notes),
+      'gstCents': serializer.toJson<int>(gstCents),
+      'pstCents': serializer.toJson<int>(pstCents),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'dueAt': serializer.toJson<DateTime?>(dueAt),
@@ -3654,6 +3699,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           InvoiceDiscountKind? invoiceDiscountKind,
           int? invoiceDiscountValue,
           Value<String?> notes = const Value.absent(),
+          int? gstCents,
+          int? pstCents,
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> dueAt = const Value.absent(),
@@ -3705,6 +3752,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         invoiceDiscountKind: invoiceDiscountKind ?? this.invoiceDiscountKind,
         invoiceDiscountValue: invoiceDiscountValue ?? this.invoiceDiscountValue,
         notes: notes.present ? notes.value : this.notes,
+        gstCents: gstCents ?? this.gstCents,
+        pstCents: pstCents ?? this.pstCents,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         dueAt: dueAt.present ? dueAt.value : this.dueAt,
@@ -3773,6 +3822,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ? data.invoiceDiscountValue.value
           : this.invoiceDiscountValue,
       notes: data.notes.present ? data.notes.value : this.notes,
+      gstCents: data.gstCents.present ? data.gstCents.value : this.gstCents,
+      pstCents: data.pstCents.present ? data.pstCents.value : this.pstCents,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       dueAt: data.dueAt.present ? data.dueAt.value : this.dueAt,
@@ -3814,6 +3865,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ..write('invoiceDiscountKind: $invoiceDiscountKind, ')
           ..write('invoiceDiscountValue: $invoiceDiscountValue, ')
           ..write('notes: $notes, ')
+          ..write('gstCents: $gstCents, ')
+          ..write('pstCents: $pstCents, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('dueAt: $dueAt, ')
@@ -3853,6 +3906,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         invoiceDiscountKind,
         invoiceDiscountValue,
         notes,
+        gstCents,
+        pstCents,
         createdAt,
         updatedAt,
         dueAt,
@@ -3891,6 +3946,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           other.invoiceDiscountKind == this.invoiceDiscountKind &&
           other.invoiceDiscountValue == this.invoiceDiscountValue &&
           other.notes == this.notes &&
+          other.gstCents == this.gstCents &&
+          other.pstCents == this.pstCents &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.dueAt == this.dueAt &&
@@ -3927,6 +3984,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
   final Value<InvoiceDiscountKind> invoiceDiscountKind;
   final Value<int> invoiceDiscountValue;
   final Value<String?> notes;
+  final Value<int> gstCents;
+  final Value<int> pstCents;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> dueAt;
@@ -3961,6 +4020,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.invoiceDiscountKind = const Value.absent(),
     this.invoiceDiscountValue = const Value.absent(),
     this.notes = const Value.absent(),
+    this.gstCents = const Value.absent(),
+    this.pstCents = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.dueAt = const Value.absent(),
@@ -3996,6 +4057,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.invoiceDiscountKind = const Value.absent(),
     this.invoiceDiscountValue = const Value.absent(),
     this.notes = const Value.absent(),
+    this.gstCents = const Value.absent(),
+    this.pstCents = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.dueAt = const Value.absent(),
@@ -4034,6 +4097,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     Expression<int>? invoiceDiscountKind,
     Expression<int>? invoiceDiscountValue,
     Expression<String>? notes,
+    Expression<int>? gstCents,
+    Expression<int>? pstCents,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? dueAt,
@@ -4075,6 +4140,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       if (invoiceDiscountValue != null)
         'invoice_discount_value': invoiceDiscountValue,
       if (notes != null) 'notes': notes,
+      if (gstCents != null) 'gst_cents': gstCents,
+      if (pstCents != null) 'pst_cents': pstCents,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (dueAt != null) 'due_at': dueAt,
@@ -4112,6 +4179,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       Value<InvoiceDiscountKind>? invoiceDiscountKind,
       Value<int>? invoiceDiscountValue,
       Value<String?>? notes,
+      Value<int>? gstCents,
+      Value<int>? pstCents,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<DateTime?>? dueAt,
@@ -4146,6 +4215,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       invoiceDiscountKind: invoiceDiscountKind ?? this.invoiceDiscountKind,
       invoiceDiscountValue: invoiceDiscountValue ?? this.invoiceDiscountValue,
       notes: notes ?? this.notes,
+      gstCents: gstCents ?? this.gstCents,
+      pstCents: pstCents ?? this.pstCents,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       dueAt: dueAt ?? this.dueAt,
@@ -4248,6 +4319,12 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (gstCents.present) {
+      map['gst_cents'] = Variable<int>(gstCents.value);
+    }
+    if (pstCents.present) {
+      map['pst_cents'] = Variable<int>(pstCents.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4297,6 +4374,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
           ..write('invoiceDiscountKind: $invoiceDiscountKind, ')
           ..write('invoiceDiscountValue: $invoiceDiscountValue, ')
           ..write('notes: $notes, ')
+          ..write('gstCents: $gstCents, ')
+          ..write('pstCents: $pstCents, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('dueAt: $dueAt, ')
@@ -14675,6 +14754,8 @@ typedef $$TicketsTableCreateCompanionBuilder = TicketsCompanion Function({
   Value<InvoiceDiscountKind> invoiceDiscountKind,
   Value<int> invoiceDiscountValue,
   Value<String?> notes,
+  Value<int> gstCents,
+  Value<int> pstCents,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> dueAt,
@@ -14710,6 +14791,8 @@ typedef $$TicketsTableUpdateCompanionBuilder = TicketsCompanion Function({
   Value<InvoiceDiscountKind> invoiceDiscountKind,
   Value<int> invoiceDiscountValue,
   Value<String?> notes,
+  Value<int> gstCents,
+  Value<int> pstCents,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> dueAt,
@@ -14961,6 +15044,12 @@ class $$TicketsTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
       column: $table.notes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get gstCents => $composableBuilder(
+      column: $table.gstCents, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get pstCents => $composableBuilder(
+      column: $table.pstCents, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -15281,6 +15370,12 @@ class $$TicketsTableOrderingComposer
   ColumnOrderings<String> get notes => $composableBuilder(
       column: $table.notes, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get gstCents => $composableBuilder(
+      column: $table.gstCents, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get pstCents => $composableBuilder(
+      column: $table.pstCents, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -15441,6 +15536,12 @@ class $$TicketsTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<int> get gstCents =>
+      $composableBuilder(column: $table.gstCents, builder: (column) => column);
+
+  GeneratedColumn<int> get pstCents =>
+      $composableBuilder(column: $table.pstCents, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -15727,6 +15828,8 @@ class $$TicketsTableTableManager extends RootTableManager<
                 const Value.absent(),
             Value<int> invoiceDiscountValue = const Value.absent(),
             Value<String?> notes = const Value.absent(),
+            Value<int> gstCents = const Value.absent(),
+            Value<int> pstCents = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> dueAt = const Value.absent(),
@@ -15762,6 +15865,8 @@ class $$TicketsTableTableManager extends RootTableManager<
             invoiceDiscountKind: invoiceDiscountKind,
             invoiceDiscountValue: invoiceDiscountValue,
             notes: notes,
+            gstCents: gstCents,
+            pstCents: pstCents,
             createdAt: createdAt,
             updatedAt: updatedAt,
             dueAt: dueAt,
@@ -15798,6 +15903,8 @@ class $$TicketsTableTableManager extends RootTableManager<
                 const Value.absent(),
             Value<int> invoiceDiscountValue = const Value.absent(),
             Value<String?> notes = const Value.absent(),
+            Value<int> gstCents = const Value.absent(),
+            Value<int> pstCents = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> dueAt = const Value.absent(),
@@ -15833,6 +15940,8 @@ class $$TicketsTableTableManager extends RootTableManager<
             invoiceDiscountKind: invoiceDiscountKind,
             invoiceDiscountValue: invoiceDiscountValue,
             notes: notes,
+            gstCents: gstCents,
+            pstCents: pstCents,
             createdAt: createdAt,
             updatedAt: updatedAt,
             dueAt: dueAt,

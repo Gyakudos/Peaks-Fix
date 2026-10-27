@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -6,6 +7,7 @@ import 'database.dart';
 import 'financials.dart';
 import 'photo_store.dart';
 import 'photo_templates.dart';
+import 'taxes.dart';
 
 /// One row of the Tickets board.
 class TicketBoardEntry {
@@ -335,11 +337,13 @@ class InvoiceDraft {
     required this.discountKind,
     required this.discountValue,
     required this.lines,
+    this.taxes = const TaxConfig(),
   });
 
   final InvoiceDiscountKind discountKind;
   final int discountValue;
   final List<InvoiceLine> lines;
+  final TaxConfig taxes;
 
   int get subtotalCents =>
       lines.fold(0, (total, line) => total + line.lineTotalCents);
@@ -355,7 +359,14 @@ class InvoiceDraft {
     }
   }
 
-  int get totalCents => subtotalCents - discountCents;
+  /// Amount sales tax is calculated on: the bill after discounts.
+  int get taxableCents => subtotalCents - discountCents;
+
+  List<TaxLine> get taxLines => taxes.linesFor(taxableCents);
+
+  int get taxCents => taxes.taxCentsFor(taxableCents);
+
+  int get totalCents => taxableCents + taxCents;
 }
 
 /// One numbered shot on a ticket's Report 1 checklist.
@@ -889,27 +900,61 @@ class DriftTicketsRepository implements TicketsRepository {
     ])
       ..where(_db.tickets.id.equals(ticketId))
       ..orderBy([OrderingTerm.asc(_db.ticketItems.id)]);
-    return query.watch().map((rows) {
-      if (rows.isEmpty) return null;
-      final ticket = rows.first.readTable(_db.tickets);
-      return InvoiceDraft(
-        discountKind: ticket.invoiceDiscountKind,
-        discountValue: ticket.invoiceDiscountValue,
-        lines: [
-          for (final row in rows)
-            if (row.readTableOrNull(_db.ticketItems) case final item?)
-              InvoiceLine(
-                ticketItemId: item.id,
-                kind: item.kind,
-                description: item.description,
-                quantity: item.quantity,
-                unitPriceCents: item.unitPriceCents,
-                isMerch: item.kind == TicketItemKind.custom &&
-                    item.unitCostCents != null,
-              ),
-        ],
+
+    late StreamController<InvoiceDraft?> controller;
+    StreamSubscription<List<TypedResult>>? invoiceSubscription;
+    StreamSubscription<TaxConfig>? taxSubscription;
+    List<TypedResult>? rows;
+    TaxConfig? taxes;
+
+    void emit() {
+      final currentRows = rows;
+      final currentTaxes = taxes;
+      if (currentRows == null || currentTaxes == null) return;
+      if (currentRows.isEmpty) {
+        controller.add(null);
+        return;
+      }
+      final ticket = currentRows.first.readTable(_db.tickets);
+      controller.add(
+        InvoiceDraft(
+          discountKind: ticket.invoiceDiscountKind,
+          discountValue: ticket.invoiceDiscountValue,
+          taxes: currentTaxes,
+          lines: [
+            for (final row in currentRows)
+              if (row.readTableOrNull(_db.ticketItems) case final item?)
+                InvoiceLine(
+                  ticketItemId: item.id,
+                  kind: item.kind,
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitPriceCents: item.unitPriceCents,
+                  isMerch: item.kind == TicketItemKind.custom &&
+                      item.unitCostCents != null,
+                ),
+          ],
+        ),
       );
-    });
+    }
+
+    controller = StreamController<InvoiceDraft?>(
+      onListen: () {
+        invoiceSubscription = query.watch().listen((value) {
+          rows = value;
+          emit();
+        });
+        taxSubscription = _db.watchTaxConfig().listen((value) {
+          taxes = value;
+          emit();
+        });
+      },
+      onCancel: () async {
+        await invoiceSubscription?.cancel();
+        await taxSubscription?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   @override

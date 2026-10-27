@@ -64,8 +64,13 @@ printing are still being built.
   shared sign-in/clock-out page, per-person hours, estimated pay and the
   tickets assigned to that person on any report stage.
 - **Financial** — closed-ticket revenue, recorded parts/merch cost, gross
-  profit, tracked staff hours and pay, and a net profit estimate. Filter by
-  all time, this month, the last 30 days or this year.
+  profit, tracked staff hours and pay, and a net profit estimate. Opens on
+  **This month**, with **Yearly view** and other period filters. GST and PST
+  collected on closed tickets appear as separate figures.
+- **Sales tax** — Settings turns GST and PST on or off and sets each rate
+  (GST defaults to 5%, PST defaults to 7% and starts off). Tax is calculated on
+  the discounted invoice subtotal, shown on the invoice and Checkout, included
+  in the balance due, and snapshotted when a ticket closes.
 - **Phone capture** — on the shop PC, **Capture with phone** shows a QR code;
   scan it with a phone on the same Wi-Fi and shoot the Report 1 slots straight
   into the open ticket. Photos land as thumbnails on the PC as they arrive.

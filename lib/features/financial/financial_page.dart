@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
 import '../../data/financials.dart';
+import '../../data/taxes.dart';
 import '../settings/settings_page.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
@@ -29,8 +30,9 @@ class _FinancialPageState extends State<FinancialPage> {
       _database.watchFinancialTickets();
   late final Stream<List<FinancialStaff>> _staffStream =
       _database.watchFinancialStaff();
+  late final Stream<TaxConfig> _taxStream = _database.watchTaxConfig();
 
-  FinancialPeriod _period = FinancialPeriod.allTime;
+  FinancialPeriod _period = FinancialPeriod.thisMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -40,140 +42,171 @@ class _FinancialPageState extends State<FinancialPage> {
         return StreamBuilder<List<FinancialStaff>>(
           stream: _staffStream,
           builder: (context, staffSnapshot) {
-            final hasError = ticketSnapshot.hasError || staffSnapshot.hasError;
-            final loading = !ticketSnapshot.hasData || !staffSnapshot.hasData;
-            final now = DateTime.now();
-            final allTickets = ticketSnapshot.data ?? const <FinancialTicket>[];
-            final tickets = allTickets
-                .where((ticket) => _period.contains(ticket.closedAt, now))
-                .toList();
-            final staff = staffSnapshot.data ?? const <FinancialStaff>[];
-            final staffRows = _staffRows(staff, _period.startFrom(now), now);
+            return StreamBuilder<TaxConfig>(
+              stream: _taxStream,
+              builder: (context, taxSnapshot) {
+                final taxes = taxSnapshot.data ?? const TaxConfig();
+                final hasError =
+                    ticketSnapshot.hasError || staffSnapshot.hasError;
+                final loading =
+                    !ticketSnapshot.hasData || !staffSnapshot.hasData;
+                final now = DateTime.now();
+                final allTickets =
+                    ticketSnapshot.data ?? const <FinancialTicket>[];
+                final tickets = allTickets
+                    .where((ticket) => _period.contains(ticket.closedAt, now))
+                    .toList();
+                final staff = staffSnapshot.data ?? const <FinancialStaff>[];
+                final staffRows =
+                    _staffRows(staff, _period.startFrom(now), now);
 
-            final revenue = tickets.fold<int>(
-                0, (sum, ticket) => sum + ticket.revenueCents);
-            final cost =
-                tickets.fold<int>(0, (sum, ticket) => sum + ticket.costCents);
-            final grossProfit = revenue - cost;
-            final tracked = staffRows.fold<Duration>(
-              Duration.zero,
-              (sum, row) => sum + row.hours,
-            );
-            final staffPay = staffRows.fold<int>(
-              0,
-              (sum, row) => sum + (row.payCents ?? 0),
-            );
-            final netEstimate = grossProfit - staffPay;
+                final revenue = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.revenueCents);
+                final cost = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.costCents);
+                final grossProfit = revenue - cost;
+                final tracked = staffRows.fold<Duration>(
+                  Duration.zero,
+                  (sum, row) => sum + row.hours,
+                );
+                final staffPay = staffRows.fold<int>(
+                  0,
+                  (sum, row) => sum + (row.payCents ?? 0),
+                );
+                final netEstimate = grossProfit - staffPay;
+                final gstTotal = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.gstCents);
+                final pstTotal = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.pstCents);
+                final showGst = taxes.gstEnabled || gstTotal > 0;
+                final showPst = taxes.pstEnabled || pstTotal > 0;
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Header(
-                  period: _period,
-                  ticketCount: tickets.length,
-                  staffCount: staffRows.length,
-                  netEstimateCents: netEstimate,
-                  onPeriodChanged: (period) => setState(() => _period = period),
-                ),
-                Expanded(
-                  child: switch ((hasError, loading)) {
-                    (true, _) => const _Message(
-                        icon: Icons.storage_outlined,
-                        title: 'Financials could not be loaded',
-                        body:
-                            'The local database is unavailable. Restart the app '
-                            'and try again.',
-                      ),
-                    (_, true) => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    _ => Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: _maxContentWidth,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Header(
+                      period: _period,
+                      ticketCount: tickets.length,
+                      staffCount: staffRows.length,
+                      netEstimateCents: netEstimate,
+                      gstCents: showGst ? gstTotal : null,
+                      pstCents: showPst ? pstTotal : null,
+                      onPeriodChanged: (period) =>
+                          setState(() => _period = period),
+                    ),
+                    Expanded(
+                      child: switch ((hasError, loading)) {
+                        (true, _) => const _Message(
+                            icon: Icons.storage_outlined,
+                            title: 'Financials could not be loaded',
+                            body:
+                                'The local database is unavailable. Restart the app '
+                                'and try again.',
                           ),
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-                            children: [
-                              _SummaryCards(
-                                revenueCents: revenue,
-                                costCents: cost,
-                                grossProfitCents: grossProfit,
-                                staffPayCents: staffPay,
-                                netEstimateCents: netEstimate,
-                                tracked: tracked,
-                                ticketCount: tickets.length,
+                        (_, true) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        _ => Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: _maxContentWidth,
                               ),
-                              const Divider(height: 36),
-                              const _SectionHeading(title: 'Hours by staff'),
-                              if (staffRows.isEmpty)
-                                const _EmptyNote(
-                                  'Add staff in Settings to track hours and pay.',
-                                )
-                              else ...[
-                                for (final row in staffRows)
-                                  _StaffRowCard(
-                                    row: row,
-                                    period: _period,
-                                    database: _database,
+                              child: ListView(
+                                padding:
+                                    const EdgeInsets.fromLTRB(24, 4, 24, 32),
+                                children: [
+                                  _SummaryCards(
+                                    revenueCents: revenue,
+                                    costCents: cost,
+                                    grossProfitCents: grossProfit,
+                                    staffPayCents: staffPay,
+                                    netEstimateCents: netEstimate,
+                                    tracked: tracked,
+                                    ticketCount: tickets.length,
+                                    gstCents: showGst ? gstTotal : null,
+                                    pstCents: showPst ? pstTotal : null,
+                                    gstRateBp: taxes.gstEnabled
+                                        ? taxes.gstRateBp
+                                        : null,
+                                    pstRateBp: taxes.pstEnabled
+                                        ? taxes.pstRateBp
+                                        : null,
                                   ),
-                                const SizedBox(height: 4),
-                                _TotalRow(
-                                  label: 'Total tracked time',
-                                  value: _formatDuration(tracked),
-                                  secondary: _money(staffPay),
-                                ),
-                              ],
-                              const Divider(height: 36),
-                              const _SectionHeading(
-                                title: 'Closed tickets',
-                              ),
-                              if (tickets.isEmpty)
-                                _EmptyNote(
-                                  _period == FinancialPeriod.allTime
-                                      ? 'Close a paid ticket in Checkout and it '
-                                          'will appear here.'
-                                      : 'No tickets were closed in this period.',
-                                )
-                              else ...[
-                                for (final ticket in tickets)
-                                  _ClosedTicketCard(ticket: ticket),
-                                const SizedBox(height: 4),
-                                _TotalRow(
-                                  label: '${tickets.length} closed '
-                                      'ticket${tickets.length == 1 ? '' : 's'}',
-                                  value: _money(grossProfit),
-                                  secondary: 'gross profit',
-                                  valueColor: _profitColor(
-                                    context,
-                                    grossProfit,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 20),
-                              Text(
-                                'Revenue is the invoice total after discounts. '
-                                'Cost is the recorded part and merchandise cost. '
-                                'Staff pay uses tracked shifts × hourly rate, so '
-                                'net profit is an estimate before rent, tools and '
-                                'other overhead.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                      height: 1.4,
+                                  const Divider(height: 36),
+                                  const _SectionHeading(
+                                      title: 'Hours by staff'),
+                                  if (staffRows.isEmpty)
+                                    const _EmptyNote(
+                                      'Add staff in Settings to track hours and pay.',
+                                    )
+                                  else ...[
+                                    for (final row in staffRows)
+                                      _StaffRowCard(
+                                        row: row,
+                                        period: _period,
+                                        database: _database,
+                                      ),
+                                    const SizedBox(height: 4),
+                                    _TotalRow(
+                                      label: 'Total tracked time',
+                                      value: _formatDuration(tracked),
+                                      secondary: _money(staffPay),
                                     ),
+                                  ],
+                                  const Divider(height: 36),
+                                  const _SectionHeading(
+                                    title: 'Closed tickets',
+                                  ),
+                                  if (tickets.isEmpty)
+                                    _EmptyNote(
+                                      _period == FinancialPeriod.allTime
+                                          ? 'Close a paid ticket in Checkout and it '
+                                              'will appear here.'
+                                          : 'No tickets were closed in this period.',
+                                    )
+                                  else ...[
+                                    for (final ticket in tickets)
+                                      _ClosedTicketCard(ticket: ticket),
+                                    const SizedBox(height: 4),
+                                    _TotalRow(
+                                      label: '${tickets.length} closed '
+                                          'ticket${tickets.length == 1 ? '' : 's'}',
+                                      value: _money(grossProfit),
+                                      secondary: 'gross profit',
+                                      valueColor: _profitColor(
+                                        context,
+                                        grossProfit,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    'Revenue is the invoice total after discounts '
+                                    'and before tax. Cost is the recorded part and '
+                                    'merchandise cost. GST/PST are shown separately '
+                                    'from closed-ticket snapshots. Staff pay uses '
+                                    'tracked shifts × hourly rate, so net profit is '
+                                    'an estimate before rent, tools and other '
+                                    'overhead.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          height: 1.4,
+                                        ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                  },
-                ),
-              ],
+                      },
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
@@ -188,6 +221,8 @@ class _Header extends StatelessWidget {
     required this.ticketCount,
     required this.staffCount,
     required this.netEstimateCents,
+    required this.gstCents,
+    required this.pstCents,
     required this.onPeriodChanged,
   });
 
@@ -195,6 +230,11 @@ class _Header extends StatelessWidget {
   final int ticketCount;
   final int staffCount;
   final int netEstimateCents;
+
+  /// `null` hides that tax row, so a shop that never enabled PST does not see
+  /// an empty PST figure.
+  final int? gstCents;
+  final int? pstCents;
   final ValueChanged<FinancialPeriod> onPeriodChanged;
 
   @override
@@ -252,12 +292,27 @@ class _Header extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(color: theme.colorScheme.outlineVariant),
                   ),
+                  if (gstCents != null)
+                    Chip(
+                      key: const Key('financial-header-gst'),
+                      label: Text('GST ${_money(gstCents!)}'),
+                      visualDensity: VisualDensity.compact,
+                      side: BorderSide(color: theme.colorScheme.outlineVariant),
+                    ),
+                  if (pstCents != null)
+                    Chip(
+                      key: const Key('financial-header-pst'),
+                      label: Text('PST ${_money(pstCents!)}'),
+                      visualDensity: VisualDensity.compact,
+                      side: BorderSide(color: theme.colorScheme.outlineVariant),
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   for (final option in FinancialPeriod.values)
                     ChoiceChip(
@@ -266,6 +321,24 @@ class _Header extends StatelessWidget {
                       selected: option == period,
                       onSelected: (_) => onPeriodChanged(option),
                     ),
+                  FilledButton.tonalIcon(
+                    key: const Key('financial-year-toggle'),
+                    onPressed: () => onPeriodChanged(
+                      period == FinancialPeriod.thisYear
+                          ? FinancialPeriod.thisMonth
+                          : FinancialPeriod.thisYear,
+                    ),
+                    icon: Icon(
+                      period == FinancialPeriod.thisYear
+                          ? Icons.calendar_month_outlined
+                          : Icons.calendar_today_outlined,
+                    ),
+                    label: Text(
+                      period == FinancialPeriod.thisYear
+                          ? 'Monthly view'
+                          : 'Yearly view',
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -285,6 +358,10 @@ class _SummaryCards extends StatelessWidget {
     required this.netEstimateCents,
     required this.tracked,
     required this.ticketCount,
+    required this.gstCents,
+    required this.pstCents,
+    required this.gstRateBp,
+    required this.pstRateBp,
   });
 
   final int revenueCents;
@@ -294,6 +371,10 @@ class _SummaryCards extends StatelessWidget {
   final int netEstimateCents;
   final Duration tracked;
   final int ticketCount;
+  final int? gstCents;
+  final int? pstCents;
+  final int? gstRateBp;
+  final int? pstRateBp;
 
   @override
   Widget build(BuildContext context) {
@@ -310,6 +391,24 @@ class _SummaryCards extends StatelessWidget {
           value: _money(revenueCents),
           note: '$ticketCount closed ticket${ticketCount == 1 ? '' : 's'}',
         ),
+        if (gstCents != null)
+          _SummaryCard(
+            icon: Icons.percent,
+            label: 'GST',
+            value: _money(gstCents!),
+            note: gstRateBp == null
+                ? 'Collected on closed tickets'
+                : '${formatTaxRate(gstRateBp!)} on taxable sales',
+          ),
+        if (pstCents != null)
+          _SummaryCard(
+            icon: Icons.percent,
+            label: 'PST',
+            value: _money(pstCents!),
+            note: pstRateBp == null
+                ? 'Collected on closed tickets'
+                : '${formatTaxRate(pstRateBp!)} on taxable sales',
+          ),
         _SummaryCard(
           icon: Icons.inventory_2_outlined,
           label: 'Parts & merch cost',

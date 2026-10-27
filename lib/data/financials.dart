@@ -19,6 +19,8 @@ class FinancialTicket {
     required this.closedAt,
     required this.revenueCents,
     required this.costCents,
+    this.gstCents = 0,
+    this.pstCents = 0,
   });
 
   final int ticketId;
@@ -28,6 +30,12 @@ class FinancialTicket {
   final DateTime closedAt;
   final int revenueCents;
   final int costCents;
+
+  /// Sales tax snapshotted when the ticket closed. Revenue is pre-tax.
+  final int gstCents;
+  final int pstCents;
+
+  int get taxCents => gstCents + pstCents;
 
   int get profitCents => revenueCents - costCents;
 
@@ -100,6 +108,8 @@ class FinancialSummary {
     required this.staffPayCents,
     required this.tracked,
     required this.ticketCount,
+    this.gstCents = 0,
+    this.pstCents = 0,
   });
 
   final int revenueCents;
@@ -107,6 +117,10 @@ class FinancialSummary {
   final int staffPayCents;
   final Duration tracked;
   final int ticketCount;
+  final int gstCents;
+  final int pstCents;
+
+  int get taxCents => gstCents + pstCents;
 
   int get grossProfitCents => revenueCents - costCents;
 
@@ -198,6 +212,8 @@ extension FinancialQueries on AppDatabase {
                   value: accumulator.ticket.invoiceDiscountValue,
                 ),
             costCents: accumulator.costCents,
+            gstCents: accumulator.ticket.gstCents,
+            pstCents: accumulator.ticket.pstCents,
           ),
       ]..sort((a, b) => b.closedAt.compareTo(a.closedAt));
       return result;
@@ -269,6 +285,8 @@ FinancialSummary summarizeFinancials({
   final revenue =
       tickets.fold<int>(0, (sum, ticket) => sum + ticket.revenueCents);
   final cost = tickets.fold<int>(0, (sum, ticket) => sum + ticket.costCents);
+  final gst = tickets.fold<int>(0, (sum, ticket) => sum + ticket.gstCents);
+  final pst = tickets.fold<int>(0, (sum, ticket) => sum + ticket.pstCents);
   var tracked = Duration.zero;
   var staffPay = 0;
   for (final member in staff) {
@@ -282,6 +300,8 @@ FinancialSummary summarizeFinancials({
     staffPayCents: staffPay,
     tracked: tracked,
     ticketCount: tickets.length,
+    gstCents: gst,
+    pstCents: pst,
   );
 }
 

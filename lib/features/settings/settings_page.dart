@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
+import '../../data/taxes.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
 import 'device_catalog_section.dart';
@@ -107,6 +109,8 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         children: [
           DeviceCatalogSection(database: _database),
+          const Divider(height: 36),
+          _TaxSettings(database: _database),
           const Divider(height: 36),
           _MarkupSettings(database: _database),
           const Divider(height: 36),
@@ -902,6 +906,193 @@ class _StaffStatCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TaxSettings extends StatefulWidget {
+  const _TaxSettings({required this.database});
+
+  final AppDatabase database;
+
+  @override
+  State<_TaxSettings> createState() => _TaxSettingsState();
+}
+
+class _TaxSettingsState extends State<_TaxSettings> {
+  final _gstRateController = TextEditingController();
+  final _pstRateController = TextEditingController();
+  bool _gstEnabled = false;
+  bool _pstEnabled = false;
+  bool _loaded = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _gstRateController.dispose();
+    _pstRateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final config = await widget.database.taxConfig();
+    if (!mounted) return;
+    setState(() {
+      _gstEnabled = config.gstEnabled;
+      _pstEnabled = config.pstEnabled;
+      _gstRateController.text = _rateText(config.gstRateBp);
+      _pstRateController.text = _rateText(config.pstRateBp);
+      _loaded = true;
+    });
+  }
+
+  Future<void> _save() async {
+    final gst = _parseRate(_gstRateController.text);
+    final pst = _parseRate(_pstRateController.text);
+    if (gst == null || pst == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter tax rates from 0% to 50%.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.database.setTaxConfig(
+        TaxConfig(
+          gstEnabled: _gstEnabled,
+          gstRateBp: gst,
+          pstEnabled: _pstEnabled,
+          pstRateBp: pst,
+        ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sales tax saved.')),
+      );
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save sales tax: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  static String _rateText(int rateBp) {
+    final whole = rateBp ~/ 100;
+    final fraction = rateBp % 100;
+    if (fraction == 0) return '$whole';
+    if (fraction % 10 == 0) return '$whole.${fraction ~/ 10}';
+    return '$whole.${fraction.toString().padLeft(2, '0')}';
+  }
+
+  static int? _parseRate(String input) {
+    final value = double.tryParse(input.trim());
+    if (value == null || !value.isFinite || value < 0 || value > 50) {
+      return null;
+    }
+    return (value * 100).round();
+  }
+
+  Widget _taxCard({
+    required String label,
+    required String description,
+    required Key switchKey,
+    required Key rateKey,
+    required bool enabled,
+    required ValueChanged<bool> onChanged,
+    required TextEditingController rateController,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            key: switchKey,
+            value: enabled,
+            onChanged: _saving ? null : onChanged,
+            title: Text(label),
+            subtitle: Text(description),
+            secondary: const Icon(Icons.percent),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: TextField(
+              key: rateKey,
+              controller: rateController,
+              enabled: !_saving,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
+              decoration: InputDecoration(
+                labelText: '$label rate',
+                suffixText: '%',
+                isDense: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeading(title: 'Sales tax'),
+        if (!_loaded)
+          const LinearProgressIndicator()
+        else ...[
+          Text(
+            'Invoices add the enabled taxes after discounts. GST defaults to '
+            '5%; PST starts off at 7%.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          _taxCard(
+            label: 'GST',
+            description: 'Goods and services tax',
+            switchKey: const Key('tax-gst-enabled'),
+            rateKey: const Key('tax-gst-rate'),
+            enabled: _gstEnabled,
+            onChanged: (value) => setState(() => _gstEnabled = value),
+            rateController: _gstRateController,
+          ),
+          const SizedBox(height: 8),
+          _taxCard(
+            label: 'PST',
+            description: 'Provincial sales tax',
+            switchKey: const Key('tax-pst-enabled'),
+            rateKey: const Key('tax-pst-rate'),
+            enabled: _pstEnabled,
+            onChanged: (value) => setState(() => _pstEnabled = value),
+            rateController: _pstRateController,
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              key: const Key('tax-save'),
+              onPressed: _saving ? null : _save,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Save taxes'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

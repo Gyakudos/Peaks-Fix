@@ -308,6 +308,17 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                       ],
                     ),
                     const Divider(height: 24),
+                    _TotalRow(label: 'Subtotal', cents: invoice.subtotalCents),
+                    if (invoice.discountCents > 0)
+                      _TotalRow(
+                        label: 'Discount',
+                        cents: -invoice.discountCents,
+                      ),
+                    for (final line in invoice.taxLines)
+                      _TotalRow(
+                        label: '${line.label} (${line.rateLabel})',
+                        cents: line.amountCents,
+                      ),
                     _TotalRow(
                         label: 'Invoice total', cents: invoice.totalCents),
                     _TotalRow(label: 'Paid', cents: paid),
@@ -603,4 +614,7 @@ String _paymentMethodLabel(PaymentMethod method) => switch (method) {
       PaymentMethod.other => 'Other',
     };
 
-String _money(int cents) => '\$${(cents / 100).toStringAsFixed(2)}';
+String _money(int cents) {
+  final sign = cents < 0 ? '-' : '';
+  return '$sign\$${(cents.abs() / 100).toStringAsFixed(2)}';
+}

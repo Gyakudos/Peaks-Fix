@@ -403,6 +403,11 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                     label: 'Discount',
                     value: '-${_money(invoice.discountCents)}',
                   ),
+                  for (final line in invoice.taxLines)
+                    _TotalRow(
+                      label: '${line.label} (${line.rateLabel})',
+                      value: _money(line.amountCents),
+                    ),
                   _TotalRow(
                     label: 'Total',
                     value: _money(invoice.totalCents),
@@ -410,7 +415,9 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tax is not included in this invoice draft.',
+                    invoice.taxes.isEnabled
+                        ? 'GST/PST is calculated on the discounted subtotal.'
+                        : 'Sales tax is turned off in Settings.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

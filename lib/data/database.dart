@@ -5,6 +5,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'photo_templates.dart';
+import 'taxes.dart';
 
 part 'database.g.dart';
 
@@ -261,6 +262,11 @@ class Tickets extends Table {
   IntColumn get invoiceDiscountValue =>
       integer().withDefault(const Constant(0))();
   TextColumn get notes => text().nullable()();
+
+  /// Tax snapshot taken when the ticket is closed, so later rate changes never
+  /// rewrite an old invoice. Revenue stays pre-tax on Financial.
+  IntColumn get gstCents => integer().withDefault(const Constant(0))();
+  IntColumn get pstCents => integer().withDefault(const Constant(0))();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -584,7 +590,7 @@ class AppDatabase extends _$AppDatabase {
   static final Random _random = Random.secure();
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -603,6 +609,7 @@ class AppDatabase extends _$AppDatabase {
   /// customer-contacted dates. Pickup already existed as `picked_up_at`.
   /// v13 added `report2_completed_at` and `report3_completed_at` so the
   /// technical and client stages can be marked complete.
+  /// v14 added the GST/PST amounts snapshotted when a ticket closes.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -696,6 +703,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(tickets, tickets.report2CompletedAt);
             await m.addColumn(tickets, tickets.report3CompletedAt);
           }
+          if (from < 14) {
+            await m.addColumn(tickets, tickets.gstCents);
+            await m.addColumn(tickets, tickets.pstCents);
+          }
         },
       );
 
@@ -723,6 +734,43 @@ class AppDatabase extends _$AppDatabase {
     await _putSetting(key, '$value');
   }
 
+  /// Current GST/PST setup. Missing keys mean tax is off, so databases created
+  /// before the tax feature keep working until [ensureSeeded] adds defaults.
+  Future<TaxConfig> taxConfig() async {
+    final rows = await (select(settings)
+          ..where((row) => row.key.isIn(TaxConfig.settingKeys)))
+        .get();
+    return TaxConfig.fromSettings({
+      for (final row in rows) row.key: row.value,
+    });
+  }
+
+  Stream<TaxConfig> watchTaxConfig() {
+    final query = select(settings)
+      ..where((row) => row.key.isIn(TaxConfig.settingKeys));
+    return query.watch().map(
+          (rows) => TaxConfig.fromSettings({
+            for (final row in rows) row.key: row.value,
+          }),
+        );
+  }
+
+  Future<void> setTaxConfig(TaxConfig config) async {
+    if (config.gstRateBp < 0 ||
+        config.gstRateBp > TaxConfig.maxRateBp ||
+        config.pstRateBp < 0 ||
+        config.pstRateBp > TaxConfig.maxRateBp) {
+      throw ArgumentError(
+        'Tax rates must be between 0% and ${TaxConfig.maxRateBp ~/ 100}%.',
+      );
+    }
+    await transaction(() async {
+      for (final entry in config.toSettings().entries) {
+        await _putSetting(entry.key, entry.value);
+      }
+    });
+  }
+
   /// Creates the catalog and default settings on first run, and adds anything
   /// new to an existing catalog on later runs.
   ///
@@ -739,6 +787,10 @@ class AppDatabase extends _$AppDatabase {
         ('currency', 'CAD'),
         ('parts_markup_percent', '35'),
         ('merch_markup_percent', '45'),
+        (TaxConfig.gstEnabledKey, 'true'),
+        (TaxConfig.gstRateKey, '${TaxConfig.defaultGstRateBp}'),
+        (TaxConfig.pstEnabledKey, 'false'),
+        (TaxConfig.pstRateKey, '${TaxConfig.defaultPstRateBp}'),
         ('warranty_days', '90'),
         (
           'warranty_terms',
@@ -2320,6 +2372,8 @@ class AppDatabase extends _$AppDatabase {
             : ticket.invoiceDiscountValue,
       };
       final total = subtotal - discount;
+      final taxes = await taxConfig();
+      final amountDue = total + taxes.taxCentsFor(total);
       final paymentsForTicket = await (select(payments)
             ..where((payment) => payment.ticketId.equals(ticketId)))
           .get();
@@ -2331,7 +2385,7 @@ class AppDatabase extends _$AppDatabase {
                 ? -payment.amountCents
                 : payment.amountCents),
       );
-      if (amountCents > total - paid) {
+      if (amountCents > amountDue - paid) {
         throw StateError('Payment exceeds the outstanding balance.');
       }
       await into(payments).insert(
@@ -2369,6 +2423,11 @@ class AppDatabase extends _$AppDatabase {
             ? subtotal
             : ticket.invoiceDiscountValue,
       };
+      final taxable = subtotal - discount;
+      final taxes = await taxConfig();
+      final gst = taxes.gstCentsFor(taxable);
+      final pst = taxes.pstCentsFor(taxable);
+      final total = taxable + gst + pst;
       final paymentsForTicket = await (select(payments)
             ..where((payment) => payment.ticketId.equals(ticketId)))
           .get();
@@ -2380,7 +2439,7 @@ class AppDatabase extends _$AppDatabase {
                 ? -payment.amountCents
                 : payment.amountCents),
       );
-      if (paid < subtotal - discount) {
+      if (paid < total) {
         throw StateError(
             'The invoice must be paid before closing this ticket.');
       }
@@ -2391,6 +2450,8 @@ class AppDatabase extends _$AppDatabase {
           completedAt: Value(now),
           pickedUpAt: Value(now),
           updatedAt: Value(now),
+          gstCents: Value(gst),
+          pstCents: Value(pst),
         ),
       );
     });
