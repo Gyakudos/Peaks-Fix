@@ -4,22 +4,31 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../tickets/ticket_detail_page.dart';
+import '../tickets/ticket_widgets.dart';
 
 const _staffJobs = ['Admin', 'Front Desk', 'Tech 3', 'Tech 2', 'Tech 1'];
+const _invalidPayMessage =
+    'Enter an hourly pay of \$0 or more, or leave it blank.';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.database});
+
+  /// Supplied by tests; the app uses the shared database.
+  final AppDatabase? database;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final AppDatabase _database = AppDatabase.instance;
+  late final AppDatabase _database = widget.database ?? AppDatabase.instance;
   late Future<List<_StaffMember>> _staffFuture = _readStaff(_database);
 
   Future<void> _refreshStaff() async {
-    setState(() => _staffFuture = _readStaff(_database));
+    setState(() {
+      _staffFuture = _readStaff(_database);
+    });
   }
 
   Future<void> _addCategory() async {
@@ -33,7 +42,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty) return;
     try {
-      final categories = await _database.select(_database.deviceCategories).get();
+      final categories =
+          await _database.select(_database.deviceCategories).get();
       final nextOrder = categories.fold<int>(
         0,
         (maxOrder, category) =>
@@ -71,16 +81,53 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _setStaffActive(_StaffMember member, bool isActive) async {
+    await _replaceStaff(member.copyWith(isActive: isActive));
+  }
+
+  Future<void> _editStaff(_StaffMember member) async {
+    final updated = await showDialog<_StaffMember>(
+      context: context,
+      builder: (context) => _EditStaffDialog(member: member),
+    );
+    if (!mounted || updated == null) return;
+    await _replaceStaff(updated);
+  }
+
+  Future<void> _replaceStaff(_StaffMember member) async {
     final roster = await _readStaff(_database);
     final index = roster.indexWhere((entry) => entry.id == member.id);
     if (index == -1) return;
-    roster[index] = member.copyWith(isActive: isActive);
+    roster[index] = member;
     await _writeJsonSetting(
       _database,
       'staff_roster',
       roster.map((entry) => entry.toJson()).toList(),
     );
     await _refreshStaff();
+  }
+
+  void _openStaffHours(_StaffMember member) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => StaffHoursPage(
+          staffId: member.id,
+          staffName: member.name,
+          database: _database,
+        ),
+      ),
+    );
+  }
+
+  void _openStaffTickets(_StaffMember member) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => StaffTicketsPage(
+          staffId: member.id,
+          staffName: member.name,
+          database: _database,
+        ),
+      ),
+    );
   }
 
   @override
@@ -148,12 +195,13 @@ class _SettingsPageState extends State<SettingsPage> {
               return Column(
                 children: staff
                     .map(
-                      (member) => SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(member.name),
-                        subtitle: Text(member.job),
-                        value: member.isActive,
-                        onChanged: (active) => _setStaffActive(member, active),
+                      (member) => _StaffCard(
+                        member: member,
+                        onActiveChanged: (active) =>
+                            _setStaffActive(member, active),
+                        onEdit: () => _editStaff(member),
+                        onHours: () => _openStaffHours(member),
+                        onTickets: () => _openStaffTickets(member),
                       ),
                     )
                     .toList(),
@@ -199,7 +247,8 @@ class _StaffClockPageState extends State<StaffClockPage> {
         .toSet();
     return _ClockData(
       staff: staff
-          .where((member) => member.isActive || clockedInIds.contains(member.id))
+          .where(
+              (member) => member.isActive || clockedInIds.contains(member.id))
           .toList(),
       sessions: sessions,
     );
@@ -273,10 +322,9 @@ class _StaffClockPageState extends State<StaffClockPage> {
               else
                 ...data.staff.map((member) {
                   final matchingSessions = activeSessions
-                    .where((entry) => entry.staffId == member.id);
-                  final session = matchingSessions.isEmpty
-                    ? null
-                    : matchingSessions.first;
+                      .where((entry) => entry.staffId == member.id);
+                  final session =
+                      matchingSessions.isEmpty ? null : matchingSessions.first;
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const CircleAvatar(
@@ -333,11 +381,14 @@ class _AddStaffDialog extends StatefulWidget {
 
 class _AddStaffDialogState extends State<_AddStaffDialog> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _rateController = TextEditingController();
   String _job = _staffJobs.first;
+  String? _error;
 
   @override
   void dispose() {
     _nameController.dispose();
+    _rateController.dispose();
     super.dispose();
   }
 
@@ -345,27 +396,50 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Add staff'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Name'),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _job,
-            decoration: const InputDecoration(labelText: 'Staff job'),
-            items: _staffJobs
-                .map((job) => DropdownMenuItem(value: job, child: Text(job)))
-                .toList(),
-            onChanged: (job) {
-              if (job != null) setState(() => _job = job);
-            },
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('staff-name-field'),
+              controller: _nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _job,
+              decoration: const InputDecoration(labelText: 'Staff job'),
+              items: _staffJobs
+                  .map((job) => DropdownMenuItem(value: job, child: Text(job)))
+                  .toList(),
+              onChanged: (job) {
+                if (job != null) setState(() => _job = job);
+              },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('staff-rate-field'),
+              controller: _rateController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Hourly pay',
+                prefixText: '\$',
+                suffixText: '/hr',
+                helperText: 'Optional. Used to estimate tracked pay.',
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -373,21 +447,528 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
+          key: const Key('staff-add-save'),
           onPressed: () {
             final name = _nameController.text.trim();
-            if (name.isEmpty) return;
+            if (name.isEmpty) {
+              setState(() => _error = 'Enter a name.');
+              return;
+            }
+            final rate = _parseHourlyRateCents(_rateController.text);
+            if (rate == null) {
+              setState(() => _error = _invalidPayMessage);
+              return;
+            }
             Navigator.pop(
               context,
               _StaffMember(
                 id: DateTime.now().microsecondsSinceEpoch.toString(),
                 name: name,
                 job: _job,
+                hourlyRateCents: rate,
               ),
             );
           },
           child: const Text('Add'),
         ),
       ],
+    );
+  }
+}
+
+class _StaffCard extends StatelessWidget {
+  const _StaffCard({
+    required this.member,
+    required this.onActiveChanged,
+    required this.onEdit,
+    required this.onHours,
+    required this.onTickets,
+  });
+
+  final _StaffMember member;
+  final ValueChanged<bool> onActiveChanged;
+  final VoidCallback onEdit;
+  final VoidCallback onHours;
+  final VoidCallback onTickets;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = member.isActive
+        ? '${member.job} · ${member.rateLabel}'
+        : '${member.job} · ${member.rateLabel} · Inactive';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(child: Icon(Icons.person_outline)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        member.name,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(subtitle),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: member.isActive,
+                  onChanged: onActiveChanged,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  key: Key('staff-edit-${member.id}'),
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit'),
+                ),
+                TextButton.icon(
+                  key: Key('staff-hours-${member.id}'),
+                  onPressed: onHours,
+                  icon: const Icon(Icons.schedule_outlined),
+                  label: const Text('Hours'),
+                ),
+                TextButton.icon(
+                  key: Key('staff-tickets-${member.id}'),
+                  onPressed: onTickets,
+                  icon: const Icon(Icons.confirmation_number_outlined),
+                  label: const Text('Tickets'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EditStaffDialog extends StatefulWidget {
+  const _EditStaffDialog({required this.member});
+
+  final _StaffMember member;
+
+  @override
+  State<_EditStaffDialog> createState() => _EditStaffDialogState();
+}
+
+class _EditStaffDialogState extends State<_EditStaffDialog> {
+  late final TextEditingController _nameController =
+      TextEditingController(text: widget.member.name);
+  late final TextEditingController _rateController = TextEditingController(
+    text: widget.member.hourlyRateCents <= 0
+        ? ''
+        : (widget.member.hourlyRateCents / 100).toStringAsFixed(2),
+  );
+  late String _job = widget.member.job;
+  late bool _isActive = widget.member.isActive;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _rateController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final jobs = <String>[
+      widget.member.job,
+      ..._staffJobs.where((job) => job != widget.member.job),
+    ];
+    return AlertDialog(
+      title: const Text('Edit staff'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('staff-name-field'),
+              controller: _nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _job,
+              decoration: const InputDecoration(labelText: 'Staff job'),
+              items: jobs
+                  .map((job) => DropdownMenuItem(value: job, child: Text(job)))
+                  .toList(),
+              onChanged: (job) {
+                if (job != null) setState(() => _job = job);
+              },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('staff-rate-field'),
+              controller: _rateController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Hourly pay',
+                prefixText: '\$',
+                suffixText: '/hr',
+                helperText: 'Optional. Used to estimate tracked pay.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Active'),
+              subtitle: const Text(
+                'Inactive staff stay in ticket history but are hidden from sign-in.',
+              ),
+              value: _isActive,
+              onChanged: (active) => setState(() => _isActive = active),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('staff-edit-save'),
+          onPressed: () {
+            final name = _nameController.text.trim();
+            if (name.isEmpty) {
+              setState(() => _error = 'Enter a name.');
+              return;
+            }
+            final rate = _parseHourlyRateCents(_rateController.text);
+            if (rate == null) {
+              setState(() => _error = _invalidPayMessage);
+              return;
+            }
+            Navigator.pop(
+              context,
+              widget.member.copyWith(
+                name: name,
+                job: _job,
+                isActive: _isActive,
+                hourlyRateCents: rate,
+              ),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class StaffHoursPage extends StatefulWidget {
+  const StaffHoursPage({
+    super.key,
+    required this.staffId,
+    required this.staffName,
+    this.database,
+  });
+
+  final String staffId;
+  final String staffName;
+
+  /// Supplied by tests; the app uses the shared database.
+  final AppDatabase? database;
+
+  @override
+  State<StaffHoursPage> createState() => _StaffHoursPageState();
+}
+
+class _StaffHoursPageState extends State<StaffHoursPage> {
+  late final AppDatabase _database = widget.database ?? AppDatabase.instance;
+  late final Future<_StaffHoursData> _future = _load();
+
+  Future<_StaffHoursData> _load() async {
+    final roster = await _readStaff(_database);
+    final sessions = await _readSessions(_database);
+    _StaffMember? member;
+    for (final entry in roster) {
+      if (entry.id == widget.staffId) member = entry;
+    }
+    final shifts = sessions
+        .where((session) => session.staffId == widget.staffId)
+        .toList()
+      ..sort((a, b) => b.clockInAt.compareTo(a.clockInAt));
+    return _StaffHoursData(member: member, shifts: shifts);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.staffName} · Hours')),
+      body: FutureBuilder<_StaffHoursData>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final data = snapshot.data;
+          if (data == null || data.member == null) {
+            return const Center(
+              child: Text('This staff member no longer exists.'),
+            );
+          }
+          final member = data.member!;
+          final now = DateTime.now();
+          final total = data.shifts.fold<Duration>(
+            Duration.zero,
+            (sum, shift) => sum + _shiftDuration(shift, now),
+          );
+          final weekStart = DateTime(now.year, now.month, now.day)
+              .subtract(Duration(days: now.weekday - 1));
+          final week = data.shifts
+              .where((shift) => !shift.clockInAt.isBefore(weekStart))
+              .fold<Duration>(
+                Duration.zero,
+                (sum, shift) => sum + _shiftDuration(shift, now),
+              );
+          final payCents = _estimatedPayCents(total, member.hourlyRateCents);
+          final active =
+              data.shifts.where((shift) => shift.clockOutAt == null).toList();
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _StaffStatCard(
+                    icon: Icons.schedule_outlined,
+                    label: 'Total tracked',
+                    value: _formatDuration(total),
+                    note: '${data.shifts.length} shift'
+                        '${data.shifts.length == 1 ? '' : 's'}',
+                  ),
+                  _StaffStatCard(
+                    icon: Icons.date_range_outlined,
+                    label: 'This week',
+                    value: _formatDuration(week),
+                  ),
+                  _StaffStatCard(
+                    icon: Icons.payments_outlined,
+                    label: 'Estimated pay',
+                    value: payCents == null
+                        ? 'Set a rate'
+                        : _formatMoney(payCents),
+                    note: payCents == null
+                        ? 'Add hourly pay from Edit.'
+                        : '${member.rateLabel} · tracked time',
+                  ),
+                ],
+              ),
+              if (active.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.punch_clock_outlined),
+                    title: const Text('On the clock now'),
+                    subtitle: Text(
+                      'Since ${_formatDateTime(active.first.clockInAt)} · '
+                      '${_formatDuration(_shiftDuration(active.first, now))}',
+                    ),
+                  ),
+                ),
+              ],
+              const Divider(height: 36),
+              const _SectionHeading(title: 'Shift history'),
+              if (data.shifts.isEmpty)
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('No shifts recorded yet.'),
+                )
+              else
+                ...data.shifts.map((shift) {
+                  final duration = _shiftDuration(shift, now);
+                  final shiftPay =
+                      _estimatedPayCents(duration, member.hourlyRateCents);
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_formatDateTime(shift.clockInAt)),
+                    subtitle: Text(
+                      shift.clockOutAt == null
+                          ? 'In progress · ${_formatDuration(duration)}'
+                          : '${_formatTime(shift.clockOutAt!)} · '
+                              '${_formatDuration(duration)}',
+                    ),
+                    trailing:
+                        shiftPay == null ? null : Text(_formatMoney(shiftPay)),
+                  );
+                }),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class StaffTicketsPage extends StatefulWidget {
+  const StaffTicketsPage({
+    super.key,
+    required this.staffId,
+    required this.staffName,
+    this.database,
+  });
+
+  final String staffId;
+  final String staffName;
+
+  /// Supplied by tests; the app uses the shared database.
+  final AppDatabase? database;
+
+  @override
+  State<StaffTicketsPage> createState() => _StaffTicketsPageState();
+}
+
+class _StaffTicketsPageState extends State<StaffTicketsPage> {
+  late final AppDatabase _database = widget.database ?? AppDatabase.instance;
+  late final Future<List<_StaffTicket>> _future =
+      _readStaffTickets(_database, widget.staffId);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.staffName} · Tickets')),
+      body: FutureBuilder<List<_StaffTicket>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final tickets = snapshot.data ?? const <_StaffTicket>[];
+          if (tickets.isEmpty) {
+            return const Center(
+              child: Text('No tickets are assigned to this staff member yet.'),
+            );
+          }
+          final open = tickets.where((ticket) => ticket.status.isActive).length;
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(label: Text('$open open')),
+                  Chip(label: Text('${tickets.length} total')),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...tickets.map(
+                (ticket) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    key: Key('staff-ticket-${ticket.id}'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            TicketDetailPage(ticketId: ticket.id),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${ticket.number} · ${ticket.deviceName}',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TicketStatusChip(status: ticket.status),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(ticket.customerName),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Assigned: ${_reportKindsLabel(ticket.reports)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StaffStatCard extends StatelessWidget {
+  const _StaffStatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.note,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 210,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 20, color: theme.colorScheme.primary),
+              const SizedBox(height: 8),
+              Text(label, style: theme.textTheme.bodySmall),
+              const SizedBox(height: 2),
+              Text(value, style: theme.textTheme.titleLarge),
+              if (note != null) ...[
+                const SizedBox(height: 4),
+                Text(note!, style: theme.textTheme.bodySmall),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -465,8 +1046,10 @@ class _MarkupSettingsState extends State<_MarkupSettings> {
   }
 
   Future<void> _load() async {
-    final parts = await widget.database.markupPercent('parts_markup_percent', 35);
-    final merch = await widget.database.markupPercent('merch_markup_percent', 45);
+    final parts =
+        await widget.database.markupPercent('parts_markup_percent', 35);
+    final merch =
+        await widget.database.markupPercent('merch_markup_percent', 45);
     if (!mounted) return;
     setState(() {
       _partsMarkupController.text = '$parts';
@@ -479,8 +1062,12 @@ class _MarkupSettingsState extends State<_MarkupSettings> {
       TextEditingController markupController) {
     final cost = double.tryParse(costController.text.trim());
     final markup = int.tryParse(markupController.text.trim());
-    if (cost == null || !cost.isFinite || cost < 0 || markup == null ||
-        markup < 0 || markup > 500) {
+    if (cost == null ||
+        !cost.isFinite ||
+        cost < 0 ||
+        markup == null ||
+        markup < 0 ||
+        markup > 500) {
       return null;
     }
     final costCents = (cost * 100).round();
@@ -640,18 +1227,31 @@ class _StaffMember {
     required this.name,
     required this.job,
     this.isActive = true,
+    this.hourlyRateCents = 0,
   });
 
   final String id;
   final String name;
   final String job;
   final bool isActive;
+  final int hourlyRateCents;
 
-  _StaffMember copyWith({bool? isActive}) => _StaffMember(
+  String get rateLabel => hourlyRateCents <= 0
+      ? 'Pay not set'
+      : '${_formatMoney(hourlyRateCents)}/hr';
+
+  _StaffMember copyWith({
+    String? name,
+    String? job,
+    bool? isActive,
+    int? hourlyRateCents,
+  }) =>
+      _StaffMember(
         id: id,
-        name: name,
-        job: job,
+        name: name ?? this.name,
+        job: job ?? this.job,
         isActive: isActive ?? this.isActive,
+        hourlyRateCents: hourlyRateCents ?? this.hourlyRateCents,
       );
 
   Map<String, Object?> toJson() => {
@@ -659,6 +1259,7 @@ class _StaffMember {
         'name': name,
         'job': job,
         'isActive': isActive,
+        'hourlyRateCents': hourlyRateCents,
       };
 
   factory _StaffMember.fromJson(Map<String, dynamic> json) => _StaffMember(
@@ -666,6 +1267,7 @@ class _StaffMember {
         name: json['name'] as String,
         job: json['job'] as String,
         isActive: json['isActive'] as bool? ?? true,
+        hourlyRateCents: (json['hourlyRateCents'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -716,6 +1318,33 @@ class _ClockSession {
       );
 }
 
+class _StaffHoursData {
+  const _StaffHoursData({required this.member, required this.shifts});
+
+  final _StaffMember? member;
+  final List<_ClockSession> shifts;
+}
+
+class _StaffTicket {
+  const _StaffTicket({
+    required this.id,
+    required this.number,
+    required this.status,
+    required this.customerName,
+    required this.deviceName,
+    required this.createdAt,
+    required this.reports,
+  });
+
+  final int id;
+  final String number;
+  final TicketStatus status;
+  final String customerName;
+  final String deviceName;
+  final DateTime createdAt;
+  final Set<ReportKind> reports;
+}
+
 class _ClockData {
   const _ClockData({required this.staff, required this.sessions});
 
@@ -745,6 +1374,67 @@ Future<List<_ClockSession>> _readSessions(AppDatabase database) async {
       .toList();
 }
 
+Future<List<_StaffTicket>> _readStaffTickets(
+  AppDatabase database,
+  String staffId,
+) async {
+  final assignments = <int, Set<ReportKind>>{};
+  final pattern = RegExp(r'^ticket_staff_(\d+)_(intake|technical|client)$');
+  final rows = await (database.select(database.settings)
+        ..where((setting) => setting.key.like('ticket_staff_%')))
+      .get();
+  for (final row in rows) {
+    if (row.value != staffId) continue;
+    final match = pattern.firstMatch(row.key);
+    if (match == null) continue;
+    final ticketId = int.tryParse(match.group(1)!);
+    if (ticketId == null) continue;
+    ReportKind? reportKind;
+    for (final kind in ReportKind.values) {
+      if (kind.name == match.group(2)) reportKind = kind;
+    }
+    if (reportKind == null) continue;
+    assignments.putIfAbsent(ticketId, () => <ReportKind>{}).add(reportKind);
+  }
+  if (assignments.isEmpty) return const [];
+
+  final query = database.select(database.tickets).join([
+    drift.innerJoin(
+      database.customers,
+      database.customers.id.equalsExp(database.tickets.customerId),
+    ),
+    drift.leftOuterJoin(
+      database.deviceModels,
+      database.deviceModels.id.equalsExp(database.tickets.deviceModelId),
+    ),
+  ])
+    ..where(database.tickets.id.isIn(assignments.keys));
+  final ticketRows = await query.get();
+
+  final tickets = [
+    for (final row in ticketRows)
+      _StaffTicket(
+        id: row.readTable(database.tickets).id,
+        number: row.readTable(database.tickets).number,
+        status: row.readTable(database.tickets).status,
+        customerName: row.readTable(database.customers).name,
+        deviceName: row.readTableOrNull(database.deviceModels)?.name ??
+            row.readTable(database.tickets).deviceName ??
+            'Unlisted device',
+        createdAt: row.readTable(database.tickets).createdAt,
+        reports: assignments[row.readTable(database.tickets).id] ??
+            const <ReportKind>{},
+      ),
+  ];
+  tickets.sort((a, b) {
+    if (a.status.isActive != b.status.isActive) {
+      return a.status.isActive ? -1 : 1;
+    }
+    return b.createdAt.compareTo(a.createdAt);
+  });
+  return tickets;
+}
+
 Future<void> _writeJsonSetting(
   AppDatabase database,
   String key,
@@ -754,6 +1444,45 @@ Future<void> _writeJsonSetting(
         SettingsCompanion.insert(key: key, value: jsonEncode(value)),
       );
 }
+
+int? _parseHourlyRateCents(String text) {
+  final cleaned = text.trim().replaceAll('\$', '').replaceAll(',', '');
+  if (cleaned.isEmpty) return 0;
+  final value = double.tryParse(cleaned);
+  if (value == null || !value.isFinite || value < 0 || value > 100000) {
+    return null;
+  }
+  return (value * 100).round();
+}
+
+String _formatMoney(int cents) => '\$${(cents / 100).toStringAsFixed(2)}';
+
+String _formatDuration(Duration duration) {
+  if (duration.inSeconds < 60) return '${duration.inSeconds}s';
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes % 60;
+  if (hours == 0) return '${minutes}m';
+  return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+}
+
+Duration _shiftDuration(_ClockSession session, DateTime now) {
+  final duration = (session.clockOutAt ?? now).difference(session.clockInAt);
+  return duration.isNegative ? Duration.zero : duration;
+}
+
+int? _estimatedPayCents(Duration duration, int hourlyRateCents) {
+  if (hourlyRateCents <= 0) return null;
+  return (duration.inSeconds * hourlyRateCents / 3600).round();
+}
+
+String _reportKindLabel(ReportKind kind) => switch (kind) {
+      ReportKind.intake => 'Intake',
+      ReportKind.technical => 'Technical',
+      ReportKind.client => 'Client',
+    };
+
+String _reportKindsLabel(Set<ReportKind> kinds) =>
+    ReportKind.values.where(kinds.contains).map(_reportKindLabel).join(', ');
 
 String _formatTime(DateTime dateTime) {
   final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;

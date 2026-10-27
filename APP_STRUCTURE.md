@@ -34,9 +34,11 @@ buttons.
 
 The shop is run by one person, so the app is built for one pair of hands:
 
-- No staff accounts, roles, assignments or handoffs. The author on a report is
-  stamped from the shop name in Settings (editable), which also means adding
-  accounts later needs no data migration.
+- Staff is a lightweight directory, not a permission system: each person has a
+  name, job, active flag and optional hourly pay. Staff can sign in to a shared
+  time clock, and each person has their own hours and assigned-ticket views.
+  There are no accounts, roles, assignments or handoffs, and report completion
+  is still a stage of one job.
 - Status changes are **never blocked**. Missing information is surfaced as a
   badge, not a gate — a solo shop works out of order.
 - Report 2 is optional for simple jobs (see `REPORTS.md`).
@@ -183,3 +185,6 @@ Merging them would corrupt both stock counts and revenue reporting.
 - **Customers** — searchable and editable profiles with devices and repair
   history. Intake can select existing customers and devices.
 - **Merch, Settings** — still placeholders.
+- **Staff** — directory with inline edit (name, job, active, hourly pay), a
+  shared sign-in/time clock, per-person tracked hours and estimated pay, and a
+  per-person list of tickets assigned on any report stage.
