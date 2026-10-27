@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/calendar/calendar_page.dart';
 import '../features/checkout/checkout_page.dart';
 import '../features/customers/customers_page.dart';
+import '../features/financial/financial_page.dart';
 import '../features/merch/merch_page.dart';
 import '../features/parts/parts_page.dart';
 import '../features/settings/settings_page.dart';
@@ -67,6 +68,12 @@ class ShopDestination {
       icon: Icons.memory_outlined,
       selectedIcon: Icons.memory,
       page: PartsPage(),
+    ),
+    ShopDestination(
+      label: 'Financial',
+      icon: Icons.insights_outlined,
+      selectedIcon: Icons.insights,
+      page: FinancialPage(),
     ),
     ShopDestination(
       label: 'Settings',

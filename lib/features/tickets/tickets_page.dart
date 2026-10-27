@@ -334,6 +334,18 @@ class _TicketCard extends StatelessWidget {
                     ageLabel(ticket.createdAt),
                     style: theme.textTheme.bodySmall?.copyWith(color: muted),
                   ),
+                  if (ticket.status == TicketStatus.closed)
+                    IconButton(
+                      key: Key('reopen-ticket-${ticket.id}'),
+                      tooltip: 'Reopen ${ticket.number}',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.lock_open),
+                      onPressed: () => showReopenTicketDialog(
+                        context,
+                        ticketId: ticket.id,
+                        ticketNumber: ticket.number,
+                      ),
+                    ),
                   IconButton(
                     key: Key('delete-ticket-${ticket.id}'),
                     tooltip: 'Delete ${ticket.number}',

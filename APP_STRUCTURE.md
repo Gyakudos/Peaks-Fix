@@ -1,15 +1,18 @@
 # App structure
 
-## Tabs (6)
+## Tabs (9)
 
 | # | Tab | Contains |
 | --- | --- | --- |
 | 1 | **Tickets** | Default screen. Job board grouped by status, plus the *New repair* button. |
-| 2 | **Calendar** | Monthly view of drop-off, technician start, parts arrival, customer contact and pickup dates. |
-| 3 | **Customers** | Contact records, devices owned, repair and merch history. |
-| 4 | **Merch** | Retail products and variants, quick sell + cart, stock and sales. |
-| 5 | **Parts** | Repair components, consumed from tickets. |
-| 6 | **Settings** | Shop info, ticket numbering, device catalog, backup. |
+| 2 | **Closed Tickets** | Paid jobs that have been closed, with a **Reopen** action for warranty work. |
+| 3 | **Checkout** | Ready tickets: bill lines, merchandise, payment and closing. |
+| 4 | **Calendar** | Monthly view of drop-off, technician start, parts arrival, customer contact and pickup dates. |
+| 5 | **Customers** | Contact records, devices owned, repair and merch history. |
+| 6 | **Merch** | Planned retail counter; still a placeholder. |
+| 7 | **Parts** | Repair components, consumed from tickets. |
+| 8 | **Financial** | Revenue, part/merch cost and profit from closed tickets, plus tracked hours and estimated pay per staff member. |
+| 9 | **Settings** | Staff directory and time clock, markup, device catalog, shop settings. |
 
 Deliberately **not** tabs:
 
@@ -24,7 +27,7 @@ Deliberately **not** tabs:
 One destination list (`lib/shell/shop_destination.dart`) drives both navs:
 
 - **Wide (>= 900 px, i.e. any normal Windows window):** `NavigationRail`.
-- **Narrow (Android, small Windows window):** `NavigationBar` with all 6 items.
+- **Narrow (Android, small Windows window):** `NavigationBar` with all 9 items.
 
 The Windows title bar is rendered by Flutter above the navigator
 (`lib/app.dart`), so pushed routes such as intake never cover the window
@@ -95,6 +98,17 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Schema v13 adds `tickets.report2_completed_at` and `report3_completed_at`.
   Report 1 completion already unlocked Report 2; completing Report 3 also moves
   the ticket to **Ready** so it appears in Checkout.
+- **Financial** is calculated from existing records, not a separate ledger.
+  Revenue is each closed ticket's invoice subtotal minus its saved discount;
+  cost is the recorded `ticket_items.unit_cost_cents` for parts and
+  merchandise. Gross profit is revenue minus that cost, and net profit is an
+  estimate after subtracting tracked staff time × hourly rate. Labour lines
+  carry no cost, so staff pay is not double-counted. The period chips filter
+  both closed tickets (by close date) and shifts (clipped to the period).
+- **Reopen** on a closed ticket sends it back to the board in a chosen active
+  status (default **In repair**). Reports, invoice lines and payments stay
+  attached; because the status is no longer `closed`, the ticket leaves the
+  Financial totals until it is closed again.
 - A **single Joy-Con** is a catalog row of its own (`Joy-Con (single)`), and
   intake asks **Left / Right** as a follow-up. The side is stored on the ticket
   (`device_side`) and shown on the board and the ticket page. A pair remains one
@@ -169,9 +183,11 @@ Merging them would corrupt both stock counts and revenue reporting.
 - **Data** — drift/SQLite, seeded console, handheld, controller and vacuum
   catalog, ticket numbering, shop tags and
   shop-applied serials.
-- **Tickets** — real board, working intake (saves a ticket and issues its tag)
-  and a ticket page where the status can be moved. Intake previews the Report 1
-  photo checklist for the selected device, and the ticket keeps its own copy.
+- **Tickets** - real board, working intake (saves a ticket and issues its tag)
+  and a ticket page where the status can be moved. Closed tickets can be
+  **reopened** for warranty work without losing their reports or payments.
+  Intake previews the Report 1 photo checklist for the selected device, and the
+  ticket keeps its own copy.
 - **Report 1 photos** — the shop PC shows a QR, the phone fills slots over the
   LAN, and captured shots appear as tappable thumbnails on the ticket.
 - **Report 1 notes** — a per-ticket condition box that saves itself while
@@ -184,7 +200,11 @@ Merging them would corrupt both stock counts and revenue reporting.
   `REPORTS.md`.
 - **Customers** — searchable and editable profiles with devices and repair
   history. Intake can select existing customers and devices.
-- **Merch, Settings** — still placeholders.
+- **Merch** — still a placeholder. **Settings** is live: staff directory and
+  time clock, parts/merch markup, shop values and the device catalog.
 - **Staff** — directory with inline edit (name, job, active, hourly pay), a
   shared sign-in/time clock, per-person tracked hours and estimated pay, and a
   per-person list of tickets assigned on any report stage.
+- **Financial** — closed-ticket revenue, part/merch cost, gross profit, tracked
+  staff hours and pay, and a net profit estimate, with All time / This month /
+  Last 30 days / This year filters.

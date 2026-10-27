@@ -698,7 +698,7 @@ class TicketPhotoCleanupException implements Exception {
 }
 
 String _reportStaffSettingKey(int ticketId, ReportKind reportKind) =>
-  'ticket_staff_${ticketId}_${reportKind.name}';
+    'ticket_staff_${ticketId}_${reportKind.name}';
 
 /// SQLite implementation, backed by [AppDatabase].
 class DriftTicketsRepository implements TicketsRepository {
@@ -1083,15 +1083,15 @@ class DriftTicketsRepository implements TicketsRepository {
       final values = {for (final row in rows) row.key: row.value};
       final roster = (jsonDecode(values['staff_roster'] ?? '[]')
               as List<dynamic>)
-          .map((item) =>
-              StaffMemberEntry.fromJson(item as Map<String, dynamic>))
+          .map(
+              (item) => StaffMemberEntry.fromJson(item as Map<String, dynamic>))
           .toList();
-      final clockedInIds = (jsonDecode(values['staff_clock_sessions'] ?? '[]')
-              as List<dynamic>)
-          .map((item) => item as Map<String, dynamic>)
-          .where((session) => session['clockOutAt'] == null)
-          .map((session) => session['staffId'] as String)
-          .toSet();
+      final clockedInIds =
+          (jsonDecode(values['staff_clock_sessions'] ?? '[]') as List<dynamic>)
+              .map((item) => item as Map<String, dynamic>)
+              .where((session) => session['clockOutAt'] == null)
+              .map((session) => session['staffId'] as String)
+              .toSet();
       return roster
           .where((staff) => staff.isActive && clockedInIds.contains(staff.id))
           .toList()
@@ -1114,10 +1114,10 @@ class DriftTicketsRepository implements TicketsRepository {
       final values = {for (final row in rows) row.key: row.value};
       final staffId = values[assignmentKey];
       if (staffId == null || staffId.isEmpty) return null;
-      final roster = (jsonDecode(values['staff_roster'] ?? '[]')
-              as List<dynamic>)
-          .map((item) =>
-              StaffMemberEntry.fromJson(item as Map<String, dynamic>));
+      final roster =
+          (jsonDecode(values['staff_roster'] ?? '[]') as List<dynamic>).map(
+              (item) =>
+                  StaffMemberEntry.fromJson(item as Map<String, dynamic>));
       for (final staff in roster) {
         if (staff.id == staffId) return staff;
       }

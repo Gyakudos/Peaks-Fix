@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../../data/shop_scope.dart';
 
 /// Colour used for a status everywhere it appears, so the board and the ticket
 /// page agree.
@@ -73,4 +74,102 @@ String shortDate(DateTime time) {
     'Dec',
   ];
   return '${time.day} ${months[time.month - 1]} ${time.year}';
+}
+
+/// Reopens a closed ticket so warranty work can be booked against the same job.
+///
+/// Reports, invoice lines and payments stay on the ticket; only the workflow
+/// status changes. The shop chooses where the job re-enters the board.
+Future<void> showReopenTicketDialog(
+  BuildContext context, {
+  required int ticketId,
+  required String ticketNumber,
+}) async {
+  final repository = ShopScope.of(context);
+  final status = await showDialog<TicketStatus>(
+    context: context,
+    builder: (_) => _ReopenTicketDialog(ticketNumber: ticketNumber),
+  );
+  if (status == null || !context.mounted) return;
+
+  try {
+    await repository.updateStatus(ticketId, status);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$ticketNumber reopened as ${status.label}'),
+      ),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not reopen $ticketNumber: $error')),
+    );
+  }
+}
+
+class _ReopenTicketDialog extends StatefulWidget {
+  const _ReopenTicketDialog({required this.ticketNumber});
+
+  final String ticketNumber;
+
+  @override
+  State<_ReopenTicketDialog> createState() => _ReopenTicketDialogState();
+}
+
+class _ReopenTicketDialogState extends State<_ReopenTicketDialog> {
+  TicketStatus _status = TicketStatus.inRepair;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Reopen ${widget.ticketNumber}?'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Use this for warranty work or a repair that came back. Reports, '
+              'invoice lines and payments stay on the ticket.',
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<TicketStatus>(
+              key: const Key('reopen-status-field'),
+              initialValue: _status,
+              decoration: const InputDecoration(
+                labelText: 'Return to the board as',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final option in TicketStatus.values)
+                  if (option.isActive)
+                    DropdownMenuItem(
+                      value: option,
+                      child: Text(option.label),
+                    ),
+              ],
+              onChanged: (next) {
+                if (next != null) setState(() => _status = next);
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('cancel-reopen-ticket'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          key: const Key('confirm-reopen-ticket'),
+          onPressed: () => Navigator.of(context).pop(_status),
+          icon: const Icon(Icons.lock_open),
+          label: const Text('Reopen ticket'),
+        ),
+      ],
+    );
+  }
 }

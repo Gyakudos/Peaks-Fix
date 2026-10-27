@@ -37,7 +37,8 @@ class CheckoutPage extends StatelessWidget {
             ),
             Expanded(
               child: snapshot.hasError
-                  ? const Center(child: Text('Could not load checkout tickets.'))
+                  ? const Center(
+                      child: Text('Could not load checkout tickets.'))
                   : !snapshot.hasData
                       ? const Center(child: CircularProgressIndicator())
                       : ready.isEmpty
@@ -95,9 +96,9 @@ class _CheckoutTicket extends StatelessWidget {
                         final paid = _netPaid(paymentSnapshot.data ?? const []);
                         final due = invoice == null
                             ? null
-                          : (invoice.totalCents - paid)
-                            .clamp(0, invoice.totalCents)
-                            .toInt();
+                            : (invoice.totalCents - paid)
+                                .clamp(0, invoice.totalCents)
+                                .toInt();
                         return Text(
                           due == null
                               ? 'Loading balance…'
@@ -183,7 +184,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
   }
 
   Future<void> _closeTicket() async {
-    await _run(() => widget.repository.closeTicketAfterPayment(widget.ticket.id));
+    await _run(
+        () => widget.repository.closeTicketAfterPayment(widget.ticket.id));
     if (_error == null && mounted) Navigator.of(context).pop();
   }
 
@@ -221,8 +223,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                 final payments = paymentSnapshot.data ?? const <PaymentEntry>[];
                 final paid = _netPaid(payments);
                 final due = (invoice.totalCents - paid)
-                  .clamp(0, invoice.totalCents)
-                  .toInt();
+                    .clamp(0, invoice.totalCents)
+                    .toInt();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -241,7 +243,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                         ),
                       ],
                     ),
-                    Text('${widget.ticket.customerName} · ${widget.ticket.deviceWithVariant}'),
+                    Text(
+                        '${widget.ticket.customerName} · ${widget.ticket.deviceWithVariant}'),
                     const SizedBox(height: 12),
                     Expanded(
                       child: invoice.lines.isEmpty
@@ -264,7 +267,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                     if (_error != null) ...[
                       Text(
                         _error!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -295,9 +299,11 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                       ],
                     ),
                     const Divider(height: 24),
-                    _TotalRow(label: 'Invoice total', cents: invoice.totalCents),
+                    _TotalRow(
+                        label: 'Invoice total', cents: invoice.totalCents),
                     _TotalRow(label: 'Paid', cents: paid),
-                    _TotalRow(label: 'Balance due', cents: due, emphasize: true),
+                    _TotalRow(
+                        label: 'Balance due', cents: due, emphasize: true),
                     if (payments.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -394,8 +400,11 @@ class _AddMerchDialogState extends State<_AddMerchDialog> {
             TextField(
               key: const Key('checkout-merch-cost'),
               controller: _costController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))
+              ],
               decoration: const InputDecoration(
                 labelText: 'Unit cost',
                 prefixText: '\$',
@@ -485,7 +494,9 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             key: const Key('checkout-payment-amount'),
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))
+            ],
             decoration: const InputDecoration(
               labelText: 'Amount',
               prefixText: '\$',
@@ -507,7 +518,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(_error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
         ],
       ),
@@ -534,7 +546,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 }
 
 class _TotalRow extends StatelessWidget {
-  const _TotalRow({required this.label, required this.cents, this.emphasize = false});
+  const _TotalRow(
+      {required this.label, required this.cents, this.emphasize = false});
 
   final String label;
   final int cents;
@@ -543,7 +556,10 @@ class _TotalRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = emphasize
-        ? Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)
+        ? Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontWeight: FontWeight.w700)
         : Theme.of(context).textTheme.bodyMedium;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -559,7 +575,8 @@ class _TotalRow extends StatelessWidget {
 
 int _netPaid(List<PaymentEntry> payments) => payments.fold<int>(
       0,
-      (total, payment) => total +
+      (total, payment) =>
+          total +
           (payment.kind == PaymentKind.refund
               ? -payment.amountCents
               : payment.amountCents),

@@ -20,9 +20,9 @@ printing are still being built.
 
 - **Windows shell** — persisted window geometry, centered first launch, custom
   Flutter title bar, tray icon and single instance.
-- **Eight tabs** — Tickets (default), Closed Tickets, Checkout, Calendar,
-  Customers, Merch, Parts, Settings, shown as a rail on wide windows and a
-  bottom bar on narrow ones.
+- **Nine tabs** — Tickets (default), Closed Tickets, Checkout, Calendar,
+  Customers, Merch, Parts, Financial, Settings, shown as a rail on wide windows
+  and a bottom bar on narrow ones.
 - **Tickets board** — `In the shop` and `Finished`, with a real intake form.
 - **Intake** — customer name/phone/email, category → brand → model, optional
   model number, serial or **No serial number sticker** (which issues a
@@ -54,6 +54,15 @@ printing are still being built.
 - **Client report and checkout** — review the client draft, then **Complete
   report 3** to send the ticket to Checkout. Checkout handles merchandise,
   payment and closing the ticket after pickup.
+- **Reopen closed tickets** — a closed job can be reopened for warranty work.
+  Choose where it re-enters the board (default **In repair**); its reports,
+  invoice and payments stay attached.
+- **Staff and time clock** — a lightweight roster with optional hourly pay, a
+  shared sign-in/clock-out page, per-person hours, estimated pay and the
+  tickets assigned to that person on any report stage.
+- **Financial** — closed-ticket revenue, recorded parts/merch cost, gross
+  profit, tracked staff hours and pay, and a net profit estimate. Filter by
+  all time, this month, the last 30 days or this year.
 - **Phone capture** — on the shop PC, **Capture with phone** shows a QR code;
   scan it with a phone on the same Wi-Fi and shoot the Report 1 slots straight
   into the open ticket. Photos land as thumbnails on the PC as they arrive.
@@ -63,7 +72,7 @@ printing are still being built.
 
 - Structured Report 2 tests, findings, estimates and contact log; Report 3
   summary, warranty page and printing.
-- Merch and Settings beyond their placeholders.
+- Merch checkout and the remaining Settings screens (backup, shop details).
 
 ## Requirements
 
@@ -156,7 +165,7 @@ lib/
     tickets/                board, ticket page, shared widgets
     capture/                QR dialog and phone pairing
     repairs/                intake form
-    customers/ merch/ parts/ settings/
+    customers/ merch/ parts/ settings/ financial/
   window/                   Windows-only shell: title bar, tray, single instance
 test/                       widget and label tests
 ```

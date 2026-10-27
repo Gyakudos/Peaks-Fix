@@ -2266,7 +2266,8 @@ class AppDatabase extends _$AppDatabase {
     if (unitCostCents < 0 || unitPriceCents < 0) {
       throw ArgumentError('Merchandise costs and prices must not be negative.');
     }
-    final ticket = await (select(tickets)..where((row) => row.id.equals(ticketId)))
+    final ticket = await (select(tickets)
+          ..where((row) => row.id.equals(ticketId)))
         .getSingleOrNull();
     if (ticket?.status != TicketStatus.ready) {
       throw StateError('Merchandise can only be added during checkout.');
@@ -2283,11 +2284,10 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Stream<List<Payment>> watchTicketPayments(int ticketId) =>
-      (select(payments)
-            ..where((payment) => payment.ticketId.equals(ticketId))
-            ..orderBy([(payment) => OrderingTerm.asc(payment.at)]))
-          .watch();
+  Stream<List<Payment>> watchTicketPayments(int ticketId) => (select(payments)
+        ..where((payment) => payment.ticketId.equals(ticketId))
+        ..orderBy([(payment) => OrderingTerm.asc(payment.at)]))
+      .watch();
 
   Future<void> recordTicketPayment({
     required int ticketId,
@@ -2315,10 +2315,9 @@ class AppDatabase extends _$AppDatabase {
         InvoiceDiscountKind.none => 0,
         InvoiceDiscountKind.percentage =>
           (subtotal * ticket.invoiceDiscountValue + 50) ~/ 100,
-        InvoiceDiscountKind.fixed =>
-          ticket.invoiceDiscountValue > subtotal
-              ? subtotal
-              : ticket.invoiceDiscountValue,
+        InvoiceDiscountKind.fixed => ticket.invoiceDiscountValue > subtotal
+            ? subtotal
+            : ticket.invoiceDiscountValue,
       };
       final total = subtotal - discount;
       final paymentsForTicket = await (select(payments)
@@ -2326,7 +2325,8 @@ class AppDatabase extends _$AppDatabase {
           .get();
       final paid = paymentsForTicket.fold<int>(
         0,
-        (sum, payment) => sum +
+        (sum, payment) =>
+            sum +
             (payment.kind == PaymentKind.refund
                 ? -payment.amountCents
                 : payment.amountCents),
@@ -2365,23 +2365,24 @@ class AppDatabase extends _$AppDatabase {
         InvoiceDiscountKind.none => 0,
         InvoiceDiscountKind.percentage =>
           (subtotal * ticket.invoiceDiscountValue + 50) ~/ 100,
-        InvoiceDiscountKind.fixed =>
-          ticket.invoiceDiscountValue > subtotal
-              ? subtotal
-              : ticket.invoiceDiscountValue,
+        InvoiceDiscountKind.fixed => ticket.invoiceDiscountValue > subtotal
+            ? subtotal
+            : ticket.invoiceDiscountValue,
       };
       final paymentsForTicket = await (select(payments)
             ..where((payment) => payment.ticketId.equals(ticketId)))
           .get();
       final paid = paymentsForTicket.fold<int>(
         0,
-        (sum, payment) => sum +
+        (sum, payment) =>
+            sum +
             (payment.kind == PaymentKind.refund
                 ? -payment.amountCents
                 : payment.amountCents),
       );
       if (paid < subtotal - discount) {
-        throw StateError('The invoice must be paid before closing this ticket.');
+        throw StateError(
+            'The invoice must be paid before closing this ticket.');
       }
       final now = DateTime.now();
       await (update(tickets)..where((row) => row.id.equals(ticketId))).write(

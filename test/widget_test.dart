@@ -11,6 +11,7 @@ import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
 import 'package:vola_fix/features/checkout/checkout_page.dart';
 import 'package:vola_fix/features/tickets/ticket_detail_page.dart';
+import 'package:vola_fix/features/tickets/tickets_page.dart';
 
 /// Stands in for SQLite so these tests never open a database file.
 class FakeTicketsRepository implements TicketsRepository {
@@ -306,12 +307,14 @@ class FakeTicketsRepository implements TicketsRepository {
 
   @override
   Stream<InvoiceDraft?> watchInvoice(int ticketId) async* {
-    yield invoices[ticketId] ?? const InvoiceDraft(
-      discountKind: InvoiceDiscountKind.none,
-      discountValue: 0,
-      lines: [],
-    );
-    yield* (_invoiceUpdates[ticketId] ??= StreamController<InvoiceDraft?>.broadcast())
+    yield invoices[ticketId] ??
+        const InvoiceDraft(
+          discountKind: InvoiceDiscountKind.none,
+          discountValue: 0,
+          lines: [],
+        );
+    yield* (_invoiceUpdates[ticketId] ??=
+            StreamController<InvoiceDraft?>.broadcast())
         .stream;
   }
 
@@ -735,7 +738,8 @@ class FakeTicketsRepository implements TicketsRepository {
       technicianStartAt: ticket.technicianStartAt,
       partsArriveAt: ticket.partsArriveAt,
       customerContactedAt: ticket.customerContactedAt,
-      pickedUpAt: status == TicketStatus.closed ? DateTime(2026) : ticket.pickedUpAt,
+      pickedUpAt:
+          status == TicketStatus.closed ? DateTime(2026) : ticket.pickedUpAt,
       shopTag: ticket.shopTag,
       serial: ticket.serial,
       serialMissing: ticket.serialMissing,
@@ -1102,7 +1106,7 @@ void main() {
     expect(repository.reportStaffAssignments[(7, ReportKind.intake)], 'tech-1');
   });
 
-  testWidgets('app builds with all eight tabs', (WidgetTester tester) async {
+  testWidgets('app builds with all nine tabs', (WidgetTester tester) async {
     await tester.pumpWidget(VolaFixApp(tickets: FakeTicketsRepository()));
 
     expect(find.text('Peaks Fix'), findsWidgets);
@@ -1113,6 +1117,7 @@ void main() {
     expect(find.text('Customers'), findsWidgets);
     expect(find.text('Merch'), findsWidgets);
     expect(find.text('Parts'), findsWidgets);
+    expect(find.text('Financial'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
   });
 
@@ -1213,6 +1218,53 @@ void main() {
     await tester.tap(find.text('Closed Tickets').first);
     await tester.pumpAndSettle();
     expect(find.text('PF-000001'), findsOneWidget);
+  });
+
+  testWidgets('closed ticket reopens for warranty work',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    repository.boardTickets.add(
+      TicketBoardEntry(
+        id: 9,
+        number: 'PF-000009',
+        status: TicketStatus.closed,
+        customerName: 'Warranty Customer',
+        device: 'Handheld console',
+        complaint: 'Warranty return',
+        createdAt: DateTime(2026, 10, 1),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopScope(
+          tickets: repository,
+          child: const Scaffold(body: TicketsPage(closedOnly: true)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('PF-000009'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('reopen-ticket-9')));
+    await tester.pumpAndSettle();
+    expect(find.text('Reopen PF-000009?'), findsOneWidget);
+    expect(
+      find.textContaining('Reports, invoice lines and payments stay'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('confirm-reopen-ticket')));
+    await tester.pumpAndSettle();
+
+    expect(repository.boardTickets.single.status, TicketStatus.inRepair);
+    expect(find.text('No closed tickets'), findsOneWidget);
+    expect(find.textContaining('reopened as In repair'), findsOneWidget);
   });
 
   testWidgets('calendar shows all ticket workflow dates and opens tickets',

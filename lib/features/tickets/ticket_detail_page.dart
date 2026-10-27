@@ -166,7 +166,11 @@ class _TicketBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _StatusCard(ticketId: summary.id, status: summary.status),
+            _StatusCard(
+              ticketId: summary.id,
+              ticketNumber: summary.number,
+              status: summary.status,
+            ),
             const SizedBox(height: 16),
             _TextCard(
               title: 'Reported fault',
@@ -210,8 +214,7 @@ class _TicketStaffAssignment extends StatefulWidget {
   final String label;
 
   @override
-  State<_TicketStaffAssignment> createState() =>
-      _TicketStaffAssignmentState();
+  State<_TicketStaffAssignment> createState() => _TicketStaffAssignmentState();
 }
 
 class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
@@ -288,8 +291,8 @@ class _TicketStaffAssignmentState extends State<_TicketStaffAssignment> {
                       for (final staff in options)
                         DropdownMenuItem(
                           value: staff.id,
-                          enabled: assigned?.id != staff.id ||
-                              assignedIsClockedIn,
+                          enabled:
+                              assigned?.id != staff.id || assignedIsClockedIn,
                           child: Text(
                             assigned?.id == staff.id && !assignedIsClockedIn
                                 ? '${staff.name} · off shift'
@@ -477,9 +480,14 @@ class _Meta extends StatelessWidget {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.ticketId, required this.status});
+  const _StatusCard({
+    required this.ticketId,
+    required this.ticketNumber,
+    required this.status,
+  });
 
   final int ticketId;
+  final String ticketNumber;
   final TicketStatus status;
 
   @override
@@ -524,12 +532,32 @@ class _StatusCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 8),
-            Text(
-              'Close ready tickets from Checkout after final payment.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
+            if (status == TicketStatus.closed) ...[
+              OutlinedButton.icon(
+                key: Key('reopen-ticket-detail-$ticketId'),
+                onPressed: () => showReopenTicketDialog(
+                  context,
+                  ticketId: ticketId,
+                  ticketNumber: ticketNumber,
+                ),
+                icon: const Icon(Icons.lock_open),
+                label: const Text('Reopen ticket'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Reopen a closed ticket for warranty work. Reports, invoice '
+                'lines and payments are kept.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ] else
+              Text(
+                'Close ready tickets from Checkout after final payment.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
           ],
         ),
       ),
@@ -648,11 +676,11 @@ class _ReportsCard extends StatelessWidget {
                     fallbackText: _intakeSummary(checklist),
                   ),
                   children: [
-                      _TicketStaffAssignment(
-                        ticketId: ticketId,
-                        reportKind: ReportKind.intake,
-                        label: 'Checked in by',
-                      ),
+                    _TicketStaffAssignment(
+                      ticketId: ticketId,
+                      reportKind: ReportKind.intake,
+                      label: 'Checked in by',
+                    ),
                     if (checklist == null)
                       const Padding(
                         padding: EdgeInsets.only(top: 8),
