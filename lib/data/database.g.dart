@@ -4691,6 +4691,12 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
           GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 120),
       type: DriftSqlType.string,
       requiredDuringInsert: true);
+  static const VerificationMeta _descriptionMeta =
+      const VerificationMeta('description');
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+      'description', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _skuMeta = const VerificationMeta('sku');
   @override
   late final GeneratedColumn<String> sku = GeneratedColumn<String>(
@@ -4794,6 +4800,7 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
   List<GeneratedColumn> get $columns => [
         id,
         name,
+        description,
         sku,
         vendorId,
         vendorSku,
@@ -4827,6 +4834,12 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+          _descriptionMeta,
+          description.isAcceptableOrUnknown(
+              data['description']!, _descriptionMeta));
     }
     if (data.containsKey('sku')) {
       context.handle(
@@ -4901,6 +4914,8 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      description: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}description']),
       sku: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}sku']),
       vendorId: attachedDatabase.typeMapping
@@ -4945,6 +4960,9 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
 class Part extends DataClass implements Insertable<Part> {
   final int id;
   final String name;
+  final String? description;
+
+  /// Shop SKU in `NNN-NNN` form. Blank SKUs are assigned at creation time.
   final String? sku;
 
   /// Where the part is purchased, e.g. a supplier account or store name.
@@ -4972,6 +4990,7 @@ class Part extends DataClass implements Insertable<Part> {
   const Part(
       {required this.id,
       required this.name,
+      this.description,
       this.sku,
       this.vendorId,
       this.vendorSku,
@@ -4991,6 +5010,9 @@ class Part extends DataClass implements Insertable<Part> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
     if (!nullToAbsent || sku != null) {
       map['sku'] = Variable<String>(sku);
     }
@@ -5027,6 +5049,9 @@ class Part extends DataClass implements Insertable<Part> {
     return PartsCompanion(
       id: Value(id),
       name: Value(name),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
       sku: sku == null && nullToAbsent ? const Value.absent() : Value(sku),
       vendorId: vendorId == null && nullToAbsent
           ? const Value.absent()
@@ -5060,6 +5085,7 @@ class Part extends DataClass implements Insertable<Part> {
     return Part(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String?>(json['description']),
       sku: serializer.fromJson<String?>(json['sku']),
       vendorId: serializer.fromJson<String?>(json['vendorId']),
       vendorSku: serializer.fromJson<String?>(json['vendorSku']),
@@ -5083,6 +5109,7 @@ class Part extends DataClass implements Insertable<Part> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String?>(description),
       'sku': serializer.toJson<String?>(sku),
       'vendorId': serializer.toJson<String?>(vendorId),
       'vendorSku': serializer.toJson<String?>(vendorSku),
@@ -5104,6 +5131,7 @@ class Part extends DataClass implements Insertable<Part> {
   Part copyWith(
           {int? id,
           String? name,
+          Value<String?> description = const Value.absent(),
           Value<String?> sku = const Value.absent(),
           Value<String?> vendorId = const Value.absent(),
           Value<String?> vendorSku = const Value.absent(),
@@ -5121,6 +5149,7 @@ class Part extends DataClass implements Insertable<Part> {
       Part(
         id: id ?? this.id,
         name: name ?? this.name,
+        description: description.present ? description.value : this.description,
         sku: sku.present ? sku.value : this.sku,
         vendorId: vendorId.present ? vendorId.value : this.vendorId,
         vendorSku: vendorSku.present ? vendorSku.value : this.vendorSku,
@@ -5140,6 +5169,8 @@ class Part extends DataClass implements Insertable<Part> {
     return Part(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      description:
+          data.description.present ? data.description.value : this.description,
       sku: data.sku.present ? data.sku.value : this.sku,
       vendorId: data.vendorId.present ? data.vendorId.value : this.vendorId,
       vendorSku: data.vendorSku.present ? data.vendorSku.value : this.vendorSku,
@@ -5171,6 +5202,7 @@ class Part extends DataClass implements Insertable<Part> {
     return (StringBuffer('Part(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('description: $description, ')
           ..write('sku: $sku, ')
           ..write('vendorId: $vendorId, ')
           ..write('vendorSku: $vendorSku, ')
@@ -5193,6 +5225,7 @@ class Part extends DataClass implements Insertable<Part> {
   int get hashCode => Object.hash(
       id,
       name,
+      description,
       sku,
       vendorId,
       vendorSku,
@@ -5213,6 +5246,7 @@ class Part extends DataClass implements Insertable<Part> {
       (other is Part &&
           other.id == this.id &&
           other.name == this.name &&
+          other.description == this.description &&
           other.sku == this.sku &&
           other.vendorId == this.vendorId &&
           other.vendorSku == this.vendorSku &&
@@ -5232,6 +5266,7 @@ class Part extends DataClass implements Insertable<Part> {
 class PartsCompanion extends UpdateCompanion<Part> {
   final Value<int> id;
   final Value<String> name;
+  final Value<String?> description;
   final Value<String?> sku;
   final Value<String?> vendorId;
   final Value<String?> vendorSku;
@@ -5249,6 +5284,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
   const PartsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.description = const Value.absent(),
     this.sku = const Value.absent(),
     this.vendorId = const Value.absent(),
     this.vendorSku = const Value.absent(),
@@ -5267,6 +5303,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
   PartsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.description = const Value.absent(),
     this.sku = const Value.absent(),
     this.vendorId = const Value.absent(),
     this.vendorSku = const Value.absent(),
@@ -5285,6 +5322,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
   static Insertable<Part> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<String>? description,
     Expression<String>? sku,
     Expression<String>? vendorId,
     Expression<String>? vendorSku,
@@ -5303,6 +5341,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (description != null) 'description': description,
       if (sku != null) 'sku': sku,
       if (vendorId != null) 'vendor_id': vendorId,
       if (vendorSku != null) 'vendor_sku': vendorSku,
@@ -5323,6 +5362,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
   PartsCompanion copyWith(
       {Value<int>? id,
       Value<String>? name,
+      Value<String?>? description,
       Value<String?>? sku,
       Value<String?>? vendorId,
       Value<String?>? vendorSku,
@@ -5340,6 +5380,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     return PartsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      description: description ?? this.description,
       sku: sku ?? this.sku,
       vendorId: vendorId ?? this.vendorId,
       vendorSku: vendorSku ?? this.vendorSku,
@@ -5365,6 +5406,9 @@ class PartsCompanion extends UpdateCompanion<Part> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
     }
     if (sku.present) {
       map['sku'] = Variable<String>(sku.value);
@@ -5417,6 +5461,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     return (StringBuffer('PartsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('description: $description, ')
           ..write('sku: $sku, ')
           ..write('vendorId: $vendorId, ')
           ..write('vendorSku: $vendorSku, ')
@@ -16626,6 +16671,7 @@ typedef $$ShopTagsTableProcessedTableManager = ProcessedTableManager<
 typedef $$PartsTableCreateCompanionBuilder = PartsCompanion Function({
   Value<int> id,
   required String name,
+  Value<String?> description,
   Value<String?> sku,
   Value<String?> vendorId,
   Value<String?> vendorSku,
@@ -16644,6 +16690,7 @@ typedef $$PartsTableCreateCompanionBuilder = PartsCompanion Function({
 typedef $$PartsTableUpdateCompanionBuilder = PartsCompanion Function({
   Value<int> id,
   Value<String> name,
+  Value<String?> description,
   Value<String?> sku,
   Value<String?> vendorId,
   Value<String?> vendorSku,
@@ -16706,6 +16753,9 @@ class $$PartsTableFilterComposer extends Composer<_$AppDatabase, $PartsTable> {
 
   ColumnFilters<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get sku => $composableBuilder(
       column: $table.sku, builder: (column) => ColumnFilters(column));
@@ -16810,6 +16860,9 @@ class $$PartsTableOrderingComposer
   ColumnOrderings<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get sku => $composableBuilder(
       column: $table.sku, builder: (column) => ColumnOrderings(column));
 
@@ -16871,6 +16924,9 @@ class $$PartsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => column);
 
   GeneratedColumn<String> get sku =>
       $composableBuilder(column: $table.sku, builder: (column) => column);
@@ -16983,6 +17039,7 @@ class $$PartsTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> name = const Value.absent(),
+            Value<String?> description = const Value.absent(),
             Value<String?> sku = const Value.absent(),
             Value<String?> vendorId = const Value.absent(),
             Value<String?> vendorSku = const Value.absent(),
@@ -17001,6 +17058,7 @@ class $$PartsTableTableManager extends RootTableManager<
               PartsCompanion(
             id: id,
             name: name,
+            description: description,
             sku: sku,
             vendorId: vendorId,
             vendorSku: vendorSku,
@@ -17019,6 +17077,7 @@ class $$PartsTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String name,
+            Value<String?> description = const Value.absent(),
             Value<String?> sku = const Value.absent(),
             Value<String?> vendorId = const Value.absent(),
             Value<String?> vendorSku = const Value.absent(),
@@ -17037,6 +17096,7 @@ class $$PartsTableTableManager extends RootTableManager<
               PartsCompanion.insert(
             id: id,
             name: name,
+            description: description,
             sku: sku,
             vendorId: vendorId,
             vendorSku: vendorSku,

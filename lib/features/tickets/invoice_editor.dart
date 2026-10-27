@@ -251,8 +251,8 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                   ),
                   Text(
                     'Prepared for ${widget.customerName} · ${widget.device}\n'
-                    'Required Parts are priced at their saved retail price. '
-                    'Add labor or service charges below.',
+                    'Parts on this invoice are priced at their saved retail '
+                    'price. Add labor or service charges below.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -264,8 +264,9 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                     child: invoice.lines.isEmpty
                         ? const Center(
                             child: Text(
-                              'No invoice lines yet. Add Required Parts in '
-                              'Technical or add a labor/service charge.',
+                              'No invoice lines yet. Add parts from the Parts '
+                              'Invoice in Technical or add a labor/service '
+                              'charge.',
                               textAlign: TextAlign.center,
                             ),
                           )

@@ -88,7 +88,7 @@ class PartsPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Inventory linked to ticket required-parts lists. '
+                            'Inventory linked to ticket parts invoices. '
                             'Adding a part to a ticket does not change stock.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
@@ -116,7 +116,7 @@ class PartsPage extends StatelessWidget {
                       padding: EdgeInsets.all(20),
                       child: Text(
                         'No parts in inventory yet. Add a part to make it '
-                        'available in a ticket’s Required Parts list.',
+                        'available in a ticket’s Parts Invoice.',
                       ),
                     ),
                   )
@@ -127,6 +127,9 @@ class PartsPage extends StatelessWidget {
                         leading: const Icon(Icons.memory_outlined),
                         title: Text(part.name),
                         subtitle: Text([
+                          if (part.description != null &&
+                              part.description!.trim().isNotEmpty)
+                            part.description!.trim(),
                           if (part.category != null) part.category!,
                           if (part.sku != null) 'SKU ${part.sku}',
                           if (part.vendorId != null) 'Vendor ${part.vendorId}',

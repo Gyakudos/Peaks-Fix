@@ -206,7 +206,7 @@ class _TechnicalReportEditorState extends State<TechnicalReportEditor> {
                               ticketId: widget.ticketId,
                             ),
                     icon: const Icon(Icons.memory_outlined),
-                    label: const Text('Required Parts'),
+                    label: const Text('Parts Invoice'),
                   ),
                   if (defaultTargetPlatform == TargetPlatform.windows)
                     OutlinedButton.icon(

@@ -205,6 +205,56 @@ void main() {
     expect(await database.deleteTicket(ticket.id), isFalse);
   });
 
+  test('new parts get the next 000-000 SKU and keep their description',
+      () async {
+    final firstId = await database.createInventoryPart(
+      name: 'First part',
+      description: 'Long description for the first part',
+      startingStock: 1,
+    );
+    final secondId = await database.createInventoryPart(
+      name: 'Second part',
+      startingStock: 1,
+    );
+    final manualId = await database.createInventoryPart(
+      name: 'Manual SKU part',
+      sku: '007-042',
+      startingStock: 1,
+    );
+    final afterManualId = await database.createInventoryPart(
+      name: 'After manual part',
+      startingStock: 1,
+    );
+
+    final rows = await (database.select(database.parts)
+          ..orderBy([(row) => OrderingTerm.asc(row.id)]))
+        .get();
+    expect(rows.map((row) => row.sku), [
+      '001-001',
+      '001-002',
+      '007-042',
+      '007-043',
+    ]);
+    expect(rows.first.id, firstId);
+    expect(rows[1].id, secondId);
+    expect(rows[2].id, manualId);
+    expect(rows[3].id, afterManualId);
+    expect(rows.first.description, 'Long description for the first part');
+    expect(await database.nextPartSku(), '007-044');
+
+    await database.updateInventoryPart(
+      partId: secondId,
+      name: 'Second part renamed',
+      stock: 2,
+      rawCostCents: 100,
+      retailPriceCents: 200,
+    );
+    final preserved = await (database.select(database.parts)
+          ..where((row) => row.id.equals(secondId)))
+        .getSingle();
+    expect(preserved.sku, '001-002');
+  });
+
   test('required ticket parts link inventory without changing stock', () async {
     final ticket = await database.createTicket(
       customerName: 'Parts Customer',
@@ -215,6 +265,7 @@ void main() {
     );
     final partId = await database.createInventoryPart(
       name: 'USB-C charging port',
+      description: 'Charging port board for Nintendo Switch',
       sku: 'USB-C-01',
       vendorId: 'AliExpress - PartsPro',
       vendorSku: 'TYPE-C-16PIN',
@@ -255,6 +306,7 @@ void main() {
     expect(part.priceCents, 1666);
     expect(part.vendorId, 'AliExpress - PartsPro');
     expect(part.vendorSku, 'TYPE-C-16PIN');
+    expect(part.description, 'Charging port board for Nintendo Switch');
     expect(part.purchaseType, PartPurchaseType.bulk);
     expect(part.bulkQuantity, 10);
     expect(part.bulkTotalCents, 12340);
@@ -262,6 +314,7 @@ void main() {
     await database.updateInventoryPart(
       partId: partId,
       name: 'USB-C replacement port',
+      description: '24-pin replacement board',
       sku: 'USB-C-02',
       vendorId: 'Mouser',
       vendorSku: 'USB-C-24PIN',
@@ -279,6 +332,7 @@ void main() {
         .getSingle();
     expect(edited.name, 'USB-C replacement port');
     expect(edited.sku, 'USB-C-02');
+    expect(edited.description, '24-pin replacement board');
     expect(edited.vendorId, 'Mouser');
     expect(edited.vendorSku, 'USB-C-24PIN');
     expect(edited.purchaseType, PartPurchaseType.bulk);

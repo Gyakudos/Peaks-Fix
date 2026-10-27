@@ -74,6 +74,11 @@ printing are still being built.
 - **Parts vendor tracking** — inventory parts record a **Vendor ID** (where the
   part is purchased) and a **Vendor SKU** (the exact item ordered). Both fields
   appear when adding or editing a part and in the parts list.
+- **Part descriptions and shop SKUs** — each part can carry a description, and
+  its shop SKU follows the `000-000` format. New parts get the next free SKU
+  automatically (for example `001-003`); a SKU you type is kept as-is.
+- **Parts Invoice search** — the ticket's **Parts Invoice** (formerly Required
+  Parts) picker filters as you type, matching either the SKU or the part name.
 - **Bulk purchase calculator** — choose **Bulk purchase**, enter the quantity
   purchased and the total lot cost, and the part's per-item cost is calculated
   automatically. Retail pricing still uses that per-item cost and the shop

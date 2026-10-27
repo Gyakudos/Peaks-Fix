@@ -65,11 +65,13 @@ both be true.
 Separate tables on purpose:
 
 - **Parts** are internal consumables attached to a ticket: cost, stock, and
-  consumed during a repair. Each part records its **Vendor ID** (where it is
-  purchased) and **Vendor SKU** (the exact item ordered), alongside its own
-  internal SKU and storage location. A part can be marked as a **single item**
-  or a **bulk purchase**; bulk parts store the quantity and total cost, and the
-  cost per item is calculated from them.
+  consumed during a repair. Each part records a **description**, its **Vendor
+  ID** (where it is purchased) and **Vendor SKU** (the exact item ordered),
+  alongside its own internal SKU and storage location. Shop SKUs use the
+  `000-000` format and are assigned automatically when left blank. The **Parts
+  Invoice** picker searches by either SKU or part name. A part can be marked as
+  a **single item** or a **bulk purchase**; bulk parts store the quantity and
+  total cost, and the cost per item is calculated from them.
 - **Merch** is customer-facing retail: variants (size/colour), SKU/barcode, and
   sales that happen independently of any ticket.
 
@@ -115,6 +117,9 @@ Merging them would corrupt both stock counts and revenue reporting.
   remember where they were purchased and the vendor's catalogue SKU. It also
   adds the purchase type, bulk quantity and bulk total used to calculate the
   per-item cost of a bulk lot.
+- Schema v16 adds `parts.description` and assigns a `000-000` SKU to every part
+  that did not have one, starting after the highest existing formatted SKU.
+  Hand-written SKUs are preserved.
 - **Financial** is calculated from existing records, not a separate ledger.
   Revenue is each closed ticket's invoice subtotal minus its saved discount and
   before tax; cost is the recorded `ticket_items.unit_cost_cents` for parts and

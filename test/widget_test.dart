@@ -7,10 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/app.dart';
 import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/financials.dart';
+import 'package:vola_fix/data/part_skus.dart';
 import 'package:vola_fix/data/photo_templates.dart';
 import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
 import 'package:vola_fix/features/checkout/checkout_page.dart';
+import 'package:vola_fix/features/tickets/required_parts_dialog.dart';
 import 'package:vola_fix/features/tickets/ticket_detail_page.dart';
 import 'package:vola_fix/features/tickets/tickets_page.dart';
 
@@ -224,8 +226,13 @@ class FakeTicketsRepository implements TicketsRepository {
   }
 
   @override
+  Future<String> nextPartSku() async =>
+      PartSku.next(inventoryParts.map((part) => part.sku));
+
+  @override
   Future<void> createInventoryPart({
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -238,11 +245,15 @@ class FakeTicketsRepository implements TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
   }) async {
+    final cleanSku = sku?.trim();
     inventoryParts.add(
       InventoryPart(
         id: inventoryParts.length + 1,
         name: name,
-        sku: sku,
+        description: description,
+        sku: cleanSku == null || cleanSku.isEmpty
+            ? PartSku.next(inventoryParts.map((part) => part.sku))
+            : cleanSku,
         vendorId: vendorId,
         vendorSku: vendorSku,
         category: category,
@@ -262,6 +273,7 @@ class FakeTicketsRepository implements TicketsRepository {
   Future<void> updateInventoryPart({
     required int partId,
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -276,10 +288,15 @@ class FakeTicketsRepository implements TicketsRepository {
   }) async {
     final index = inventoryParts.indexWhere((part) => part.id == partId);
     if (index == -1) throw StateError('Inventory part not found.');
+    final existing = inventoryParts[index];
+    final cleanSku = sku?.trim();
     inventoryParts[index] = InventoryPart(
       id: partId,
       name: name,
-      sku: sku,
+      description: description,
+      sku: cleanSku == null || cleanSku.isEmpty
+          ? existing.sku ?? PartSku.next(inventoryParts.map((part) => part.sku))
+          : cleanSku,
       vendorId: vendorId,
       vendorSku: vendorSku,
       category: category,
@@ -314,6 +331,7 @@ class FakeTicketsRepository implements TicketsRepository {
           ticketItemId: requiredParts.length + 1,
           partId: part.id,
           name: part.name,
+          description: part.description,
           quantity: quantity,
           stock: part.stock,
           rawCostCents: part.rawCostCents,
@@ -329,6 +347,7 @@ class FakeTicketsRepository implements TicketsRepository {
         ticketItemId: existing.ticketItemId,
         partId: existing.partId,
         name: existing.name,
+        description: existing.description,
         quantity: existing.quantity + quantity,
         stock: existing.stock,
         rawCostCents: existing.rawCostCents,
@@ -946,6 +965,7 @@ void main() {
     final repository = FakeTicketsRepository();
     await repository.createInventoryPart(
       name: 'USB-C charging port',
+      description: 'Charging board for Switch',
       sku: 'PORT-1',
       vendorId: 'PartsPro',
       vendorSku: 'TYPE-C-16PIN',
@@ -989,6 +1009,15 @@ void main() {
     expect(
       tester
           .widget<TextField>(
+            find.byKey(const Key('inventory-part-description')),
+          )
+          .controller!
+          .text,
+      'Charging board for Switch',
+    );
+    expect(
+      tester
+          .widget<TextField>(
             find.byKey(const Key('inventory-part-vendor-id')),
           )
           .controller!
@@ -1008,6 +1037,10 @@ void main() {
     await tester.enterText(
       find.byKey(const Key('inventory-part-name')),
       'USB-C replacement port',
+    );
+    await tester.enterText(
+      find.byKey(const Key('inventory-part-description')),
+      '24-pin replacement board',
     );
     await tester.enterText(
       find.byKey(const Key('inventory-part-vendor-id')),
@@ -1043,6 +1076,7 @@ void main() {
 
     final edited = repository.inventoryParts.single;
     expect(edited.name, 'USB-C replacement port');
+    expect(edited.description, '24-pin replacement board');
     expect(edited.vendorId, 'Mouser');
     expect(edited.vendorSku, 'USB-C-24PIN');
     expect(edited.stock, 6);
@@ -2629,6 +2663,13 @@ void main() {
     expect(find.textContaining('No inventory parts yet.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('required-parts-create-inventory')));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('inventory-part-sku')))
+          .controller!
+          .text,
+      '001-001',
+    );
     await tester.enterText(
       find.byKey(const Key('inventory-part-name')),
       'USB-C charging port',
@@ -2655,17 +2696,74 @@ void main() {
 
     await tester.tap(find.byKey(const Key('required-parts-picker')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('USB-C charging port · stock 4').last);
+    await tester.tap(
+      find.text('001-001 · USB-C charging port · stock 4').last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('required-parts-add')));
     await tester.pumpAndSettle();
     expect(find.text('USB-C charging port'), findsOneWidget);
     expect(repository.requiredParts.single.quantity, 1);
     expect(repository.inventoryParts.single.stock, 4);
+    expect(repository.inventoryParts.single.sku, '001-001');
     expect(repository.inventoryParts.single.rawCostCents, 1000);
     expect(repository.inventoryParts.single.retailPriceCents, 1350);
     expect(find.textContaining('Qty 1 · stock 4'), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('parts invoice picker filters by SKU or part name',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.createInventoryPart(
+      name: 'USB-C charging port',
+      description: 'Charging board for Switch',
+      startingStock: 4,
+      rawCostCents: 1000,
+      retailPriceCents: 1350,
+    );
+    await repository.createInventoryPart(
+      name: 'Speaker module',
+      startingStock: 2,
+      rawCostCents: 500,
+      retailPriceCents: 700,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RequiredPartsDialog(repository: repository, ticketId: 1),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Parts Invoice'), findsOneWidget);
+
+    final dropdown = tester.widget<DropdownMenu<int>>(
+      find.byKey(const Key('required-parts-picker')),
+    );
+    expect(dropdown.enableFilter, isTrue);
+
+    final entries = dropdown.dropdownMenuEntries;
+    expect(entries.map((entry) => entry.label), [
+      '001-001 · USB-C charging port · stock 4',
+      '001-002 · Speaker module · stock 2',
+    ]);
+
+    List<String> filtered(String query) =>
+        dropdown.filterCallback!(entries, query)
+            .map((entry) => entry.label)
+            .toList();
+
+    expect(filtered('001-002'), ['001-002 · Speaker module · stock 2']);
+    expect(filtered('charging'), ['001-001 · USB-C charging port · stock 4']);
+    expect(filtered('switch'), ['001-001 · USB-C charging port · stock 4']);
+    expect(filtered(''), hasLength(2));
   });
 
   testWidgets('reopening report 1 locks report 2 again',

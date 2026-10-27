@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'part_skus.dart';
 import 'photo_templates.dart';
 import 'taxes.dart';
 
@@ -459,6 +460,9 @@ class ReportContactLog extends Table {
 class Parts extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 120)();
+  TextColumn get description => text().nullable()();
+
+  /// Shop SKU in `NNN-NNN` form. Blank SKUs are assigned at creation time.
   TextColumn get sku => text().nullable()();
 
   /// Where the part is purchased, e.g. a supplier account or store name.
@@ -617,8 +621,10 @@ class AppDatabase extends _$AppDatabase {
 
   /// v15 added the inventory part vendor ID and vendor SKU, plus purchase type
   /// and bulk-lot quantity/total so cost per item can be recalculated.
+  /// v16 added the part description and assigned `NNN-NNN` SKUs to parts that
+  /// did not have one.
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -742,6 +748,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(parts, parts.purchaseType);
             await m.addColumn(parts, parts.bulkQuantity);
             await m.addColumn(parts, parts.bulkTotalCents);
+          }
+          if (from < 16) {
+            await m.addColumn(parts, parts.description);
+            await _backfillPartSkus();
           }
         },
       );
@@ -2154,8 +2164,33 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// The next free shop SKU in `NNN-NNN` form.
+  Future<String> nextPartSku() async {
+    final query = selectOnly(parts)..addColumns([parts.sku]);
+    final rows = await query.get();
+    return PartSku.next(rows.map((row) => row.read(parts.sku)));
+  }
+
+  /// Gives every part without a SKU the next formatted code, while keeping all
+  /// existing SKUs exactly as the shop entered them.
+  Future<void> _backfillPartSkus() async {
+    final rows = await select(parts).get();
+    var highest = PartSku.highestSequence(rows.map((part) => part.sku));
+    if (highest < PartSku.firstSequence) {
+      highest = PartSku.firstSequence - 1;
+    }
+    for (final part in rows) {
+      if (_clean(part.sku) != null) continue;
+      highest++;
+      await (update(parts)..where((row) => row.id.equals(part.id))).write(
+        PartsCompanion(sku: Value(PartSku.format(highest))),
+      );
+    }
+  }
+
   Future<int> createInventoryPart({
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -2195,11 +2230,13 @@ class AppDatabase extends _$AppDatabase {
     if (unitCostCents < 0 || retailPriceCents < 0) {
       throw ArgumentError('Part costs must not be negative.');
     }
+    final cleanSku = _clean(sku);
     return transaction(() async {
       final partId = await into(parts).insert(
         PartsCompanion.insert(
           name: cleanName,
-          sku: Value(_clean(sku)),
+          description: Value(_clean(description)),
+          sku: Value(cleanSku ?? await nextPartSku()),
           vendorId: Value(_clean(vendorId)),
           vendorSku: Value(_clean(vendorSku)),
           category: Value(_clean(category)),
@@ -2228,6 +2265,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateInventoryPart({
     required int partId,
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -2263,6 +2301,7 @@ class AppDatabase extends _$AppDatabase {
     if (unitCostCents < 0 || retailPriceCents < 0) {
       throw ArgumentError('Part costs must not be negative.');
     }
+    final cleanSku = _clean(sku);
     await transaction(() async {
       final existing = await (select(parts)
             ..where((part) => part.id.equals(partId)))
@@ -2274,7 +2313,10 @@ class AppDatabase extends _$AppDatabase {
       await (update(parts)..where((part) => part.id.equals(partId))).write(
         PartsCompanion(
           name: Value(cleanName),
-          sku: Value(_clean(sku)),
+          description: Value(_clean(description)),
+          sku: Value(
+            cleanSku ?? _clean(existing.sku) ?? await nextPartSku(),
+          ),
           vendorId: Value(_clean(vendorId)),
           vendorSku: Value(_clean(vendorSku)),
           category: Value(_clean(category)),

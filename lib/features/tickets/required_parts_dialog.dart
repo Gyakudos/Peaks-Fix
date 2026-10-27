@@ -4,6 +4,30 @@ import 'package:flutter/services.dart';
 import '../../data/tickets_repository.dart';
 import '../parts/add_inventory_part_dialog.dart';
 
+/// Label shown in the Parts Invoice picker.
+///
+/// The menu's filter matches this text, so it contains both the SKU and the
+/// part name.
+String partPickerLabel(InventoryPart part) {
+  final sku = part.sku?.trim();
+  return [
+    if (sku != null && sku.isNotEmpty) sku,
+    part.name,
+    'stock ${part.stock}',
+  ].join(' · ');
+}
+
+/// Whether [part] matches the text typed into the Parts Invoice picker.
+bool partMatchesQuery(InventoryPart part, String query) {
+  final needle = query.trim().toLowerCase();
+  if (needle.isEmpty) return true;
+  return [
+    part.sku ?? '',
+    part.name,
+    part.description ?? '',
+  ].any((value) => value.toLowerCase().contains(needle));
+}
+
 Future<void> showRequiredPartsDialog(
   BuildContext context, {
   required TicketsRepository repository,
@@ -112,7 +136,7 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
                 builder: (context, requiredSnapshot) {
                   if (requiredSnapshot.hasError) {
                     return const _PartsError(
-                      message: 'Could not load required parts for this ticket.',
+                      message: 'Could not load parts for this invoice.',
                     );
                   }
                   final requiredParts = requiredSnapshot.data ?? const [];
@@ -124,7 +148,7 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
                         children: [
                           const Expanded(
                             child: Text(
-                              'Required Parts',
+                              'Parts Invoice',
                               style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w600,
@@ -170,13 +194,26 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
                                 key: const Key('required-parts-picker'),
                                 width: double.infinity,
                                 initialSelection: _selectedPartId,
-                                label: const Text('Inventory part'),
+                                label: const Text('Search by SKU or part name'),
+                                hintText: 'Type a SKU or part name',
+                                leadingIcon: const Icon(Icons.search),
+                                enableFilter: true,
+                                requestFocusOnTap: true,
+                                filterCallback: (entries, filter) => [
+                                  for (final entry in entries)
+                                    if (partMatchesQuery(
+                                      inventory.firstWhere(
+                                        (part) => part.id == entry.value,
+                                      ),
+                                      filter,
+                                    ))
+                                      entry,
+                                ],
                                 dropdownMenuEntries: [
                                   for (final part in inventory)
                                     DropdownMenuEntry(
                                       value: part.id,
-                                      label:
-                                          '${part.name} · stock ${part.stock}',
+                                      label: partPickerLabel(part),
                                     ),
                                 ],
                                 onSelected: _busy
@@ -216,7 +253,7 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
                         Flexible(
                           child: requiredParts.isEmpty
                               ? const Center(
-                                  child: Text('No required parts added yet.'),
+                                  child: Text('No parts on this invoice yet.'),
                                 )
                               : ListView.builder(
                                   shrinkWrap: true,
@@ -230,6 +267,7 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
                                       contentPadding: EdgeInsets.zero,
                                       title: Text(part.name),
                                       subtitle: Text(
+                                        '${part.description == null || part.description!.trim().isEmpty ? '' : '${part.description!.trim()} · '}'
                                         'Qty ${part.quantity} · stock '
                                         '${part.stock}'
                                         ' · Raw ${_money(part.rawCostCents)}'

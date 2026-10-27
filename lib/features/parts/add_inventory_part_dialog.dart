@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../../data/part_skus.dart';
 import '../../data/tickets_repository.dart';
 
 Future<void> showAddInventoryPartDialog(
@@ -45,6 +46,7 @@ class AddInventoryPartDialog extends StatefulWidget {
 
 class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
   final _skuController = TextEditingController();
   final _vendorIdController = TextEditingController();
   final _vendorSkuController = TextEditingController();
@@ -65,8 +67,12 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     super.initState();
     unawaited(_loadMarkup());
     final part = widget.part;
-    if (part == null) return;
+    if (part == null) {
+      unawaited(_loadSuggestedSku());
+      return;
+    }
     _nameController.text = part.name;
+    _descriptionController.text = part.description ?? '';
     _skuController.text = part.sku ?? '';
     _vendorIdController.text = part.vendorId ?? '';
     _vendorSkuController.text = part.vendorSku ?? '';
@@ -90,9 +96,20 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     } catch (_) {}
   }
 
+  /// Shows the code that will be assigned when the part is saved, so the shop
+  /// can write it on the bin before saving.
+  Future<void> _loadSuggestedSku() async {
+    try {
+      final sku = await widget.repository.nextPartSku();
+      if (!mounted || _skuController.text.trim().isNotEmpty) return;
+      setState(() => _skuController.text = sku);
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
+    _descriptionController.dispose();
     _skuController.dispose();
     _vendorIdController.dispose();
     _vendorSkuController.dispose();
@@ -178,6 +195,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     final isBulk = _purchaseType == PartPurchaseType.bulk;
     final bulkQuantity = int.tryParse(_bulkQuantityController.text.trim());
     final bulkTotalCents = _moneyCents(_bulkTotalController.text);
+    final sku = _skuController.text.trim();
     if (_nameController.text.trim().isEmpty ||
         startingStock == null ||
         startingStock < 0 ||
@@ -191,6 +209,11 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           'Enter a part name, valid stock quantity, and non-negative costs.');
       return;
     }
+    if (widget.part == null && sku.isNotEmpty && !PartSku.isValid(sku)) {
+      setState(
+          () => _error = 'Use the 000-000 SKU format, for example 001-003.');
+      return;
+    }
     final unitCostCents =
         isBulk ? (bulkTotalCents! / bulkQuantity!).round() : rawCostCents;
     setState(() {
@@ -202,7 +225,8 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
       if (part == null) {
         await widget.repository.createInventoryPart(
           name: _nameController.text,
-          sku: _skuController.text,
+          description: _descriptionController.text,
+          sku: sku,
           vendorId: _vendorIdController.text,
           vendorSku: _vendorSkuController.text,
           category: _categoryController.text,
@@ -218,7 +242,8 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
         await widget.repository.updateInventoryPart(
           partId: part.id,
           name: _nameController.text,
-          sku: _skuController.text,
+          description: _descriptionController.text,
+          sku: sku,
           vendorId: _vendorIdController.text,
           vendorSku: _vendorSkuController.text,
           category: _categoryController.text,
@@ -261,9 +286,24 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 ),
               ),
               TextField(
+                key: const Key('inventory-part-description'),
+                controller: _descriptionController,
+                minLines: 1,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                  hintText: 'e.g. Charging port board for Nintendo Switch',
+                ),
+              ),
+              TextField(
                 key: const Key('inventory-part-sku'),
                 controller: _skuController,
-                decoration: const InputDecoration(labelText: 'SKU (optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'SKU',
+                  hintText: '001-001',
+                  helperText:
+                      'Shop format 000-000. Leave blank to auto-assign.',
+                ),
               ),
               TextField(
                 key: const Key('inventory-part-vendor-id'),

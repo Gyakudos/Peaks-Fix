@@ -255,6 +255,7 @@ class InventoryPart {
     required this.id,
     required this.name,
     required this.stock,
+    this.description,
     this.rawCostCents = 0,
     this.retailPriceCents = 0,
     this.sku,
@@ -269,6 +270,7 @@ class InventoryPart {
 
   final int id;
   final String name;
+  final String? description;
   final int stock;
   final int rawCostCents;
   final int retailPriceCents;
@@ -289,6 +291,7 @@ class RequiredPart {
     required this.name,
     required this.quantity,
     required this.stock,
+    this.description,
     this.rawCostCents = 0,
     this.retailPriceCents = 0,
     this.sku,
@@ -298,6 +301,7 @@ class RequiredPart {
   final int ticketItemId;
   final int partId;
   final String name;
+  final String? description;
   final int quantity;
   final int stock;
   final int rawCostCents;
@@ -522,10 +526,14 @@ abstract class TicketsRepository {
 
   Stream<List<InventoryPart>> watchInventoryParts();
 
+  /// The next auto-assigned `NNN-NNN` shop SKU.
+  Future<String> nextPartSku();
+
   Stream<List<RequiredPart>> watchRequiredParts(int ticketId);
 
   Future<void> createInventoryPart({
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -542,6 +550,7 @@ abstract class TicketsRepository {
   Future<void> updateInventoryPart({
     required int partId,
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -864,6 +873,7 @@ class DriftTicketsRepository implements TicketsRepository {
             InventoryPart(
               id: part.id,
               name: part.name,
+              description: part.description,
               stock: part.stock,
               rawCostCents: part.costCents,
               retailPriceCents: part.priceCents,
@@ -899,6 +909,7 @@ class DriftTicketsRepository implements TicketsRepository {
                 ticketItemId: row.readTable(_db.ticketItems).id,
                 partId: row.readTable(_db.parts).id,
                 name: row.readTable(_db.parts).name,
+                description: row.readTable(_db.parts).description,
                 quantity: row.readTable(_db.ticketItems).quantity,
                 stock: row.readTable(_db.parts).stock,
                 rawCostCents: row.readTable(_db.ticketItems).unitCostCents ??
@@ -1082,8 +1093,12 @@ class DriftTicketsRepository implements TicketsRepository {
       );
 
   @override
+  Future<String> nextPartSku() => _db.nextPartSku();
+
+  @override
   Future<void> createInventoryPart({
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -1098,6 +1113,7 @@ class DriftTicketsRepository implements TicketsRepository {
   }) async {
     await _db.createInventoryPart(
       name: name,
+      description: description,
       sku: sku,
       vendorId: vendorId,
       vendorSku: vendorSku,
@@ -1116,6 +1132,7 @@ class DriftTicketsRepository implements TicketsRepository {
   Future<void> updateInventoryPart({
     required int partId,
     required String name,
+    String? description,
     String? sku,
     String? vendorId,
     String? vendorSku,
@@ -1131,6 +1148,7 @@ class DriftTicketsRepository implements TicketsRepository {
       _db.updateInventoryPart(
         partId: partId,
         name: name,
+        description: description,
         sku: sku,
         vendorId: vendorId,
         vendorSku: vendorSku,
