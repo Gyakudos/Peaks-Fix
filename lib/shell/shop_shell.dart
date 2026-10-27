@@ -121,6 +121,7 @@ class _ShopShellState extends State<ShopShell> {
                   onDestinationSelected: (index) =>
                       setState(() => _selected = index),
                   labelType: NavigationRailLabelType.all,
+                  minWidth: 84,
                   destinations: [
                     for (final destination in destinations)
                       NavigationRailDestination(
