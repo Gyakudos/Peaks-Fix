@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:vola_fix/app.dart';
 import 'package:vola_fix/data/database.dart';
+import 'package:vola_fix/data/financials.dart';
 import 'package:vola_fix/data/photo_templates.dart';
 import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
@@ -179,6 +180,29 @@ class FakeTicketsRepository implements TicketsRepository {
   Stream<List<TicketBoardEntry>> watchBoard() async* {
     yield List.unmodifiable(boardTickets);
     yield* _boardUpdates.stream;
+  }
+
+  @override
+  Stream<FinancialSummary> watchFinancialSummary() async* {
+    FinancialSummary current() {
+      var revenue = 0;
+      var count = 0;
+      for (final ticket in boardTickets) {
+        if (ticket.status != TicketStatus.closed) continue;
+        count++;
+        revenue += invoices[ticket.id]?.totalCents ?? 0;
+      }
+      return FinancialSummary(
+        revenueCents: revenue,
+        costCents: 0,
+        staffPayCents: 0,
+        tracked: Duration.zero,
+        ticketCount: count,
+      );
+    }
+
+    yield current();
+    yield* _boardUpdates.stream.map((_) => current());
   }
 
   @override
@@ -1119,6 +1143,9 @@ void main() {
     expect(find.text('Parts'), findsWidgets);
     expect(find.text('Financial'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
+    expect(find.byKey(const Key('nav-badge-checkout')), findsOneWidget);
+    expect(find.byKey(const Key('nav-badge-closed')), findsOneWidget);
+    expect(find.byKey(const Key('nav-badge-financial')), findsOneWidget);
   });
 
   testWidgets('checkout adds merchandise, takes payment, and closes ticket',
@@ -1214,6 +1241,8 @@ void main() {
     await tester.pumpWidget(VolaFixApp(tickets: repository));
     await tester.pumpAndSettle();
     expect(find.text('PF-000001'), findsNothing);
+    expect(find.byKey(const Key('nav-badge-closed')), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
 
     await tester.tap(find.text('Closed Tickets').first);
     await tester.pumpAndSettle();

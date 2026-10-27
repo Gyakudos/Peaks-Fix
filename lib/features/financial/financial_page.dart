@@ -72,6 +72,7 @@ class _FinancialPageState extends State<FinancialPage> {
                   period: _period,
                   ticketCount: tickets.length,
                   staffCount: staffRows.length,
+                  netEstimateCents: netEstimate,
                   onPeriodChanged: (period) => setState(() => _period = period),
                 ),
                 Expanded(
@@ -186,12 +187,14 @@ class _Header extends StatelessWidget {
     required this.period,
     required this.ticketCount,
     required this.staffCount,
+    required this.netEstimateCents,
     required this.onPeriodChanged,
   });
 
   final FinancialPeriod period;
   final int ticketCount;
   final int staffCount;
+  final int netEstimateCents;
   final ValueChanged<FinancialPeriod> onPeriodChanged;
 
   @override
@@ -233,6 +236,18 @@ class _Header extends StatelessWidget {
                   Chip(
                     label: Text(
                       '$ticketCount closed · $staffCount staff',
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: theme.colorScheme.outlineVariant),
+                  ),
+                  Chip(
+                    key: const Key('financial-header-net'),
+                    label: Text(
+                      'Net ${_money(netEstimateCents)}',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: _profitColor(context, netEstimateCents),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(color: theme.colorScheme.outlineVariant),

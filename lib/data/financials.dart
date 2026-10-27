@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -85,6 +86,31 @@ class FinancialStaff {
     if (hourlyRateCents <= 0) return null;
     return (duration.inSeconds * hourlyRateCents / 3600).round();
   }
+}
+
+/// Headline money for the rail badge and the Financial header.
+///
+/// All figures are for closed tickets and tracked shifts. [staffPayCents] only
+/// includes roster members with an hourly rate, so the net estimate is a
+/// conservative figure until pay is filled in.
+class FinancialSummary {
+  const FinancialSummary({
+    required this.revenueCents,
+    required this.costCents,
+    required this.staffPayCents,
+    required this.tracked,
+    required this.ticketCount,
+  });
+
+  final int revenueCents;
+  final int costCents;
+  final int staffPayCents;
+  final Duration tracked;
+  final int ticketCount;
+
+  int get grossProfitCents => revenueCents - costCents;
+
+  int get netEstimateCents => grossProfitCents - staffPayCents;
 }
 
 /// Reporting window for the Financial tab.
@@ -191,6 +217,72 @@ extension FinancialQueries on AppDatabase {
       );
     });
   }
+
+  /// Revenue, cost and staff pay for every closed ticket.
+  ///
+  /// The two source queries update independently, so this waits for both and
+  /// re-emits whenever either changes.
+  Stream<FinancialSummary> watchFinancialSummary() {
+    late StreamController<FinancialSummary> controller;
+    StreamSubscription<List<FinancialTicket>>? ticketSubscription;
+    StreamSubscription<List<FinancialStaff>>? staffSubscription;
+    List<FinancialTicket>? tickets;
+    List<FinancialStaff>? staff;
+
+    void emit() {
+      if (tickets == null || staff == null) return;
+      controller.add(
+        summarizeFinancials(tickets: tickets!, staff: staff!),
+      );
+    }
+
+    controller = StreamController<FinancialSummary>(
+      onListen: () {
+        ticketSubscription = watchFinancialTickets().listen((value) {
+          tickets = value;
+          emit();
+        });
+        staffSubscription = watchFinancialStaff().listen((value) {
+          staff = value;
+          emit();
+        });
+      },
+      onCancel: () async {
+        await ticketSubscription?.cancel();
+        await staffSubscription?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+}
+
+/// Adds up closed-ticket money and tracked staff pay for [now].
+///
+/// Pass [now] in tests; production uses the current clock so an in-progress
+/// shift counts up to this moment.
+FinancialSummary summarizeFinancials({
+  required List<FinancialTicket> tickets,
+  required List<FinancialStaff> staff,
+  DateTime? now,
+}) {
+  final cutoff = now ?? DateTime.now();
+  final revenue =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.revenueCents);
+  final cost = tickets.fold<int>(0, (sum, ticket) => sum + ticket.costCents);
+  var tracked = Duration.zero;
+  var staffPay = 0;
+  for (final member in staff) {
+    final duration = member.trackedIn(null, cutoff);
+    tracked += duration;
+    staffPay += member.payCentsFor(duration) ?? 0;
+  }
+  return FinancialSummary(
+    revenueCents: revenue,
+    costCents: cost,
+    staffPayCents: staffPay,
+    tracked: tracked,
+    ticketCount: tickets.length,
+  );
 }
 
 class _TicketAccumulator {

@@ -9,6 +9,9 @@ import '../features/parts/parts_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/tickets/tickets_page.dart';
 
+/// A live figure shown on a destination's icon.
+enum ShopBadge { checkout, closed, profit }
+
 /// One top-level tab in the shop shell.
 ///
 /// The same list drives both the desktop rail and the mobile bottom bar, so
@@ -19,12 +22,16 @@ class ShopDestination {
     required this.icon,
     required this.selectedIcon,
     required this.page,
+    this.badge,
   });
 
   final String label;
   final IconData icon;
   final IconData selectedIcon;
   final Widget page;
+
+  /// The live figure to overlay on the icon, if any.
+  final ShopBadge? badge;
 
   static const List<ShopDestination> all = <ShopDestination>[
     ShopDestination(
@@ -38,12 +45,14 @@ class ShopDestination {
       icon: Icons.inventory_2_outlined,
       selectedIcon: Icons.inventory_2,
       page: TicketsPage(closedOnly: true),
+      badge: ShopBadge.closed,
     ),
     ShopDestination(
       label: 'Checkout',
       icon: Icons.point_of_sale_outlined,
       selectedIcon: Icons.point_of_sale,
       page: CheckoutPage(),
+      badge: ShopBadge.checkout,
     ),
     ShopDestination(
       label: 'Calendar',
@@ -74,6 +83,7 @@ class ShopDestination {
       icon: Icons.insights_outlined,
       selectedIcon: Icons.insights,
       page: FinancialPage(),
+      badge: ShopBadge.profit,
     ),
     ShopDestination(
       label: 'Settings',

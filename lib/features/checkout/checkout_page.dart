@@ -25,10 +25,19 @@ class CheckoutPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
               child: Row(
                 children: [
+                  Icon(
+                    Icons.point_of_sale_outlined,
+                    size: 26,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Checkout',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
                     ),
                   ),
                   if (ready.isNotEmpty) Chip(label: Text('${ready.length}')),

@@ -29,6 +29,10 @@ One destination list (`lib/shell/shop_destination.dart`) drives both navs:
 - **Wide (>= 900 px, i.e. any normal Windows window):** `NavigationRail`.
 - **Narrow (Android, small Windows window):** `NavigationBar` with all 9 items.
 
+Checkout and Closed Tickets show a live count on their tab icon; Financial
+shows the all-time net estimate in a compact badge. Each of those pages repeats
+the figure in its header, where Financial follows the selected period.
+
 The Windows title bar is rendered by Flutter above the navigator
 (`lib/app.dart`), so pushed routes such as intake never cover the window
 buttons.

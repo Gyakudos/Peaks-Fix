@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import 'database.dart';
+import 'financials.dart';
 import 'photo_store.dart';
 import 'photo_templates.dart';
 
@@ -493,6 +494,9 @@ abstract class TicketsRepository {
 
   Stream<List<TicketBoardEntry>> watchBoard();
 
+  /// All-time closed-ticket revenue, cost and staff pay for the rail badge.
+  Stream<FinancialSummary> watchFinancialSummary();
+
   Future<void> deleteTicket(int ticketId);
 
   Stream<List<InventoryPart>> watchInventoryParts();
@@ -802,6 +806,10 @@ class DriftTicketsRepository implements TicketsRepository {
 
   @override
   Stream<List<TicketBoardEntry>> watchBoard() => _board;
+
+  @override
+  Stream<FinancialSummary> watchFinancialSummary() =>
+      _db.watchFinancialSummary();
 
   @override
   Future<void> deleteTicket(int ticketId) async {

@@ -193,6 +193,46 @@ void main() {
     );
   });
 
+  test('financial summary combines revenue, cost and staff pay', () {
+    final summary = summarizeFinancials(
+      tickets: [
+        FinancialTicket(
+          ticketId: 1,
+          number: 'PF-000001',
+          customerName: 'Alex Customer',
+          device: 'Switch OLED',
+          closedAt: DateTime(2026, 10, 19),
+          revenueCents: 16000,
+          costCents: 2000,
+        ),
+      ],
+      staff: [
+        FinancialStaff(
+          id: 'alex',
+          name: 'Alex Tech',
+          job: 'Tech 2',
+          isActive: true,
+          hourlyRateCents: 2500,
+          shifts: [
+            FinancialShift(
+              start: DateTime(2026, 10, 20, 9),
+              end: DateTime(2026, 10, 20, 11),
+            ),
+          ],
+        ),
+      ],
+      now: DateTime(2026, 10, 20, 12),
+    );
+
+    expect(summary.revenueCents, 16000);
+    expect(summary.costCents, 2000);
+    expect(summary.grossProfitCents, 14000);
+    expect(summary.tracked, const Duration(hours: 2));
+    expect(summary.staffPayCents, 5000);
+    expect(summary.netEstimateCents, 9000);
+    expect(summary.ticketCount, 1);
+  });
+
   testWidgets('financial page shows closed-ticket profit and staff pay',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1400, 1600);
@@ -229,6 +269,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Financial'), findsOneWidget);
+    expect(find.text('Net \$102.50'), findsOneWidget);
     expect(find.text('Revenue'), findsOneWidget);
     expect(find.text('Parts & merch cost'), findsOneWidget);
     expect(find.text('Gross profit'), findsOneWidget);

@@ -92,7 +92,9 @@ class _Header extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.receipt_long_outlined,
+                    closedOnly
+                        ? Icons.inventory_2_outlined
+                        : Icons.receipt_long_outlined,
                     size: 26,
                     color: theme.colorScheme.primary,
                   ),
