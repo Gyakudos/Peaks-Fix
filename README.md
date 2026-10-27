@@ -35,9 +35,12 @@ printing are still being built.
   associated ticket.
 - **Customers** — searchable customer profiles with editable contact details
   and notes, owned devices, and repair-ticket history.
-- **Device catalog** — 7 categories, including Vacuum with common Dyson, Kirby,
-  Dirt Devil and Shark models, plus General Electronics for unlisted devices;
-  seeded additively so upgrades never wipe shop edits.
+- **Device catalog** — categories, brand headings and devices are edited in
+  Settings: add, rename, hide, or remove any of the three levels. 7 categories
+  are seeded, including Vacuum with common Dyson, Kirby, Dirt Devil and Shark
+  models, plus General Electronics for unlisted devices; seeding is additive so
+  upgrades never wipe shop edits, and removing a catalog row leaves past
+  tickets with the device name they recorded.
 - **Report 1 checklist** — per-device photo templates (3DS gets its own five
   shots; Vacuum gets Front, Back and Charge Port; General Electronics gets
   generic device shots labeled with its device name), previewed at intake and
