@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../data/database.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
+import 'device_catalog_section.dart';
+import 'section_heading.dart';
 
 const _staffJobs = ['Admin', 'Front Desk', 'Tech 3', 'Tech 2', 'Tech 1'];
 const _invalidPayMessage =
@@ -29,39 +31,6 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _staffFuture = _readStaff(_database);
     });
-  }
-
-  Future<void> _addCategory() async {
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => const _NameDialog(
-        title: 'Add device category',
-        label: 'Category name',
-      ),
-    );
-    final trimmed = name?.trim() ?? '';
-    if (trimmed.isEmpty) return;
-    try {
-      final categories =
-          await _database.select(_database.deviceCategories).get();
-      final nextOrder = categories.fold<int>(
-        0,
-        (maxOrder, category) =>
-            category.sortOrder >= maxOrder ? category.sortOrder + 1 : maxOrder,
-      );
-      await _database.into(_database.deviceCategories).insert(
-            DeviceCategoriesCompanion.insert(
-              name: trimmed,
-              sortOrder: drift.Value(nextOrder),
-            ),
-          );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('That category already exists.')),
-        );
-      }
-    }
   }
 
   Future<void> _addStaff() async {
@@ -137,47 +106,11 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         children: [
-          _SectionHeading(
-            title: 'Device categories',
-            action: FilledButton.icon(
-              onPressed: _addCategory,
-              icon: const Icon(Icons.add),
-              label: const Text('Add category'),
-            ),
-          ),
-          StreamBuilder<List<DeviceCategory>>(
-            stream: (_database.select(_database.deviceCategories)
-                  ..orderBy([
-                    (category) => drift.OrderingTerm.asc(category.sortOrder),
-                    (category) => drift.OrderingTerm.asc(category.name),
-                  ]))
-                .watch(),
-            builder: (context, snapshot) {
-              final categories = snapshot.data ?? const <DeviceCategory>[];
-              if (categories.isEmpty) {
-                return const ListTile(title: Text('No device categories yet.'));
-              }
-              return Column(
-                children: categories
-                    .map(
-                      (category) => SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(category.name),
-                        subtitle: Text(category.isActive ? 'Active' : 'Hidden'),
-                        value: category.isActive,
-                        onChanged: (active) => _database
-                            .update(_database.deviceCategories)
-                            .replace(category.copyWith(isActive: active)),
-                      ),
-                    )
-                    .toList(),
-              );
-            },
-          ),
+          DeviceCatalogSection(database: _database),
           const Divider(height: 36),
           _MarkupSettings(database: _database),
           const Divider(height: 36),
-          _SectionHeading(
+          SectionHeading(
             title: 'Staff',
             action: FilledButton.icon(
               onPressed: _addStaff,
@@ -313,7 +246,7 @@ class _StaffClockPageState extends State<StaffClockPage> {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              const _SectionHeading(title: 'Sign in'),
+              const SectionHeading(title: 'Sign in'),
               if (data.staff.isEmpty)
                 const ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -347,7 +280,7 @@ class _StaffClockPageState extends State<StaffClockPage> {
                   );
                 }),
               const Divider(height: 36),
-              const _SectionHeading(title: 'Recent shifts'),
+              const SectionHeading(title: 'Recent shifts'),
               if (recentSessions.isEmpty)
                 const ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -797,7 +730,7 @@ class _StaffHoursPageState extends State<StaffHoursPage> {
                 ),
               ],
               const Divider(height: 36),
-              const _SectionHeading(title: 'Shift history'),
+              const SectionHeading(title: 'Shift history'),
               if (data.shifts.isEmpty)
                 const ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -973,47 +906,6 @@ class _StaffStatCard extends StatelessWidget {
   }
 }
 
-class _NameDialog extends StatefulWidget {
-  const _NameDialog({required this.title, required this.label});
-
-  final String title;
-  final String label;
-
-  @override
-  State<_NameDialog> createState() => _NameDialogState();
-}
-
-class _NameDialogState extends State<_NameDialog> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.title),
-        content: TextField(
-          controller: _controller,
-          autofocus: true,
-          decoration: InputDecoration(labelText: widget.label),
-          onSubmitted: (_) => Navigator.pop(context, _controller.text),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, _controller.text),
-            child: const Text('Add'),
-          ),
-        ],
-      );
-}
-
 class _MarkupSettings extends StatefulWidget {
   const _MarkupSettings({required this.database});
 
@@ -1173,7 +1065,7 @@ class _MarkupSettingsState extends State<_MarkupSettings> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SectionHeading(title: 'Pricing markups'),
+        const SectionHeading(title: 'Pricing markups'),
         if (!_loaded)
           const LinearProgressIndicator()
         else ...[
@@ -1196,29 +1088,6 @@ class _MarkupSettingsState extends State<_MarkupSettings> {
       ],
     );
   }
-}
-
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.title, this.action});
-
-  final String title;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            if (action != null) action!,
-          ],
-        ),
-      );
 }
 
 class _StaffMember {
