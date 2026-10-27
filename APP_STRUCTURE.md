@@ -86,7 +86,8 @@ Merging them would corrupt both stock counts and revenue reporting.
   Portable Consoles, Handheld PCs, Controllers) with 78 pickable models, 12
   services, and settings (shop name, `PF` ticket prefix, `PFS` shop-serial
   prefix, `G` tag prefix, 90-day warranty default and terms, 5% GST on, 7% PST
-  off). Seeding is
+  off). Each device category also carries the warranty period it offers on
+  Report 3. Seeding is
   additive and matched by name:
   later launches only add rows that are missing, so shop edits, custom models
   and added categories survive, and an existing database never needs to be wiped
@@ -120,6 +121,16 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Schema v16 adds `parts.description` and assigns a `000-000` SKU to every part
   that did not have one, starting after the highest existing formatted SKU.
   Hand-written SKUs are preserved.
+- Schema v17 adds `device_categories.warranty_days`, the warranty period each
+  category offers on Report 3. It defaults to 90 days, so existing categories
+  pick up the shop default without touching their other settings.
+- Report 3 **warranty coverage** resolves its default from the ticket's device
+  category (`device_categories.warranty_days`), falling back to the shop's
+  `warranty_days` setting and its `warranty_terms`. The per-ticket length and
+  terms are stored on the client `ticket_reports` row. Completing Report 3
+  stamps `warranty_start_at` and freezes the days/terms; reopening clears only
+  the start date. Saved customer devices read the latest completed Report 3
+  warranty for that device, so a later repair shows the newer cover.
 - **Financial** is calculated from existing records, not a separate ledger.
   Revenue is each closed ticket's invoice subtotal minus its saved discount and
   before tax; cost is the recorded `ticket_items.unit_cost_cents` for parts and
@@ -199,7 +210,8 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Each customer device stores its catalog model or free-text name, variant,
   side, and serial. Intake can reuse a saved device; a serial match also links
   future repair tickets to that device. Existing ticket device records are
-  migrated into the customer device registry.
+  migrated into the customer device registry. The customer page shows each
+  device's latest warranty, or **No warranty on file**.
 
 ## Current state
 
@@ -220,13 +232,15 @@ Merging them would corrupt both stock counts and revenue reporting.
 - **Reports** — Report 2 has an ordered internal bench log for notes and photos.
   Entries sync into an editable Report 3 draft while unedited content stays
   linked. Report 2 and Report 3 each have **Complete** and **Reopen** controls;
-  completing Report 3 confirms and sends the ticket to Checkout. Structured
-  estimates, the two-page client report and printing remain to be built; see
-  `REPORTS.md`.
-- **Customers** — searchable and editable profiles with devices and repair
-  history. Intake can select existing customers and devices.
+  completing Report 3 confirms, freezes its warranty coverage and sends the
+  ticket to Checkout. Structured estimates, client-report printing and the
+  remaining Report 3 projections remain to be built; see `REPORTS.md`.
+- **Customers** — searchable and editable profiles with devices, their latest
+  warranty, and repair history. Intake can select existing customers and
+  devices.
 - **Merch** — still a placeholder. **Settings** is live: staff directory and
-  time clock, parts/merch markup, shop values and the device catalog.
+  time clock, parts/merch markup, shop values and the device catalog, including
+  each category's warranty period.
 - **Staff** — directory with inline edit (name, job, active, hourly pay), a
   shared sign-in/time clock, per-person tracked hours and estimated pay, and a
   per-person list of tickets assigned on any report stage.

@@ -166,8 +166,8 @@ pages**: the job summary, then the warranty page.
 **Implemented now:** Report 2 notes and photos appear as editable draft entries
 here, all included by default. The technician can rewrite note text or captions
 and choose which entries to include. Those changes are preserved when Report 2
-syncs new or updated content. Sending, printing and the full two-page warranty
-report are still planned.
+syncs new or updated content. The warranty block on page 2 is editable on the
+draft; printing and the remaining page-2 projections are still planned.
 
 The Client report section includes the same ticket dates as Report 1 and
 Technical, so milestone updates remain consistent across all three.
@@ -192,8 +192,9 @@ The page the customer keeps after the repair is forgotten, so it repeats the
 job rather than assuming page 1 is still around.
 
 - **Cover block** — what is warranted, and until when:
-  - length in days (default 90, set in Settings)
-  - start date = completion/pickup, not the day the report was drafted
+  - length in days, editable per ticket; defaults to the device category's
+    **Warranty period**, or the shop default of **90 days**
+  - start date = Report 3 completion, not the day the report was drafted
   - expiry date printed as a plain date, not just "90 days"
   - the shop tag and ticket number, so the page stands alone.
 - **What we found and did** — the diagnostic information from report 2,
@@ -214,8 +215,15 @@ job rather than assuming page 1 is still around.
   a removed or replaced tag voids cover.
 
 The warranty block is stored on the report (`warranty_days`,
-`warranty_start_at`, `warranty_terms`), so a sent report keeps the terms it was
-issued with. Changing the default in Settings never rewrites history.
+`warranty_start_at`, `warranty_terms`). Completing Report 3 stamps the start and
+freezes the length and terms onto that report, so a sent report keeps the terms
+it was issued with. Reopening clears the start date but keeps the chosen days
+and terms. Changing the shop default or a category's warranty period never
+rewrites history.
+
+Saved customer devices show the warranty from the **latest completed Report 3**
+for that device: the expiry date and length while active, the expiry date once
+expired, or **No warranty on file** when no report has issued one.
 
 Excluded from every page: supplier names, cost/margin, internal notes, staff
 remarks, other customers.
@@ -268,8 +276,10 @@ page leads back to exactly one unit:
   unlocks Report 2; Report 3 sends the ticket to Checkout.
 - `ticket_reports` — ticket, kind (`intake` / `technical` / `client`), status,
   author, revision, created/updated/finalized timestamps, and the `shopTag`
-  printed on that revision. The table exists; report creation and finalization
-  flows are still being built.
+  printed on that revision. The client revision also stores the warranty block
+  (`warranty_days`, `warranty_start_at`, `warranty_terms`).
+- `device_categories.warranty_days` — the category's warranty period, offered
+  as the Report 3 default (shop default 90 days).
 - `technical_report_entries` — ordered note/photo blocks, with an optional
   parent note for attached photos.
 - `client_report_entries` — editable copies of technical entries. Content edits

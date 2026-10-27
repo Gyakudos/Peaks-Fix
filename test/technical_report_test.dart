@@ -1,8 +1,10 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/data/database.dart';
+import 'package:vola_fix/data/device_catalog.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
+import 'package:vola_fix/data/warranty.dart';
 
 void main() {
   late AppDatabase database;
@@ -619,5 +621,114 @@ void main() {
     expect(linkedItems, hasLength(1));
     expect(linkedItems.single.partId, partId);
     expect(activeParts, isEmpty);
+  });
+
+  test('report 3 warranty uses the category default and freezes on complete',
+      () async {
+    await database.ensureSeeded();
+    final repository = DriftTicketsRepository(database);
+    final catalog = DeviceCatalog(database);
+    final consoles = (await catalog.watch().first)
+        .firstWhere((category) => category.name == 'Consoles');
+    await catalog.setCategoryWarrantyDays(consoles.id, 120);
+    final device = (await repository.deviceCatalog())
+        .firstWhere((option) => option.category == 'Consoles');
+    final ticket = await database.createTicket(
+      customerName: 'Warranty Customer',
+      customerPhone: '555-0200',
+      customerEmail: 'warranty@example.com',
+      deviceModelId: device.modelId,
+      complaint: 'Stick drift',
+    );
+    await database.ensureTechnicalReports(ticket.id);
+
+    var warranty = await repository.watchClientReportWarranty(ticket.id).first;
+    expect(warranty.defaultDays, 120);
+    expect(warranty.effectiveDays, 120);
+    expect(warranty.defaultLabel, 'Consoles default: 120 days');
+    expect(warranty.startAt, isNull);
+    expect(warranty.effectiveTerms, WarrantyConfig.defaultTerms);
+
+    await repository.saveClientReportWarranty(
+      ticketId: ticket.id,
+      days: 30,
+      terms: 'Board repair only.',
+    );
+    warranty = await repository.watchClientReportWarranty(ticket.id).first;
+    expect(warranty.effectiveDays, 30);
+    expect(warranty.effectiveTerms, 'Board repair only.');
+    expect(warranty.startAt, isNull);
+
+    await repository.setReport3Completed(ticket.id, true);
+    warranty = await repository.watchClientReportWarranty(ticket.id).first;
+    expect(warranty.startAt, isNotNull);
+    expect(
+      warranty.expiresAt,
+      WarrantyConfig.expiryFor(warranty.startAt!, 30),
+    );
+    final report = await (database.select(database.ticketReports)
+          ..where((row) =>
+              row.ticketId.equals(ticket.id) &
+              row.kind.equals(ReportKind.client.index)))
+        .getSingle();
+    expect(report.warrantyDays, 30);
+    expect(report.warrantyTerms, 'Board repair only.');
+    expect(report.warrantyStartAt, warranty.startAt);
+
+    // Later category edits never rewrite the completed report.
+    await catalog.setCategoryWarrantyDays(consoles.id, 365);
+    warranty = await repository.watchClientReportWarranty(ticket.id).first;
+    expect(warranty.defaultDays, 365);
+    expect(warranty.effectiveDays, 30);
+    expect(warranty.effectiveTerms, 'Board repair only.');
+
+    // Reopening clears the start date but keeps the chosen values.
+    await repository.setReport3Completed(ticket.id, false);
+    warranty = await repository.watchClientReportWarranty(ticket.id).first;
+    expect(warranty.startAt, isNull);
+    expect(warranty.effectiveDays, 30);
+  });
+
+  test('customer devices show the latest completed warranty', () async {
+    final repository = DriftTicketsRepository(database);
+    final first = await database.createTicket(
+      customerName: 'Warranty History',
+      customerPhone: '555-0201',
+      customerEmail: 'warranty-history@example.com',
+      deviceName: 'Test handheld',
+      serial: 'WH-001',
+      complaint: 'First repair',
+    );
+    await database.ensureTechnicalReports(first.id);
+    await database.saveClientReportWarranty(
+      ticketId: first.id,
+      days: 120,
+      terms: 'First cover.',
+    );
+    await database.setReport3Completed(first.id, true);
+
+    var devices = await repository.watchCustomerDevices(first.customerId).first;
+    expect(devices, hasLength(1));
+    expect(devices.single.warranty, isNotNull);
+    expect(devices.single.warranty!.days, 120);
+    expect(devices.single.warranty!.terms, 'First cover.');
+
+    final second = await database.createTicket(
+      existingCustomerId: first.customerId,
+      customerName: 'Warranty History',
+      customerPhone: '555-0201',
+      customerEmail: 'warranty-history@example.com',
+      customerDeviceId: first.customerDeviceId,
+      deviceName: 'Test handheld',
+      serial: 'WH-001',
+      complaint: 'Second repair',
+    );
+    await database.ensureTechnicalReports(second.id);
+    await database.saveClientReportWarranty(ticketId: second.id, days: 30);
+    await database.setReport3Completed(second.id, true);
+
+    devices = await repository.watchCustomerDevices(first.customerId).first;
+    expect(devices.single.warranty!.days, 30);
+    expect(devices.single.warranty!.expiresAt, isNotNull);
   });
 }

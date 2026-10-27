@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'part_skus.dart';
 import 'photo_templates.dart';
 import 'taxes.dart';
+import 'warranty.dart';
 
 part 'database.g.dart';
 
@@ -115,6 +116,10 @@ class DeviceCategories extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 60)();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Warranty length offered on Report 3 for devices in this category.
+  IntColumn get warrantyDays =>
+      integer().withDefault(const Constant(WarrantyConfig.defaultDays))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
   @override
@@ -623,8 +628,10 @@ class AppDatabase extends _$AppDatabase {
   /// and bulk-lot quantity/total so cost per item can be recalculated.
   /// v16 added the part description and assigned `NNN-NNN` SKUs to parts that
   /// did not have one.
+  /// v17 added a warranty period to each device category, feeding the default
+  /// on Report 3.
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -753,6 +760,9 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(parts, parts.description);
             await _backfillPartSkus();
           }
+          if (from < 17) {
+            await m.addColumn(deviceCategories, deviceCategories.warrantyDays);
+          }
         },
       );
 
@@ -837,15 +847,8 @@ class AppDatabase extends _$AppDatabase {
         (TaxConfig.gstRateKey, '${TaxConfig.defaultGstRateBp}'),
         (TaxConfig.pstEnabledKey, 'false'),
         (TaxConfig.pstRateKey, '${TaxConfig.defaultPstRateBp}'),
-        ('warranty_days', '90'),
-        (
-          'warranty_terms',
-          'Covers the work and parts listed on this report for the period '
-              'shown. Excludes accidental or liquid damage, tampering or '
-              'repairs by anyone else, normal wear, software or account '
-              'problems, and data loss. The shop tag must still be on the '
-              'device.',
-        ),
+        (WarrantyConfig.daysKey, '${WarrantyConfig.defaultDays}'),
+        (WarrantyConfig.termsKey, WarrantyConfig.defaultTerms),
       ];
       for (final (key, value) in defaults) {
         await into(settings).insert(
@@ -1796,25 +1799,172 @@ class AppDatabase extends _$AppDatabase {
   /// Marks the client report (Report 3) complete or reopens it. Completing it
   /// sends the ticket to Checkout by moving it to [TicketStatus.ready], unless
   /// the job is already closed, cancelled or picked up.
+  ///
+  /// Completing also freezes the warranty length and terms onto the report and
+  /// stamps [TicketReports.warrantyStartAt], so later catalog or shop-default
+  /// changes do not rewrite an issued warranty.
   Future<void> setReport3Completed(int ticketId, bool completed) async {
     await transaction(() async {
       final ticket = await (select(tickets)
             ..where((t) => t.id.equals(ticketId)))
           .getSingle();
+      final reportId = await _ensureClientDraftReport(ticketId);
+      final report = await (select(ticketReports)
+            ..where((row) => row.id.equals(reportId)))
+          .getSingle();
+      final now = DateTime.now();
+      if (completed) {
+        final days = report.warrantyDays ??
+            await _warrantyDaysForDevice(ticket.deviceModelId);
+        final terms = _clean(report.warrantyTerms) ??
+            await _setting(
+                WarrantyConfig.termsKey, WarrantyConfig.defaultTerms);
+        await (update(ticketReports)..where((row) => row.id.equals(reportId)))
+            .write(
+          TicketReportsCompanion(
+            warrantyDays: Value(days),
+            warrantyTerms: Value(terms),
+            warrantyStartAt: Value(now),
+            updatedAt: Value(now),
+          ),
+        );
+      } else {
+        await (update(ticketReports)..where((row) => row.id.equals(reportId)))
+            .write(
+          TicketReportsCompanion(
+            warrantyStartAt: const Value(null),
+            updatedAt: Value(now),
+          ),
+        );
+      }
       final sendToCheckout = completed &&
           ticket.status != TicketStatus.closed &&
           ticket.status != TicketStatus.cancelled &&
           ticket.status != TicketStatus.pickedUp;
       await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
         TicketsCompanion(
-          report3CompletedAt: Value(completed ? DateTime.now() : null),
+          report3CompletedAt: Value(completed ? now : null),
           status: sendToCheckout
               ? const Value(TicketStatus.ready)
               : const Value.absent(),
-          updatedAt: Value(DateTime.now()),
+          updatedAt: Value(now),
         ),
       );
     });
+  }
+
+  /// The Report 3 warranty block for [ticketId], with the device-category or
+  /// shop default already filled in until the report freezes its own values.
+  Stream<ClientReportWarranty> watchClientReportWarranty(int ticketId) {
+    final query = select(tickets).join([
+      leftOuterJoin(
+        ticketReports,
+        ticketReports.ticketId.equalsExp(tickets.id) &
+            ticketReports.kind.equals(ReportKind.client.index) &
+            ticketReports.status.equals(ReportStatus.draft.index),
+      ),
+      leftOuterJoin(
+        deviceModels,
+        deviceModels.id.equalsExp(tickets.deviceModelId),
+      ),
+      leftOuterJoin(
+        deviceBrands,
+        deviceBrands.id.equalsExp(deviceModels.brandId),
+      ),
+      leftOuterJoin(
+        deviceCategories,
+        deviceCategories.id.equalsExp(deviceBrands.categoryId),
+      ),
+    ])
+      ..where(tickets.id.equals(ticketId))
+      ..orderBy([OrderingTerm.desc(ticketReports.revision)])
+      ..limit(1);
+    return query.watch().asyncMap((rows) async {
+      final row = rows.isEmpty ? null : rows.first;
+      final report = row?.readTableOrNull(ticketReports);
+      final category = row?.readTableOrNull(deviceCategories);
+      final defaultDays = category?.warrantyDays ?? await _shopWarrantyDays();
+      final defaultTerms = await _setting(
+        WarrantyConfig.termsKey,
+        WarrantyConfig.defaultTerms,
+      );
+      return ClientReportWarranty(
+        defaultDays: defaultDays,
+        defaultTerms: defaultTerms,
+        days: report?.warrantyDays,
+        terms: report?.warrantyTerms,
+        startAt: report?.warrantyStartAt,
+        categoryName: category?.name,
+      );
+    });
+  }
+
+  /// Saves the per-ticket warranty length and/or terms. An empty terms string
+  /// clears the override so the shop default applies again.
+  Future<void> saveClientReportWarranty({
+    required int ticketId,
+    int? days,
+    String? terms,
+  }) async {
+    if (days != null) WarrantyConfig.requireDays(days);
+    await transaction(() async {
+      final reportId = await _ensureClientDraftReport(ticketId);
+      await (update(ticketReports)..where((row) => row.id.equals(reportId)))
+          .write(
+        TicketReportsCompanion(
+          warrantyDays: days == null ? const Value.absent() : Value(days),
+          warrantyTerms:
+              terms == null ? const Value.absent() : Value(_clean(terms)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _touchTicket(ticketId);
+    });
+  }
+
+  Future<int> _ensureClientDraftReport(int ticketId) async {
+    final existing = await _draftReportId(ticketId, ReportKind.client);
+    if (existing != null) return existing;
+    final ticket = await (select(tickets)
+          ..where((row) => row.id.equals(ticketId)))
+        .getSingle();
+    return into(ticketReports).insert(
+      TicketReportsCompanion.insert(
+        ticketId: ticketId,
+        kind: ReportKind.client,
+        status: ReportStatus.draft,
+        author: 'Shop',
+        shopTag: Value(ticket.shopTag),
+      ),
+    );
+  }
+
+  Future<int> _shopWarrantyDays() async {
+    final value = int.tryParse(
+      await _setting(WarrantyConfig.daysKey, '${WarrantyConfig.defaultDays}'),
+    );
+    return (value ?? WarrantyConfig.defaultDays)
+        .clamp(1, WarrantyConfig.maxDays)
+        .toInt();
+  }
+
+  Future<int> _warrantyDaysForDevice(int? deviceModelId) async {
+    if (deviceModelId != null) {
+      final row = await (select(deviceModels).join([
+        innerJoin(
+          deviceBrands,
+          deviceBrands.id.equalsExp(deviceModels.brandId),
+        ),
+        innerJoin(
+          deviceCategories,
+          deviceCategories.id.equalsExp(deviceBrands.categoryId),
+        ),
+      ])
+            ..where(deviceModels.id.equals(deviceModelId)))
+          .getSingleOrNull();
+      if (row != null) return row.readTable(deviceCategories).warrantyDays;
+    }
+    return _shopWarrantyDays();
   }
 
   Future<void> ensureTechnicalReports(int ticketId) async {

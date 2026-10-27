@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
 import '../../data/device_catalog.dart';
+import '../../data/warranty.dart';
 import 'section_heading.dart';
 
 /// The Settings section that manages categories, brand headings and devices.
@@ -60,6 +62,15 @@ class _DeviceCatalogSectionState extends State<DeviceCatalogSection> {
     );
     if (name == null || !mounted) return;
     await _run(() => _catalog.renameCategory(category.id, name));
+  }
+
+  Future<void> _editCategoryWarranty(CatalogCategory category) async {
+    final updated = await _askWarrantyDays(
+      context,
+      initial: category.warrantyDays,
+    );
+    if (updated == null || !mounted) return;
+    await _run(() => _catalog.setCategoryWarrantyDays(category.id, updated));
   }
 
   Future<void> _deleteCategory(CatalogCategory category) async {
@@ -148,12 +159,17 @@ class _DeviceCatalogSectionState extends State<DeviceCatalogSection> {
             tooltip: 'Category actions',
             onSelected: (action) => switch (action) {
               _CategoryAction.rename => _renameCategory(category),
+              _CategoryAction.warranty => _editCategoryWarranty(category),
               _CategoryAction.delete => _deleteCategory(category),
             },
             itemBuilder: (context) => const [
               PopupMenuItem(
                 value: _CategoryAction.rename,
                 child: Text('Rename category'),
+              ),
+              PopupMenuItem(
+                value: _CategoryAction.warranty,
+                child: Text('Warranty period'),
               ),
               PopupMenuItem(
                 value: _CategoryAction.delete,
@@ -280,6 +296,15 @@ class _DeviceCategoryPageState extends State<DeviceCategoryPage> {
     await _run(() => _catalog.deleteDevice(device.id));
   }
 
+  Future<void> _editWarranty(CatalogCategory category) async {
+    final updated = await _askWarrantyDays(
+      context,
+      initial: category.warrantyDays,
+    );
+    if (updated == null || !mounted) return;
+    await _run(() => _catalog.setCategoryWarrantyDays(category.id, updated));
+  }
+
   Future<void> _deleteCategory() async {
     final confirmed = await _confirm(
       context,
@@ -313,6 +338,22 @@ class _DeviceCategoryPageState extends State<DeviceCategoryPage> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
             children: [
+              ListTile(
+                key: const Key('catalog-category-warranty'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.verified_user_outlined),
+                title: const Text('Warranty period'),
+                subtitle: Text(
+                  '${WarrantyConfig.daysLabel(category.warrantyDays)} · '
+                  'offered on Report 3',
+                ),
+                trailing: TextButton(
+                  key: const Key('catalog-category-warranty-edit'),
+                  onPressed: () => _editWarranty(category),
+                  child: const Text('Change'),
+                ),
+              ),
+              const Divider(),
               SectionHeading(
                 title: 'Brand headings',
                 action: FilledButton.icon(
@@ -485,7 +526,7 @@ class _BrandCard extends StatelessWidget {
   }
 }
 
-enum _CategoryAction { rename, delete }
+enum _CategoryAction { rename, warranty, delete }
 
 enum _BrandAction { rename, delete }
 
@@ -496,6 +537,7 @@ String _categorySummary(CatalogCategory category) {
   final devices = category.deviceCount;
   return [
     if (!category.isActive) 'Hidden',
+    '${WarrantyConfig.daysLabel(category.warrantyDays)} warranty',
     '$headings ${headings == 1 ? 'heading' : 'headings'}',
     '$devices ${devices == 1 ? 'device' : 'devices'}',
   ].join(' · ');
@@ -527,6 +569,16 @@ Future<String?> _askName(
       confirm: confirm,
       initial: initial,
     ),
+  );
+}
+
+Future<int?> _askWarrantyDays(
+  BuildContext context, {
+  required int initial,
+}) {
+  return showDialog<int>(
+    context: context,
+    builder: (context) => _WarrantyDaysDialog(initial: initial),
   );
 }
 
@@ -630,6 +682,82 @@ class _NameDialogState extends State<_NameDialog> {
             key: const Key('catalog-name-save'),
             onPressed: _canSave ? _submit : null,
             child: Text(widget.confirm),
+          ),
+        ],
+      );
+}
+
+class _WarrantyDaysDialog extends StatefulWidget {
+  const _WarrantyDaysDialog({required this.initial});
+
+  final int initial;
+
+  @override
+  State<_WarrantyDaysDialog> createState() => _WarrantyDaysDialogState();
+}
+
+class _WarrantyDaysDialogState extends State<_WarrantyDaysDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: '${widget.initial}');
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onChanged);
+  }
+
+  void _onChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  int? get _days {
+    final value = int.tryParse(_controller.text.trim());
+    if (value == null || value < 1 || value > WarrantyConfig.maxDays) {
+      return null;
+    }
+    return value;
+  }
+
+  void _submit() {
+    final days = _days;
+    if (days == null) return;
+    Navigator.pop(context, days);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Warranty period'),
+        content: SizedBox(
+          width: 380,
+          child: TextField(
+            key: const Key('catalog-warranty-days'),
+            controller: _controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              labelText: 'Days of cover',
+              helperText: '1–${WarrantyConfig.maxDays} days · '
+                  'default ${WarrantyConfig.defaultDays}',
+              errorText: _days == null ? 'Enter a number of days.' : null,
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('catalog-warranty-save'),
+            onPressed: _days == null ? null : _submit,
+            child: const Text('Save'),
           ),
         ],
       );

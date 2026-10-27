@@ -8,6 +8,7 @@ import 'financials.dart';
 import 'photo_store.dart';
 import 'photo_templates.dart';
 import 'taxes.dart';
+import 'warranty.dart';
 
 /// One row of the Tickets board.
 class TicketBoardEntry {
@@ -196,6 +197,7 @@ class CustomerDeviceEntry {
     this.modelName,
     this.deviceVariant,
     this.deviceSide,
+    this.warranty,
   });
 
   final int id;
@@ -207,6 +209,9 @@ class CustomerDeviceEntry {
   final String? modelName;
   final String? deviceVariant;
   final String? deviceSide;
+
+  /// The most recent warranty issued on a completed Report 3 for this device.
+  final DeviceWarranty? warranty;
 }
 
 /// A device the intake form can pick, flattened from category → brand → model.
@@ -674,8 +679,18 @@ abstract class TicketsRepository {
   Future<void> setReport2Completed(int ticketId, bool completed);
 
   /// Marks the client report (Report 3) complete or reopens it. Completing it
-  /// sends the ticket to Checkout.
+  /// sends the ticket to Checkout and freezes the warranty coverage.
   Future<void> setReport3Completed(int ticketId, bool completed);
+
+  /// Report 3 warranty coverage, with category/shop defaults resolved.
+  Stream<ClientReportWarranty> watchClientReportWarranty(int ticketId);
+
+  /// Saves the per-ticket warranty length and/or terms.
+  Future<void> saveClientReportWarranty({
+    required int ticketId,
+    int? days,
+    String? terms,
+  });
 
   Future<void> ensureTechnicalReports(int ticketId);
 
@@ -822,20 +837,64 @@ class DriftTicketsRepository implements TicketsRepository {
         _db.deviceCategories,
         _db.deviceCategories.id.equalsExp(_db.deviceBrands.categoryId),
       ),
+      leftOuterJoin(
+        _db.tickets,
+        _db.tickets.customerDeviceId.equalsExp(_db.customerDevices.id),
+      ),
+      leftOuterJoin(
+        _db.ticketReports,
+        _db.ticketReports.ticketId.equalsExp(_db.tickets.id) &
+            _db.ticketReports.kind.equals(ReportKind.client.index) &
+            _db.ticketReports.warrantyStartAt.isNotNull(),
+      ),
     ])
       ..where(_db.customerDevices.customerId.equals(customerId))
       ..orderBy([OrderingTerm.asc(_db.customerDevices.id)]);
-    return query.watch().map(
-          (rows) => [
-            for (final row in rows)
-              _customerDevice(
-                row.readTable(_db.customerDevices),
-                row.readTableOrNull(_db.deviceModels),
-                row.readTableOrNull(_db.deviceBrands),
-                row.readTableOrNull(_db.deviceCategories),
+    return query.watch().map((rows) {
+      final devices = <int,
+          (CustomerDevice, DeviceModel?, DeviceBrand?, DeviceCategory?)>{};
+      final warranties = <int, ({DeviceWarranty warranty, int reportId})>{};
+      for (final row in rows) {
+        final device = row.readTable(_db.customerDevices);
+        final report = row.readTableOrNull(_db.ticketReports);
+        final startAt = report?.warrantyStartAt;
+        if (report != null && startAt != null) {
+          final current = warranties[device.id];
+          if (current == null ||
+              startAt.isAfter(current.warranty.startAt) ||
+              (startAt == current.warranty.startAt &&
+                  report.id > current.reportId)) {
+            warranties[device.id] = (
+              warranty: DeviceWarranty(
+                startAt: startAt,
+                days: report.warrantyDays ?? WarrantyConfig.defaultDays,
+                terms: report.warrantyTerms,
               ),
-          ],
+              reportId: report.id,
+            );
+          }
+        }
+        devices.putIfAbsent(
+          device.id,
+          () => (
+            device,
+            row.readTableOrNull(_db.deviceModels),
+            row.readTableOrNull(_db.deviceBrands),
+            row.readTableOrNull(_db.deviceCategories),
+          ),
         );
+      }
+      return [
+        for (final source in devices.values)
+          _customerDevice(
+            source.$1,
+            source.$2,
+            source.$3,
+            source.$4,
+            warranty: warranties[source.$1.id]?.warranty,
+          ),
+      ];
+    });
   }
 
   @override
@@ -1405,6 +1464,22 @@ class DriftTicketsRepository implements TicketsRepository {
       _db.setReport3Completed(ticketId, completed);
 
   @override
+  Stream<ClientReportWarranty> watchClientReportWarranty(int ticketId) =>
+      _db.watchClientReportWarranty(ticketId);
+
+  @override
+  Future<void> saveClientReportWarranty({
+    required int ticketId,
+    int? days,
+    String? terms,
+  }) =>
+      _db.saveClientReportWarranty(
+        ticketId: ticketId,
+        days: days,
+        terms: terms,
+      );
+
+  @override
   Future<void> ensureTechnicalReports(int ticketId) =>
       _db.ensureTechnicalReports(ticketId);
 
@@ -1662,8 +1737,9 @@ class DriftTicketsRepository implements TicketsRepository {
     CustomerDevice row,
     DeviceModel? model,
     DeviceBrand? brand,
-    DeviceCategory? category,
-  ) {
+    DeviceCategory? category, {
+    DeviceWarranty? warranty,
+  }) {
     final label = model == null
         ? row.deviceName ?? 'Unspecified device'
         : deviceLabel(brand?.name ?? '', model.name);
@@ -1677,6 +1753,7 @@ class DriftTicketsRepository implements TicketsRepository {
       modelName: model?.name,
       deviceVariant: row.deviceVariant,
       deviceSide: row.deviceSide,
+      warranty: warranty,
     );
   }
 }

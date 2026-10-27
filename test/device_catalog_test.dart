@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/device_catalog.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
+import 'package:vola_fix/data/warranty.dart';
 import 'package:vola_fix/features/settings/settings_page.dart';
 
 void main() {
@@ -148,6 +149,31 @@ void main() {
     );
   });
 
+  test('categories carry a warranty period for Report 3', () async {
+    final id = await catalog.addCategory('Printers');
+    var categories = await catalog.watch().first;
+    expect(
+      categories.singleWhere((category) => category.id == id).warrantyDays,
+      WarrantyConfig.defaultDays,
+    );
+
+    await catalog.setCategoryWarrantyDays(id, 120);
+    categories = await catalog.watch().first;
+    expect(
+      categories.singleWhere((category) => category.id == id).warrantyDays,
+      120,
+    );
+
+    await expectLater(
+      catalog.setCategoryWarrantyDays(id, 0),
+      throwsA(isA<CatalogNameError>()),
+    );
+    await expectLater(
+      catalog.setCategoryWarrantyDays(id, WarrantyConfig.maxDays + 1),
+      throwsA(isA<CatalogNameError>()),
+    );
+  });
+
   testWidgets('settings edits categories, headings and devices',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1400, 1400);
@@ -177,6 +203,19 @@ void main() {
     await tester.tap(find.text('Printers'));
     await tester.pumpAndSettle();
     expect(find.text('No headings yet.'), findsOneWidget);
+    expect(find.text('90 days · offered on Report 3'), findsOneWidget);
+
+    // Change the warranty period for this category.
+    await tester.tap(find.byKey(const Key('catalog-category-warranty-edit')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('catalog-warranty-days')),
+      '120',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('catalog-warranty-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('120 days · offered on Report 3'), findsOneWidget);
 
     // Add a brand heading and a device under it.
     await tester.tap(find.byKey(const Key('catalog-add-brand')));

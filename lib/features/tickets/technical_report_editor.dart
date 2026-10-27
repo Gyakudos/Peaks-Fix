@@ -4,13 +4,16 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../data/database.dart';
 import '../../data/tickets_repository.dart';
+import '../../data/warranty.dart';
 import '../capture/phone_capture_dialog.dart';
 import 'invoice_editor.dart';
 import 'required_parts_dialog.dart';
+import 'ticket_widgets.dart';
 
 class TechnicalReportEditor extends StatefulWidget {
   const TechnicalReportEditor({
@@ -570,6 +573,11 @@ class _ClientReportDraftEditorState extends State<ClientReportDraftEditor> {
                     ),
               ],
               const SizedBox(height: 12),
+              _WarrantyCoveragePanel(
+                ticketId: widget.ticketId,
+                repository: widget.repository,
+              ),
+              const SizedBox(height: 12),
               OutlinedButton.icon(
                 key: const Key('client-report-open-invoice'),
                 onPressed: () => showInvoiceDialog(
@@ -587,6 +595,232 @@ class _ClientReportDraftEditorState extends State<ClientReportDraftEditor> {
           );
         },
       ),
+    );
+  }
+}
+
+class _WarrantyCoveragePanel extends StatefulWidget {
+  const _WarrantyCoveragePanel({
+    required this.ticketId,
+    required this.repository,
+  });
+
+  final int ticketId;
+  final TicketsRepository repository;
+
+  @override
+  State<_WarrantyCoveragePanel> createState() => _WarrantyCoveragePanelState();
+}
+
+class _WarrantyCoveragePanelState extends State<_WarrantyCoveragePanel> {
+  final TextEditingController _daysController = TextEditingController();
+  final FocusNode _daysFocus = FocusNode();
+  Timer? _daysTimer;
+  bool _saving = false;
+  String? _error;
+  int? _savedDays;
+
+  @override
+  void initState() {
+    super.initState();
+    _daysFocus.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _daysTimer?.cancel();
+    _daysFocus.removeListener(_onFocusChanged);
+    _daysController.dispose();
+    _daysFocus.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (!_daysFocus.hasFocus) _saveDays();
+  }
+
+  void _queueDaysSave() {
+    _daysTimer?.cancel();
+    _daysTimer = Timer(const Duration(milliseconds: 700), _saveDays);
+  }
+
+  void _syncDays(ClientReportWarranty warranty) {
+    final text = '${warranty.effectiveDays}';
+    if (!_daysFocus.hasFocus && !_saving && _daysController.text != text) {
+      _daysController.text = text;
+    }
+    if (!_saving) _savedDays = warranty.effectiveDays;
+  }
+
+  Future<void> _saveDays() async {
+    _daysTimer?.cancel();
+    if (_saving) return;
+    final days = int.tryParse(_daysController.text.trim());
+    if (days == null || days < 1 || days > WarrantyConfig.maxDays) {
+      setState(() => _error = 'Enter 1–${WarrantyConfig.maxDays} days.');
+      return;
+    }
+    if (days == _savedDays) {
+      if (_error != null) setState(() => _error = null);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.repository.saveClientReportWarranty(
+        ticketId: widget.ticketId,
+        days: days,
+      );
+      if (!mounted) return;
+      setState(() {
+        _savedDays = days;
+        _saving = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Not saved: $error';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return StreamBuilder<ClientReportWarranty>(
+      stream: widget.repository.watchClientReportWarranty(widget.ticketId),
+      builder: (context, snapshot) {
+        final warranty = snapshot.data;
+        if (warranty == null) {
+          return const SizedBox.shrink();
+        }
+        _syncDays(warranty);
+        final start = warranty.startAt;
+        final expires = warranty.expiresAt;
+        final summary = start == null
+            ? 'Starts when Report 3 is completed · expires '
+                '${shortDate(WarrantyConfig.expiryFor(DateTime.now(), warranty.effectiveDays))} '
+                'if completed today'
+            : 'Warranty started ${shortDate(start)} · expires '
+                '${shortDate(expires!)}';
+        return Card(
+          key: const Key('client-warranty-coverage'),
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.verified_user_outlined),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Warranty coverage',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Printed on the warranty page of the client report.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 190,
+                      child: TextField(
+                        key: const Key('client-warranty-days'),
+                        controller: _daysController,
+                        focusNode: _daysFocus,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: (_) => _queueDaysSave(),
+                        onSubmitted: (_) => _saveDays(),
+                        decoration: const InputDecoration(
+                          labelText: 'Warranty period (days)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    if (_saving)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 10, top: 16),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  warranty.isRecorded
+                      ? 'Saved on this report. Changing the device category '
+                          'will not alter it.'
+                      : '${warranty.defaultLabel}. Change it per category in '
+                          'Settings › Device catalog.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.event_available_outlined,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        summary,
+                        key: const Key('client-warranty-summary'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _error!,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                _AutosavingTextField(
+                  key: const Key('client-warranty-terms'),
+                  initialText: warranty.effectiveTerms,
+                  label: 'Warranty terms — what is covered',
+                  hint: 'What the warranty covers and excludes.',
+                  minLines: 3,
+                  onSave: (terms) => widget.repository.saveClientReportWarranty(
+                    ticketId: widget.ticketId,
+                    terms: terms,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -11,6 +11,7 @@ import 'package:vola_fix/data/part_skus.dart';
 import 'package:vola_fix/data/photo_templates.dart';
 import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
+import 'package:vola_fix/data/warranty.dart';
 import 'package:vola_fix/features/checkout/checkout_page.dart';
 import 'package:vola_fix/features/tickets/required_parts_dialog.dart';
 import 'package:vola_fix/features/tickets/ticket_detail_page.dart';
@@ -100,6 +101,8 @@ class FakeTicketsRepository implements TicketsRepository {
   int partsMarkupPercent = 35;
   int merchMarkupPercent = 45;
   final Map<int, List<CustomerDeviceEntry>> customerDevices = {};
+  final Map<int, ClientReportWarranty> clientWarranties = {};
+  final Map<int, StreamController<ClientReportWarranty>> _warrantyUpdates = {};
 
   TicketDetailEntry? _detail;
   PhotoChecklist _checklist = const PhotoChecklist(
@@ -606,16 +609,69 @@ class FakeTicketsRepository implements TicketsRepository {
   @override
   Future<void> setReport3Completed(int ticketId, bool completed) async {
     report3Writes.add((ticketId: ticketId, completed: completed));
+    final completedAt = DateTime(2026, 2, 3, 12, 45);
+    _setWarrantyStarted(ticketId, completed ? completedAt : null);
     final detail = _detail;
     if (detail == null) return;
     _detail = detail.copyWith(
-      report3CompletedAt: completed ? DateTime(2026, 2, 3, 12, 45) : null,
+      report3CompletedAt: completed ? completedAt : null,
       clearReport3: !completed,
     );
     _detailUpdates.add(_detail);
     if (completed) {
       await updateStatus(ticketId, TicketStatus.ready);
     }
+  }
+
+  ClientReportWarranty _warrantyFor(int ticketId) =>
+      clientWarranties[ticketId] ??
+      const ClientReportWarranty(
+        defaultDays: WarrantyConfig.defaultDays,
+        defaultTerms: WarrantyConfig.defaultTerms,
+      );
+
+  void _setWarrantyStarted(int ticketId, DateTime? startAt) {
+    final current = _warrantyFor(ticketId);
+    final updated = ClientReportWarranty(
+      defaultDays: current.defaultDays,
+      defaultTerms: current.defaultTerms,
+      days: current.days,
+      terms: current.terms,
+      startAt: startAt,
+      categoryName: current.categoryName,
+    );
+    clientWarranties[ticketId] = updated;
+    _warrantyUpdates[ticketId]?.add(updated);
+  }
+
+  @override
+  Stream<ClientReportWarranty> watchClientReportWarranty(int ticketId) async* {
+    yield _warrantyFor(ticketId);
+    yield* _warrantyUpdates
+        .putIfAbsent(
+          ticketId,
+          () => StreamController<ClientReportWarranty>.broadcast(),
+        )
+        .stream;
+  }
+
+  @override
+  Future<void> saveClientReportWarranty({
+    required int ticketId,
+    int? days,
+    String? terms,
+  }) async {
+    final current = _warrantyFor(ticketId);
+    final updated = ClientReportWarranty(
+      defaultDays: current.defaultDays,
+      defaultTerms: current.defaultTerms,
+      days: days ?? current.days,
+      terms: terms ?? current.terms,
+      startAt: current.startAt,
+      categoryName: current.categoryName,
+    );
+    clientWarranties[ticketId] = updated;
+    _warrantyUpdates[ticketId]?.add(updated);
   }
 
   @override
@@ -1564,6 +1620,50 @@ void main() {
     await tester.tap(find.byKey(const Key('customer-save')));
     await tester.pumpAndSettle();
     expect(find.text('Morgan Lee-Smith'), findsOneWidget);
+  });
+
+  testWidgets('customer devices show their warranty coverage',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.saveCustomer(
+      name: 'Warranty Customer',
+      phone: '555-0120',
+      email: 'warranty@example.com',
+      notes: '',
+    );
+    repository.customerDevices[1] = [
+      CustomerDeviceEntry(
+        id: 42,
+        label: 'Sony PlayStation 5',
+        serial: 'XKW-WARRANTY',
+        serialMissing: false,
+        modelId: 1,
+        category: 'Consoles',
+        modelName: 'PlayStation 5',
+        warranty: DeviceWarranty(
+          startAt: DateTime.now().subtract(const Duration(days: 10)),
+          days: 90,
+        ),
+      ),
+    ];
+
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.tap(find.text('Customers').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('customer-1')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('customer-device-warranty-42')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Warranty until'), findsOneWidget);
+    expect(find.textContaining('90 days'), findsOneWidget);
   });
 
   testWidgets('intake opens from the Tickets page',
@@ -2543,12 +2643,17 @@ void main() {
 
   testWidgets('client report Start button opens the editable draft',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 2400);
+    tester.view.physicalSize = const Size(1400, 2800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final repository = FakeTicketsRepository();
+    repository.clientWarranties[7] = const ClientReportWarranty(
+      defaultDays: 120,
+      defaultTerms: WarrantyConfig.defaultTerms,
+      categoryName: 'Consoles',
+    );
     await _open3dsReport1(tester, repository);
     final report3 = find.byKey(const Key('report3-row'));
     await tester.scrollUntilVisible(
@@ -2567,6 +2672,31 @@ void main() {
           'The draft will fill as you add technical notes and photos.',
         ),
         findsOneWidget);
+
+    final warrantyPanel = find.byKey(const Key('client-warranty-coverage'));
+    await tester.scrollUntilVisible(
+      warrantyPanel,
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('ticket-detail-scroll')),
+        matching: find.byType(Scrollable).first,
+      ),
+    );
+    expect(warrantyPanel, findsOneWidget);
+    expect(
+      find.text('Consoles default: 120 days. Change it per category in '
+          'Settings › Device catalog.'),
+      findsOneWidget,
+    );
+    final daysField = find.byKey(const Key('client-warranty-days'));
+    expect(
+      tester.widget<TextField>(daysField).controller!.text,
+      '120',
+    );
+    await tester.enterText(daysField, '30');
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    expect(repository.clientWarranties[7]!.days, 30);
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('client-report-open-invoice')),
@@ -2906,7 +3036,7 @@ void main() {
 
   testWidgets('report 3 completion sends the ticket to checkout',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 2600);
+    tester.view.physicalSize = const Size(1400, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

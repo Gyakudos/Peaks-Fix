@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../../data/warranty.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
 
@@ -208,21 +209,9 @@ class _CustomerCard extends StatelessWidget {
               return Column(
                 children: [
                   for (final device in devices)
-                    ListTile(
+                    _CustomerDeviceTile(
                       key: Key('customer-device-${device.id}'),
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.devices_other),
-                      title: Text(device.label),
-                      subtitle: Text([
-                        if (device.deviceVariant?.isNotEmpty == true)
-                          device.deviceVariant!,
-                        if (device.deviceSide != null)
-                          deviceSideLabel(device.deviceSide),
-                        device.serial ??
-                            (device.serialMissing
-                                ? 'no serial sticker'
-                                : 'serial not recorded'),
-                      ].join(' · ')),
+                      device: device,
                     ),
                 ],
               );
@@ -281,6 +270,69 @@ class _CustomerCard extends StatelessWidget {
                 ],
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerDeviceTile extends StatelessWidget {
+  const _CustomerDeviceTile({super.key, required this.device});
+
+  final CustomerDeviceEntry device;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final warranty = device.warranty;
+    final active = warranty?.isActiveAt(DateTime.now()) ?? false;
+    final warrantyColor = warranty == null
+        ? theme.colorScheme.onSurfaceVariant
+        : active
+            ? theme.colorScheme.primary
+            : theme.colorScheme.error;
+    final warrantyText = warranty == null
+        ? 'No warranty on file'
+        : active
+            ? 'Warranty until ${shortDate(warranty.expiresAt)} · '
+                '${WarrantyConfig.daysLabel(warranty.days)}'
+            : 'Warranty expired ${shortDate(warranty.expiresAt)}';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.devices_other),
+      title: Text(device.label),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text([
+            if (device.deviceVariant?.isNotEmpty == true) device.deviceVariant!,
+            if (device.deviceSide != null) deviceSideLabel(device.deviceSide),
+            device.serial ??
+                (device.serialMissing
+                    ? 'no serial sticker'
+                    : 'serial not recorded'),
+          ].join(' · ')),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.verified_user_outlined,
+                size: 14,
+                color: warrantyColor,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  warrantyText,
+                  key: Key('customer-device-warranty-${device.id}'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: warrantyColor,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

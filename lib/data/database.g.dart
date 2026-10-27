@@ -405,6 +405,14 @@ class $DeviceCategoriesTable extends DeviceCategories
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _warrantyDaysMeta =
+      const VerificationMeta('warrantyDays');
+  @override
+  late final GeneratedColumn<int> warrantyDays = GeneratedColumn<int>(
+      'warranty_days', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(WarrantyConfig.defaultDays));
   static const VerificationMeta _isActiveMeta =
       const VerificationMeta('isActive');
   @override
@@ -416,7 +424,8 @@ class $DeviceCategoriesTable extends DeviceCategories
           GeneratedColumn.constraintIsAlways('CHECK ("is_active" IN (0, 1))'),
       defaultValue: const Constant(true));
   @override
-  List<GeneratedColumn> get $columns => [id, name, sortOrder, isActive];
+  List<GeneratedColumn> get $columns =>
+      [id, name, sortOrder, warrantyDays, isActive];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -439,6 +448,12 @@ class $DeviceCategoriesTable extends DeviceCategories
     if (data.containsKey('sort_order')) {
       context.handle(_sortOrderMeta,
           sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
+    }
+    if (data.containsKey('warranty_days')) {
+      context.handle(
+          _warrantyDaysMeta,
+          warrantyDays.isAcceptableOrUnknown(
+              data['warranty_days']!, _warrantyDaysMeta));
     }
     if (data.containsKey('is_active')) {
       context.handle(_isActiveMeta,
@@ -463,6 +478,8 @@ class $DeviceCategoriesTable extends DeviceCategories
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       sortOrder: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}sort_order'])!,
+      warrantyDays: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}warranty_days'])!,
       isActive: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
     );
@@ -478,11 +495,15 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
   final int id;
   final String name;
   final int sortOrder;
+
+  /// Warranty length offered on Report 3 for devices in this category.
+  final int warrantyDays;
   final bool isActive;
   const DeviceCategory(
       {required this.id,
       required this.name,
       required this.sortOrder,
+      required this.warrantyDays,
       required this.isActive});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -490,6 +511,7 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['warranty_days'] = Variable<int>(warrantyDays);
     map['is_active'] = Variable<bool>(isActive);
     return map;
   }
@@ -499,6 +521,7 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
       id: Value(id),
       name: Value(name),
       sortOrder: Value(sortOrder),
+      warrantyDays: Value(warrantyDays),
       isActive: Value(isActive),
     );
   }
@@ -510,6 +533,7 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      warrantyDays: serializer.fromJson<int>(json['warrantyDays']),
       isActive: serializer.fromJson<bool>(json['isActive']),
     );
   }
@@ -520,16 +544,22 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'warrantyDays': serializer.toJson<int>(warrantyDays),
       'isActive': serializer.toJson<bool>(isActive),
     };
   }
 
   DeviceCategory copyWith(
-          {int? id, String? name, int? sortOrder, bool? isActive}) =>
+          {int? id,
+          String? name,
+          int? sortOrder,
+          int? warrantyDays,
+          bool? isActive}) =>
       DeviceCategory(
         id: id ?? this.id,
         name: name ?? this.name,
         sortOrder: sortOrder ?? this.sortOrder,
+        warrantyDays: warrantyDays ?? this.warrantyDays,
         isActive: isActive ?? this.isActive,
       );
   DeviceCategory copyWithCompanion(DeviceCategoriesCompanion data) {
@@ -537,6 +567,9 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      warrantyDays: data.warrantyDays.present
+          ? data.warrantyDays.value
+          : this.warrantyDays,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
     );
   }
@@ -547,13 +580,14 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('warrantyDays: $warrantyDays, ')
           ..write('isActive: $isActive')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, sortOrder, isActive);
+  int get hashCode => Object.hash(id, name, sortOrder, warrantyDays, isActive);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -561,6 +595,7 @@ class DeviceCategory extends DataClass implements Insertable<DeviceCategory> {
           other.id == this.id &&
           other.name == this.name &&
           other.sortOrder == this.sortOrder &&
+          other.warrantyDays == this.warrantyDays &&
           other.isActive == this.isActive);
 }
 
@@ -568,29 +603,34 @@ class DeviceCategoriesCompanion extends UpdateCompanion<DeviceCategory> {
   final Value<int> id;
   final Value<String> name;
   final Value<int> sortOrder;
+  final Value<int> warrantyDays;
   final Value<bool> isActive;
   const DeviceCategoriesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.warrantyDays = const Value.absent(),
     this.isActive = const Value.absent(),
   });
   DeviceCategoriesCompanion.insert({
     this.id = const Value.absent(),
     required String name,
     this.sortOrder = const Value.absent(),
+    this.warrantyDays = const Value.absent(),
     this.isActive = const Value.absent(),
   }) : name = Value(name);
   static Insertable<DeviceCategory> custom({
     Expression<int>? id,
     Expression<String>? name,
     Expression<int>? sortOrder,
+    Expression<int>? warrantyDays,
     Expression<bool>? isActive,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (warrantyDays != null) 'warranty_days': warrantyDays,
       if (isActive != null) 'is_active': isActive,
     });
   }
@@ -599,11 +639,13 @@ class DeviceCategoriesCompanion extends UpdateCompanion<DeviceCategory> {
       {Value<int>? id,
       Value<String>? name,
       Value<int>? sortOrder,
+      Value<int>? warrantyDays,
       Value<bool>? isActive}) {
     return DeviceCategoriesCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
+      warrantyDays: warrantyDays ?? this.warrantyDays,
       isActive: isActive ?? this.isActive,
     );
   }
@@ -620,6 +662,9 @@ class DeviceCategoriesCompanion extends UpdateCompanion<DeviceCategory> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (warrantyDays.present) {
+      map['warranty_days'] = Variable<int>(warrantyDays.value);
+    }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
@@ -632,6 +677,7 @@ class DeviceCategoriesCompanion extends UpdateCompanion<DeviceCategory> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('warrantyDays: $warrantyDays, ')
           ..write('isActive: $isActive')
           ..write(')'))
         .toString();
@@ -12558,6 +12604,7 @@ typedef $$DeviceCategoriesTableCreateCompanionBuilder
   Value<int> id,
   required String name,
   Value<int> sortOrder,
+  Value<int> warrantyDays,
   Value<bool> isActive,
 });
 typedef $$DeviceCategoriesTableUpdateCompanionBuilder
@@ -12565,6 +12612,7 @@ typedef $$DeviceCategoriesTableUpdateCompanionBuilder
   Value<int> id,
   Value<String> name,
   Value<int> sortOrder,
+  Value<int> warrantyDays,
   Value<bool> isActive,
 });
 
@@ -12619,6 +12667,9 @@ class $$DeviceCategoriesTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
       column: $table.sortOrder, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get warrantyDays => $composableBuilder(
+      column: $table.warrantyDays, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnFilters(column));
@@ -12684,6 +12735,10 @@ class $$DeviceCategoriesTableOrderingComposer
   ColumnOrderings<int> get sortOrder => $composableBuilder(
       column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get warrantyDays => $composableBuilder(
+      column: $table.warrantyDays,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnOrderings(column));
 }
@@ -12705,6 +12760,9 @@ class $$DeviceCategoriesTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get warrantyDays => $composableBuilder(
+      column: $table.warrantyDays, builder: (column) => column);
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
@@ -12779,24 +12837,28 @@ class $$DeviceCategoriesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<int> sortOrder = const Value.absent(),
+            Value<int> warrantyDays = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
           }) =>
               DeviceCategoriesCompanion(
             id: id,
             name: name,
             sortOrder: sortOrder,
+            warrantyDays: warrantyDays,
             isActive: isActive,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String name,
             Value<int> sortOrder = const Value.absent(),
+            Value<int> warrantyDays = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
           }) =>
               DeviceCategoriesCompanion.insert(
             id: id,
             name: name,
             sortOrder: sortOrder,
+            warrantyDays: warrantyDays,
             isActive: isActive,
           ),
           withReferenceMapper: (p0) => p0

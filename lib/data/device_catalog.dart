@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' as drift;
 
 import 'database.dart';
+import 'warranty.dart';
 
 /// One device inside a brand, as the catalog editor shows it.
 ///
@@ -37,19 +38,23 @@ class CatalogCategory {
     required this.id,
     required this.name,
     required this.isActive,
+    required this.warrantyDays,
     required this.brands,
   });
 
   final int id;
   final String name;
   final bool isActive;
+
+  /// Warranty length that Report 3 offers for devices in this category.
+  final int warrantyDays;
   final List<CatalogBrand> brands;
 
   int get deviceCount =>
       brands.fold<int>(0, (total, brand) => total + brand.devices.length);
 }
 
-/// A catalog name was blank, too long, or already taken.
+/// A catalog name or value was blank, too long, out of range, or already taken.
 ///
 /// The message is ready for a snackbar, so the pages do not have to repeat the
 /// same wording.
@@ -118,6 +123,7 @@ class DeviceCatalog {
           id: category.id,
           name: category.name,
           isActive: category.isActive,
+          warrantyDays: category.warrantyDays,
         ),
       );
       final brand = row.readTableOrNull(_db.deviceBrands);
@@ -172,6 +178,20 @@ class DeviceCatalog {
     await (_db.update(_db.deviceCategories)
           ..where((category) => category.id.equals(categoryId)))
         .write(DeviceCategoriesCompanion(isActive: drift.Value(isActive)));
+  }
+
+  Future<void> setCategoryWarrantyDays(int categoryId, int days) async {
+    try {
+      WarrantyConfig.requireDays(days);
+    } on ArgumentError {
+      throw const CatalogNameError(
+        'Warranty period must be between 1 and '
+        '${WarrantyConfig.maxDays} days.',
+      );
+    }
+    await (_db.update(_db.deviceCategories)
+          ..where((category) => category.id.equals(categoryId)))
+        .write(DeviceCategoriesCompanion(warrantyDays: drift.Value(days)));
   }
 
   /// Removes the category and every brand and device under it.
@@ -375,17 +395,20 @@ class _CategoryBuilder {
     required this.id,
     required this.name,
     required this.isActive,
+    required this.warrantyDays,
   });
 
   final int id;
   final String name;
   final bool isActive;
+  final int warrantyDays;
   final Map<int, _BrandBuilder> brands = {};
 
   CatalogCategory build() => CatalogCategory(
         id: id,
         name: name,
         isActive: isActive,
+        warrantyDays: warrantyDays,
         brands: [
           for (final brand in brands.values) brand.build()
         ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())),

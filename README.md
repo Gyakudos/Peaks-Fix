@@ -6,7 +6,8 @@ Custom built using vibe coding, I made it to manage my shop repair tickets inven
 
 Current version is only meant for windows, I will make more versions as I continue development. Planned versions Android, iOS, and Mac Current only runs locally, cloud support will be added in the future.
 The Calendar tab now tracks repair milestones from drop-off through pickup.
-Automatic warranty end-date tracking is planned separately.
+Warranty coverage starts at Report 3 completion, defaults to 90 days and can be
+set per device category; saved customer devices show their latest warranty.
 
 Local-first: one SQLite file on the machine, no server, no accounts, no cloud.
 
@@ -34,13 +35,15 @@ printing are still being built.
 - **Calendar** — month view of ticket workflow dates; select a day to open the
   associated ticket.
 - **Customers** — searchable customer profiles with editable contact details
-  and notes, owned devices, and repair-ticket history.
+  and notes, owned devices, and repair-ticket history. Each saved device shows
+  its latest warranty as active, expired, or **No warranty on file**.
 - **Device catalog** — categories, brand headings and devices are edited in
-  Settings: add, rename, hide, or remove any of the three levels. 7 categories
-  are seeded, including Vacuum with common Dyson, Kirby, Dirt Devil and Shark
-  models, plus General Electronics for unlisted devices; seeding is additive so
-  upgrades never wipe shop edits, and removing a catalog row leaves past
-  tickets with the device name they recorded.
+  Settings: add, rename, hide, or remove any of the three levels, and set a
+  **Warranty period** per category. 7 categories are seeded, including Vacuum
+  with common Dyson, Kirby, Dirt Devil and Shark models, plus General
+  Electronics for unlisted devices; seeding is additive so upgrades never wipe
+  shop edits, and removing a catalog row leaves past tickets with the device
+  name they recorded.
 - **Report 1 checklist** — per-device photo templates (3DS gets its own five
   shots; Vacuum gets Front, Back and Charge Port; General Electronics gets
   generic device shots labeled with its device name), previewed at intake and
@@ -57,6 +60,12 @@ printing are still being built.
 - **Client report and checkout** — review the client draft, then **Complete
   report 3** to send the ticket to Checkout. Checkout handles merchandise,
   payment and closing the ticket after pickup.
+- **Warranty coverage** — Report 3 carries an editable warranty block: the
+  period defaults to **90 days** or the device category's own period, and the
+  terms default from Settings. Both are editable per ticket. Completing the
+  report stamps the start date and freezes the length and terms onto that
+  report, so later catalog or Settings changes never rewrite an issued
+  warranty; reopening clears the start date but keeps the chosen values.
 - **Reopen closed tickets** — a closed job can be reopened for warranty work.
   Choose where it re-enters the board (default **In repair**); its reports,
   invoice and payments stay attached.
@@ -91,7 +100,7 @@ printing are still being built.
 **Next**
 
 - Structured Report 2 tests, findings, estimates and contact log; Report 3
-  summary, warranty page and printing.
+  printing of the job summary and warranty pages.
 - Merch checkout and the remaining Settings screens (backup, shop details).
 
 ## Requirements
