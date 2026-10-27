@@ -12,16 +12,17 @@ Local-first: one SQLite file on the machine, no server, no accounts, no cloud.
 
 ## Status
 
-Early but usable. The Windows shell, ticket intake, device catalog and Report 2
-bench log work end to end. The client report and remaining tabs are still being
-built.
+Early but usable. The Windows shell, ticket intake, device catalog, all three
+reports and the checkout flow work end to end. Structured estimates and report
+printing are still being built.
 
 **Working**
 
 - **Windows shell** — persisted window geometry, centered first launch, custom
   Flutter title bar, tray icon and single instance.
-- **Six tabs** — Tickets (default), Calendar, Customers, Merch, Parts, Settings,
-  shown as a rail on wide windows and a bottom bar on narrow ones.
+- **Eight tabs** — Tickets (default), Closed Tickets, Checkout, Calendar,
+  Customers, Merch, Parts, Settings, shown as a rail on wide windows and a
+  bottom bar on narrow ones.
 - **Tickets board** — `In the shop` and `Finished`, with a real intake form.
 - **Intake** — customer name/phone/email, category → brand → model, optional
   model number, serial or **No serial number sticker** (which issues a
@@ -48,7 +49,11 @@ built.
 - **Report 2 bench log** — after Report 1 is complete, add ordered notes and
   photos, including several photos attached to one note. The entries copy into
   the editable Report 3 draft; later bench edits update untouched draft entries
-  without overwriting customer wording or photo-inclusion choices.
+  without overwriting customer wording or photo-inclusion choices. **Complete
+  report 2** marks the technical stage done; **Reopen** undoes it.
+- **Client report and checkout** — review the client draft, then **Complete
+  report 3** to send the ticket to Checkout. Checkout handles merchandise,
+  payment and closing the ticket after pickup.
 - **Phone capture** — on the shop PC, **Capture with phone** shows a QR code;
   scan it with a phone on the same Wi-Fi and shoot the Report 1 slots straight
   into the open ticket. Photos land as thumbnails on the PC as they arrive.

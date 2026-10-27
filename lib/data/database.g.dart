@@ -2830,6 +2830,18 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
   late final GeneratedColumn<DateTime> report1CompletedAt =
       GeneratedColumn<DateTime>('report1_completed_at', aliasedName, true,
           type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _report2CompletedAtMeta =
+      const VerificationMeta('report2CompletedAt');
+  @override
+  late final GeneratedColumn<DateTime> report2CompletedAt =
+      GeneratedColumn<DateTime>('report2_completed_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _report3CompletedAtMeta =
+      const VerificationMeta('report3CompletedAt');
+  @override
+  late final GeneratedColumn<DateTime> report3CompletedAt =
+      GeneratedColumn<DateTime>('report3_completed_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _dropOffAtMeta =
       const VerificationMeta('dropOffAt');
   @override
@@ -2953,6 +2965,8 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
         diagnosis,
         intakeNotes,
         report1CompletedAt,
+        report2CompletedAt,
+        report3CompletedAt,
         dropOffAt,
         technicianStartAt,
         partsArriveAt,
@@ -3062,6 +3076,18 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
           _report1CompletedAtMeta,
           report1CompletedAt.isAcceptableOrUnknown(
               data['report1_completed_at']!, _report1CompletedAtMeta));
+    }
+    if (data.containsKey('report2_completed_at')) {
+      context.handle(
+          _report2CompletedAtMeta,
+          report2CompletedAt.isAcceptableOrUnknown(
+              data['report2_completed_at']!, _report2CompletedAtMeta));
+    }
+    if (data.containsKey('report3_completed_at')) {
+      context.handle(
+          _report3CompletedAtMeta,
+          report3CompletedAt.isAcceptableOrUnknown(
+              data['report3_completed_at']!, _report3CompletedAtMeta));
     }
     if (data.containsKey('drop_off_at')) {
       context.handle(
@@ -3181,6 +3207,12 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
       report1CompletedAt: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime,
           data['${effectivePrefix}report1_completed_at']),
+      report2CompletedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime,
+          data['${effectivePrefix}report2_completed_at']),
+      report3CompletedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime,
+          data['${effectivePrefix}report3_completed_at']),
       dropOffAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}drop_off_at']),
       technicianStartAt: attachedDatabase.typeMapping.read(
@@ -3275,6 +3307,14 @@ class Ticket extends DataClass implements Insertable<Ticket> {
   /// set; reopening Report 1 clears it.
   final DateTime? report1CompletedAt;
 
+  /// When the technical (report 2) stage was marked complete. The client report
+  /// stays editable either way.
+  final DateTime? report2CompletedAt;
+
+  /// When the client report (report 3) was marked complete. Completing it also
+  /// moves the ticket to [TicketStatus.ready] so it appears in Checkout.
+  final DateTime? report3CompletedAt;
+
   /// Shop workflow dates. Drop-off falls back to the ticket creation date on
   /// older records; pickup reuses [pickedUpAt].
   final DateTime? dropOffAt;
@@ -3312,6 +3352,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       this.diagnosis,
       this.intakeNotes,
       this.report1CompletedAt,
+      this.report2CompletedAt,
+      this.report3CompletedAt,
       this.dropOffAt,
       this.technicianStartAt,
       this.partsArriveAt,
@@ -3365,6 +3407,12 @@ class Ticket extends DataClass implements Insertable<Ticket> {
     }
     if (!nullToAbsent || report1CompletedAt != null) {
       map['report1_completed_at'] = Variable<DateTime>(report1CompletedAt);
+    }
+    if (!nullToAbsent || report2CompletedAt != null) {
+      map['report2_completed_at'] = Variable<DateTime>(report2CompletedAt);
+    }
+    if (!nullToAbsent || report3CompletedAt != null) {
+      map['report3_completed_at'] = Variable<DateTime>(report3CompletedAt);
     }
     if (!nullToAbsent || dropOffAt != null) {
       map['drop_off_at'] = Variable<DateTime>(dropOffAt);
@@ -3446,6 +3494,12 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       report1CompletedAt: report1CompletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(report1CompletedAt),
+      report2CompletedAt: report2CompletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(report2CompletedAt),
+      report3CompletedAt: report3CompletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(report3CompletedAt),
       dropOffAt: dropOffAt == null && nullToAbsent
           ? const Value.absent()
           : Value(dropOffAt),
@@ -3501,6 +3555,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       intakeNotes: serializer.fromJson<String?>(json['intakeNotes']),
       report1CompletedAt:
           serializer.fromJson<DateTime?>(json['report1CompletedAt']),
+      report2CompletedAt:
+          serializer.fromJson<DateTime?>(json['report2CompletedAt']),
+      report3CompletedAt:
+          serializer.fromJson<DateTime?>(json['report3CompletedAt']),
       dropOffAt: serializer.fromJson<DateTime?>(json['dropOffAt']),
       technicianStartAt:
           serializer.fromJson<DateTime?>(json['technicianStartAt']),
@@ -3543,6 +3601,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       'diagnosis': serializer.toJson<String?>(diagnosis),
       'intakeNotes': serializer.toJson<String?>(intakeNotes),
       'report1CompletedAt': serializer.toJson<DateTime?>(report1CompletedAt),
+      'report2CompletedAt': serializer.toJson<DateTime?>(report2CompletedAt),
+      'report3CompletedAt': serializer.toJson<DateTime?>(report3CompletedAt),
       'dropOffAt': serializer.toJson<DateTime?>(dropOffAt),
       'technicianStartAt': serializer.toJson<DateTime?>(technicianStartAt),
       'partsArriveAt': serializer.toJson<DateTime?>(partsArriveAt),
@@ -3581,6 +3641,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           Value<String?> diagnosis = const Value.absent(),
           Value<String?> intakeNotes = const Value.absent(),
           Value<DateTime?> report1CompletedAt = const Value.absent(),
+          Value<DateTime?> report2CompletedAt = const Value.absent(),
+          Value<DateTime?> report3CompletedAt = const Value.absent(),
           Value<DateTime?> dropOffAt = const Value.absent(),
           Value<DateTime?> technicianStartAt = const Value.absent(),
           Value<DateTime?> partsArriveAt = const Value.absent(),
@@ -3619,6 +3681,12 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         report1CompletedAt: report1CompletedAt.present
             ? report1CompletedAt.value
             : this.report1CompletedAt,
+        report2CompletedAt: report2CompletedAt.present
+            ? report2CompletedAt.value
+            : this.report2CompletedAt,
+        report3CompletedAt: report3CompletedAt.present
+            ? report3CompletedAt.value
+            : this.report3CompletedAt,
         dropOffAt: dropOffAt.present ? dropOffAt.value : this.dropOffAt,
         technicianStartAt: technicianStartAt.present
             ? technicianStartAt.value
@@ -3674,6 +3742,12 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       report1CompletedAt: data.report1CompletedAt.present
           ? data.report1CompletedAt.value
           : this.report1CompletedAt,
+      report2CompletedAt: data.report2CompletedAt.present
+          ? data.report2CompletedAt.value
+          : this.report2CompletedAt,
+      report3CompletedAt: data.report3CompletedAt.present
+          ? data.report3CompletedAt.value
+          : this.report3CompletedAt,
       dropOffAt: data.dropOffAt.present ? data.dropOffAt.value : this.dropOffAt,
       technicianStartAt: data.technicianStartAt.present
           ? data.technicianStartAt.value
@@ -3727,6 +3801,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ..write('diagnosis: $diagnosis, ')
           ..write('intakeNotes: $intakeNotes, ')
           ..write('report1CompletedAt: $report1CompletedAt, ')
+          ..write('report2CompletedAt: $report2CompletedAt, ')
+          ..write('report3CompletedAt: $report3CompletedAt, ')
           ..write('dropOffAt: $dropOffAt, ')
           ..write('technicianStartAt: $technicianStartAt, ')
           ..write('partsArriveAt: $partsArriveAt, ')
@@ -3764,6 +3840,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         diagnosis,
         intakeNotes,
         report1CompletedAt,
+        report2CompletedAt,
+        report3CompletedAt,
         dropOffAt,
         technicianStartAt,
         partsArriveAt,
@@ -3800,6 +3878,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           other.diagnosis == this.diagnosis &&
           other.intakeNotes == this.intakeNotes &&
           other.report1CompletedAt == this.report1CompletedAt &&
+          other.report2CompletedAt == this.report2CompletedAt &&
+          other.report3CompletedAt == this.report3CompletedAt &&
           other.dropOffAt == this.dropOffAt &&
           other.technicianStartAt == this.technicianStartAt &&
           other.partsArriveAt == this.partsArriveAt &&
@@ -3834,6 +3914,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
   final Value<String?> diagnosis;
   final Value<String?> intakeNotes;
   final Value<DateTime?> report1CompletedAt;
+  final Value<DateTime?> report2CompletedAt;
+  final Value<DateTime?> report3CompletedAt;
   final Value<DateTime?> dropOffAt;
   final Value<DateTime?> technicianStartAt;
   final Value<DateTime?> partsArriveAt;
@@ -3866,6 +3948,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.diagnosis = const Value.absent(),
     this.intakeNotes = const Value.absent(),
     this.report1CompletedAt = const Value.absent(),
+    this.report2CompletedAt = const Value.absent(),
+    this.report3CompletedAt = const Value.absent(),
     this.dropOffAt = const Value.absent(),
     this.technicianStartAt = const Value.absent(),
     this.partsArriveAt = const Value.absent(),
@@ -3899,6 +3983,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.diagnosis = const Value.absent(),
     this.intakeNotes = const Value.absent(),
     this.report1CompletedAt = const Value.absent(),
+    this.report2CompletedAt = const Value.absent(),
+    this.report3CompletedAt = const Value.absent(),
     this.dropOffAt = const Value.absent(),
     this.technicianStartAt = const Value.absent(),
     this.partsArriveAt = const Value.absent(),
@@ -3935,6 +4021,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     Expression<String>? diagnosis,
     Expression<String>? intakeNotes,
     Expression<DateTime>? report1CompletedAt,
+    Expression<DateTime>? report2CompletedAt,
+    Expression<DateTime>? report3CompletedAt,
     Expression<DateTime>? dropOffAt,
     Expression<DateTime>? technicianStartAt,
     Expression<DateTime>? partsArriveAt,
@@ -3969,6 +4057,10 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       if (intakeNotes != null) 'intake_notes': intakeNotes,
       if (report1CompletedAt != null)
         'report1_completed_at': report1CompletedAt,
+      if (report2CompletedAt != null)
+        'report2_completed_at': report2CompletedAt,
+      if (report3CompletedAt != null)
+        'report3_completed_at': report3CompletedAt,
       if (dropOffAt != null) 'drop_off_at': dropOffAt,
       if (technicianStartAt != null) 'technician_start_at': technicianStartAt,
       if (partsArriveAt != null) 'parts_arrive_at': partsArriveAt,
@@ -4007,6 +4099,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       Value<String?>? diagnosis,
       Value<String?>? intakeNotes,
       Value<DateTime?>? report1CompletedAt,
+      Value<DateTime?>? report2CompletedAt,
+      Value<DateTime?>? report3CompletedAt,
       Value<DateTime?>? dropOffAt,
       Value<DateTime?>? technicianStartAt,
       Value<DateTime?>? partsArriveAt,
@@ -4039,6 +4133,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       diagnosis: diagnosis ?? this.diagnosis,
       intakeNotes: intakeNotes ?? this.intakeNotes,
       report1CompletedAt: report1CompletedAt ?? this.report1CompletedAt,
+      report2CompletedAt: report2CompletedAt ?? this.report2CompletedAt,
+      report3CompletedAt: report3CompletedAt ?? this.report3CompletedAt,
       dropOffAt: dropOffAt ?? this.dropOffAt,
       technicianStartAt: technicianStartAt ?? this.technicianStartAt,
       partsArriveAt: partsArriveAt ?? this.partsArriveAt,
@@ -4106,6 +4202,14 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     if (report1CompletedAt.present) {
       map['report1_completed_at'] =
           Variable<DateTime>(report1CompletedAt.value);
+    }
+    if (report2CompletedAt.present) {
+      map['report2_completed_at'] =
+          Variable<DateTime>(report2CompletedAt.value);
+    }
+    if (report3CompletedAt.present) {
+      map['report3_completed_at'] =
+          Variable<DateTime>(report3CompletedAt.value);
     }
     if (dropOffAt.present) {
       map['drop_off_at'] = Variable<DateTime>(dropOffAt.value);
@@ -4180,6 +4284,8 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
           ..write('diagnosis: $diagnosis, ')
           ..write('intakeNotes: $intakeNotes, ')
           ..write('report1CompletedAt: $report1CompletedAt, ')
+          ..write('report2CompletedAt: $report2CompletedAt, ')
+          ..write('report3CompletedAt: $report3CompletedAt, ')
           ..write('dropOffAt: $dropOffAt, ')
           ..write('technicianStartAt: $technicianStartAt, ')
           ..write('partsArriveAt: $partsArriveAt, ')
@@ -14556,6 +14662,8 @@ typedef $$TicketsTableCreateCompanionBuilder = TicketsCompanion Function({
   Value<String?> diagnosis,
   Value<String?> intakeNotes,
   Value<DateTime?> report1CompletedAt,
+  Value<DateTime?> report2CompletedAt,
+  Value<DateTime?> report3CompletedAt,
   Value<DateTime?> dropOffAt,
   Value<DateTime?> technicianStartAt,
   Value<DateTime?> partsArriveAt,
@@ -14589,6 +14697,8 @@ typedef $$TicketsTableUpdateCompanionBuilder = TicketsCompanion Function({
   Value<String?> diagnosis,
   Value<String?> intakeNotes,
   Value<DateTime?> report1CompletedAt,
+  Value<DateTime?> report2CompletedAt,
+  Value<DateTime?> report3CompletedAt,
   Value<DateTime?> dropOffAt,
   Value<DateTime?> technicianStartAt,
   Value<DateTime?> partsArriveAt,
@@ -14801,6 +14911,14 @@ class $$TicketsTableFilterComposer
 
   ColumnFilters<DateTime> get report1CompletedAt => $composableBuilder(
       column: $table.report1CompletedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get report2CompletedAt => $composableBuilder(
+      column: $table.report2CompletedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get report3CompletedAt => $composableBuilder(
+      column: $table.report3CompletedAt,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get dropOffAt => $composableBuilder(
@@ -15115,6 +15233,14 @@ class $$TicketsTableOrderingComposer
       column: $table.report1CompletedAt,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get report2CompletedAt => $composableBuilder(
+      column: $table.report2CompletedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get report3CompletedAt => $composableBuilder(
+      column: $table.report3CompletedAt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get dropOffAt => $composableBuilder(
       column: $table.dropOffAt, builder: (column) => ColumnOrderings(column));
 
@@ -15275,6 +15401,12 @@ class $$TicketsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get report1CompletedAt => $composableBuilder(
       column: $table.report1CompletedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get report2CompletedAt => $composableBuilder(
+      column: $table.report2CompletedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get report3CompletedAt => $composableBuilder(
+      column: $table.report3CompletedAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get dropOffAt =>
       $composableBuilder(column: $table.dropOffAt, builder: (column) => column);
@@ -15581,6 +15713,8 @@ class $$TicketsTableTableManager extends RootTableManager<
             Value<String?> diagnosis = const Value.absent(),
             Value<String?> intakeNotes = const Value.absent(),
             Value<DateTime?> report1CompletedAt = const Value.absent(),
+            Value<DateTime?> report2CompletedAt = const Value.absent(),
+            Value<DateTime?> report3CompletedAt = const Value.absent(),
             Value<DateTime?> dropOffAt = const Value.absent(),
             Value<DateTime?> technicianStartAt = const Value.absent(),
             Value<DateTime?> partsArriveAt = const Value.absent(),
@@ -15615,6 +15749,8 @@ class $$TicketsTableTableManager extends RootTableManager<
             diagnosis: diagnosis,
             intakeNotes: intakeNotes,
             report1CompletedAt: report1CompletedAt,
+            report2CompletedAt: report2CompletedAt,
+            report3CompletedAt: report3CompletedAt,
             dropOffAt: dropOffAt,
             technicianStartAt: technicianStartAt,
             partsArriveAt: partsArriveAt,
@@ -15648,6 +15784,8 @@ class $$TicketsTableTableManager extends RootTableManager<
             Value<String?> diagnosis = const Value.absent(),
             Value<String?> intakeNotes = const Value.absent(),
             Value<DateTime?> report1CompletedAt = const Value.absent(),
+            Value<DateTime?> report2CompletedAt = const Value.absent(),
+            Value<DateTime?> report3CompletedAt = const Value.absent(),
             Value<DateTime?> dropOffAt = const Value.absent(),
             Value<DateTime?> technicianStartAt = const Value.absent(),
             Value<DateTime?> partsArriveAt = const Value.absent(),
@@ -15682,6 +15820,8 @@ class $$TicketsTableTableManager extends RootTableManager<
             diagnosis: diagnosis,
             intakeNotes: intakeNotes,
             report1CompletedAt: report1CompletedAt,
+            report2CompletedAt: report2CompletedAt,
+            report3CompletedAt: report3CompletedAt,
             dropOffAt: dropOffAt,
             technicianStartAt: technicianStartAt,
             partsArriveAt: partsArriveAt,

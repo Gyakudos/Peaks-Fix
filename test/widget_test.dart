@@ -62,6 +62,10 @@ class FakeTicketsRepository implements TicketsRepository {
       <({int ticketId, String notes})>[];
   final List<({int ticketId, bool completed})> report1Writes =
       <({int ticketId, bool completed})>[];
+  final List<({int ticketId, bool completed})> report2Writes =
+      <({int ticketId, bool completed})>[];
+  final List<({int ticketId, bool completed})> report3Writes =
+      <({int ticketId, bool completed})>[];
 
   final StreamController<List<TicketBoardEntry>> _boardUpdates =
       StreamController<List<TicketBoardEntry>>.broadcast();
@@ -514,18 +518,38 @@ class FakeTicketsRepository implements TicketsRepository {
     report1Writes.add((ticketId: ticketId, completed: completed));
     final detail = _detail;
     if (detail == null) return;
-    _detail = TicketDetailEntry(
-      summary: detail.summary,
-      diagnosis: detail.diagnosis,
-      notes: detail.notes,
-      intakeNotes: detail.intakeNotes,
+    _detail = detail.copyWith(
       report1CompletedAt: completed ? DateTime(2026, 2, 3, 10, 15) : null,
-      estimateCents: detail.estimateCents,
-      dueAt: detail.dueAt,
-      completedAt: detail.completedAt,
-      pickedUpAt: detail.pickedUpAt,
+      clearReport1: !completed,
     );
     _detailUpdates.add(_detail);
+  }
+
+  @override
+  Future<void> setReport2Completed(int ticketId, bool completed) async {
+    report2Writes.add((ticketId: ticketId, completed: completed));
+    final detail = _detail;
+    if (detail == null) return;
+    _detail = detail.copyWith(
+      report2CompletedAt: completed ? DateTime(2026, 2, 3, 11, 30) : null,
+      clearReport2: !completed,
+    );
+    _detailUpdates.add(_detail);
+  }
+
+  @override
+  Future<void> setReport3Completed(int ticketId, bool completed) async {
+    report3Writes.add((ticketId: ticketId, completed: completed));
+    final detail = _detail;
+    if (detail == null) return;
+    _detail = detail.copyWith(
+      report3CompletedAt: completed ? DateTime(2026, 2, 3, 12, 45) : null,
+      clearReport3: !completed,
+    );
+    _detailUpdates.add(_detail);
+    if (completed) {
+      await updateStatus(ticketId, TicketStatus.ready);
+    }
   }
 
   @override
@@ -720,6 +744,11 @@ class FakeTicketsRepository implements TicketsRepository {
     );
     boardTickets[boardTickets.indexOf(ticket)] = updated;
     _boardUpdates.add(List.unmodifiable(boardTickets));
+    final detail = _detail;
+    if (detail != null) {
+      _detail = detail.copyWith(summary: updated);
+      _detailUpdates.add(_detail);
+    }
   }
 
   @override
@@ -2485,6 +2514,146 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('report 2 completes and reopens without touching report 3',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await _open3dsReport1(tester, repository);
+    repository.markAllPhotosCaptured();
+    await tester.pumpAndSettle();
+    final ticketScroll = find.descendant(
+      of: find.byKey(const Key('ticket-detail-scroll')),
+      matching: find.byType(Scrollable).first,
+    );
+
+    final complete1 = find.byKey(const Key('complete-report1'));
+    await tester.scrollUntilVisible(
+      complete1,
+      250,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(complete1);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('report2-start')),
+      250,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(find.byKey(const Key('report2-start')));
+    await tester.pumpAndSettle();
+
+    final complete2 = find.byKey(const Key('complete-report2'));
+    await tester.scrollUntilVisible(
+      complete2,
+      250,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(complete2);
+    await tester.pumpAndSettle();
+
+    expect(repository.report2Writes, hasLength(1));
+    expect(repository.report2Writes.single.completed, isTrue);
+    expect(repository.report3Writes, isEmpty);
+    expect(find.text('Report 2 complete'), findsOneWidget);
+    expect(
+      find.textContaining('Technical stage done'),
+      findsOneWidget,
+    );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('report2-row')),
+      -250,
+      scrollable: ticketScroll,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('report2-row')),
+        matching: find.text('Completed'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('report3-row')),
+        matching: find.text('Draft'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('reopen-report2')),
+      250,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(find.byKey(const Key('reopen-report2')));
+    await tester.pumpAndSettle();
+    expect(find.text('Reopen report?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-reopen-report2')));
+    await tester.pumpAndSettle();
+
+    expect(repository.report2Writes, hasLength(2));
+    expect(repository.report2Writes.last.completed, isFalse);
+    expect(find.byKey(const Key('complete-report2')), findsOneWidget);
+  });
+
+  testWidgets('report 3 completion sends the ticket to checkout',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 2600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await _open3dsReport1(tester, repository);
+    final ticketScroll = find.descendant(
+      of: find.byKey(const Key('ticket-detail-scroll')),
+      matching: find.byType(Scrollable).first,
+    );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('report3-start')),
+      250,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(find.byKey(const Key('report3-start')));
+    await tester.pumpAndSettle();
+
+    final complete3 = find.byKey(const Key('complete-report3'));
+    await tester.scrollUntilVisible(
+      complete3,
+      250,
+      scrollable: ticketScroll,
+    );
+    await tester.tap(complete3);
+    await tester.pumpAndSettle();
+    expect(find.text('Send to checkout?'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('confirm-complete-report3')));
+    await tester.pumpAndSettle();
+
+    expect(repository.report3Writes, hasLength(1));
+    expect(repository.report3Writes.single.completed, isTrue);
+    expect(repository.boardTickets.single.status, TicketStatus.ready);
+    expect(find.text('Report 3 complete'), findsOneWidget);
+    expect(find.textContaining('sent to checkout'), findsWidgets);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopScope(
+          tickets: repository,
+          child: const Scaffold(body: CheckoutPage()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('checkout-open-7')), findsOneWidget);
   });
 }
 

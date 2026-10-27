@@ -188,6 +188,8 @@ class _TicketBody extends StatelessWidget {
               device: summary.deviceWithVariant,
               intakeNotes: entry.intakeNotes,
               report1CompletedAt: entry.report1CompletedAt,
+              report2CompletedAt: entry.report2CompletedAt,
+              report3CompletedAt: entry.report3CompletedAt,
             ),
           ],
         ),
@@ -575,6 +577,8 @@ class _ReportsCard extends StatelessWidget {
     required this.device,
     required this.intakeNotes,
     required this.report1CompletedAt,
+    required this.report2CompletedAt,
+    required this.report3CompletedAt,
   });
 
   final int ticketId;
@@ -583,6 +587,8 @@ class _ReportsCard extends StatelessWidget {
   final String device;
   final String? intakeNotes;
   final DateTime? report1CompletedAt;
+  final DateTime? report2CompletedAt;
+  final DateTime? report3CompletedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -794,7 +800,11 @@ class _ReportsCard extends StatelessWidget {
                   icon: report1CompletedAt == null
                       ? Icons.lock_outline
                       : Icons.description_outlined,
-                  status: report1CompletedAt == null ? 'Locked' : 'Draft',
+                  status: report1CompletedAt == null
+                      ? 'Locked'
+                      : report2CompletedAt == null
+                          ? 'Draft'
+                          : 'Completed',
                   locked: report1CompletedAt == null,
                   expandKey: const Key('report2-expand'),
                   startKey: const Key('report2-start'),
@@ -840,6 +850,21 @@ class _ReportsCard extends StatelessWidget {
                               device: device,
                               repository: repository,
                             ),
+                            _ReportCompletionFooter(
+                              completedAt: report2CompletedAt,
+                              title: 'Report 2 complete',
+                              completeLabel: 'Complete report 2',
+                              completedHint: 'Technical stage done',
+                              pendingHint: 'Mark the bench work done when the '
+                                  'diagnosis and estimate are finished.',
+                              completeKey: const Key('complete-report2'),
+                              reopenKey: const Key('reopen-report2'),
+                              confirmReopenKey:
+                                  const Key('confirm-reopen-report2'),
+                              onSetCompleted: (completed) => repository
+                                  .setReport2Completed(ticketId, completed),
+                              snackbarText: 'Technical stage marked complete.',
+                            ),
                           ],
                         ),
                 ),
@@ -853,7 +878,7 @@ class _ReportsCard extends StatelessWidget {
                     fallbackText: 'Editable draft · review before sharing',
                   ),
                   icon: Icons.description_outlined,
-                  status: 'Draft',
+                  status: report3CompletedAt == null ? 'Draft' : 'Completed',
                   expandKey: const Key('report3-expand'),
                   startKey: const Key('report3-start'),
                   child: Column(
@@ -873,6 +898,28 @@ class _ReportsCard extends StatelessWidget {
                         customerName: customerName,
                         device: device,
                         repository: repository,
+                      ),
+                      _ReportCompletionFooter(
+                        completedAt: report3CompletedAt,
+                        title: 'Report 3 complete',
+                        completeLabel: 'Complete report 3',
+                        completedHint: 'Client report done · sent to checkout',
+                        pendingHint: 'Completing the client report sends the '
+                            'ticket to Checkout.',
+                        completeKey: const Key('complete-report3'),
+                        reopenKey: const Key('reopen-report3'),
+                        confirmReopenKey: const Key('confirm-reopen-report3'),
+                        onSetCompleted: (completed) =>
+                            repository.setReport3Completed(ticketId, completed),
+                        snackbarText:
+                            'Client report complete. Sent to checkout.',
+                        confirmComplete: const _CompleteConfirmation(
+                          title: 'Send to checkout?',
+                          body: 'The ticket moves to Checkout so payment and '
+                              'pickup can be handled. The report stays editable.',
+                          confirmLabel: 'Send to checkout',
+                          confirmKey: Key('confirm-complete-report3'),
+                        ),
                       ),
                     ],
                   ),
@@ -1162,6 +1209,200 @@ class _ReportOneFooter extends StatelessWidget {
     if (confirmed == true) {
       await repository.setReport1Completed(ticketId, false);
     }
+  }
+}
+
+/// Optional confirmation shown before a report is marked complete.
+class _CompleteConfirmation {
+  const _CompleteConfirmation({
+    required this.title,
+    required this.body,
+    required this.confirmLabel,
+    required this.confirmKey,
+  });
+
+  final String title;
+  final String body;
+  final String confirmLabel;
+  final Key confirmKey;
+}
+
+/// Complete / reopen control at the bottom of Reports 2 and 3.
+///
+/// Unlike Report 1 these reports have no required content, so the button is
+/// always available. The timestamp is the only record of completion; the
+/// report stays editable and can be reopened.
+class _ReportCompletionFooter extends StatefulWidget {
+  const _ReportCompletionFooter({
+    required this.completedAt,
+    required this.title,
+    required this.completeLabel,
+    required this.completedHint,
+    required this.pendingHint,
+    required this.completeKey,
+    required this.reopenKey,
+    required this.confirmReopenKey,
+    required this.onSetCompleted,
+    required this.snackbarText,
+    this.confirmComplete,
+  });
+
+  final DateTime? completedAt;
+  final String title;
+  final String completeLabel;
+  final String completedHint;
+  final String pendingHint;
+  final Key completeKey;
+  final Key reopenKey;
+  final Key confirmReopenKey;
+  final Future<void> Function(bool completed) onSetCompleted;
+  final String snackbarText;
+  final _CompleteConfirmation? confirmComplete;
+
+  @override
+  State<_ReportCompletionFooter> createState() =>
+      _ReportCompletionFooterState();
+}
+
+class _ReportCompletionFooterState extends State<_ReportCompletionFooter> {
+  bool _busy = false;
+
+  Future<void> _complete() async {
+    final confirmation = widget.confirmComplete;
+    if (confirmation != null) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(confirmation.title),
+          content: Text(confirmation.body),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: confirmation.confirmKey,
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(confirmation.confirmLabel),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    await _setCompleted(true);
+  }
+
+  Future<void> _reopen() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reopen report?'),
+        content: const Text(
+          'The content is kept and the report stays editable.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: widget.confirmReopenKey,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reopen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) await _setCompleted(false);
+  }
+
+  Future<void> _setCompleted(bool completed) async {
+    setState(() => _busy = true);
+    try {
+      await widget.onSetCompleted(completed);
+      if (!mounted) return;
+      if (completed) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(widget.snackbarText)));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update the report: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final completedAt = widget.completedAt;
+
+    if (completedAt != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 6),
+        child: Row(
+          children: [
+            Icon(Icons.task_alt, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '${_dateTimeLabel(completedAt)} · ${widget.completedHint}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              key: widget.reopenKey,
+              onPressed: _busy ? null : _reopen,
+              child: const Text('Reopen'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FilledButton.icon(
+            key: widget.completeKey,
+            onPressed: _busy ? null : _complete,
+            icon: const Icon(Icons.task_alt, size: 18),
+            label: Text(widget.completeLabel),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 9),
+              child: Text(
+                widget.pendingHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

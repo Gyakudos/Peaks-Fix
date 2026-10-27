@@ -90,6 +90,9 @@ Merging them would corrupt both stock counts and revenue reporting.
   Contacted dates to tickets; the existing pickup date is reused. Old tickets
   use their creation date for Drop Off. The Calendar tab shows all five
   milestones, and each report section uses the same saved ticket dates.
+- Schema v13 adds `tickets.report2_completed_at` and `report3_completed_at`.
+  Report 1 completion already unlocked Report 2; completing Report 3 also moves
+  the ticket to **Ready** so it appears in Checkout.
 - A **single Joy-Con** is a catalog row of its own (`Joy-Con (single)`), and
   intake asks **Left / Right** as a follow-up. The side is stored on the ticket
   (`device_side`) and shown on the board and the ticket page. A pair remains one
@@ -173,8 +176,10 @@ Merging them would corrupt both stock counts and revenue reporting.
   typing, for scratches, cracks, stickers and missing parts.
 - **Reports** — Report 2 has an ordered internal bench log for notes and photos.
   Entries sync into an editable Report 3 draft while unedited content stays
-  linked. Structured estimates, the two-page client report and printing remain
-  to be built; see `REPORTS.md`.
+  linked. Report 2 and Report 3 each have **Complete** and **Reopen** controls;
+  completing Report 3 confirms and sends the ticket to Checkout. Structured
+  estimates, the two-page client report and printing remain to be built; see
+  `REPORTS.md`.
 - **Customers** — searchable and editable profiles with devices and repair
   history. Intake can select existing customers and devices.
 - **Merch, Settings** — still placeholders.

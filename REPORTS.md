@@ -132,6 +132,10 @@ The Technical section also exposes the shared five-date workflow for the job;
 changes are saved to the ticket and are visible in the other report sections
 and Calendar.
 
+A **Complete report 2** button at the bottom marks the technical stage done and
+records the timestamp; **Reopen** clears it. The report stays editable either
+way, and completing it does not change the ticket status.
+
 - Header: ticket number, shop tag and device, so the bench matches paper to
   hardware at a glance.
 - Complaint (carried from report 1).
@@ -167,6 +171,11 @@ report are still planned.
 
 The Client report section includes the same ticket dates as Report 1 and
 Technical, so milestone updates remain consistent across all three.
+
+**Complete report 3** asks "Send to checkout?" first. Confirming records the
+completion timestamp and moves the ticket to **Ready**, so it appears in the
+Checkout tab for payment and pickup. Reopening the report clears the timestamp
+but leaves the ticket where it is; the report stays editable throughout.
 
 ### Page 1 — Job summary
 
@@ -254,6 +263,9 @@ page leads back to exactly one unit:
 
 ## Data model
 
+- `tickets.report1_completed_at`, `report2_completed_at` and
+  `report3_completed_at` — when each stage was marked complete. Report 1
+  unlocks Report 2; Report 3 sends the ticket to Checkout.
 - `ticket_reports` — ticket, kind (`intake` / `technical` / `client`), status,
   author, revision, created/updated/finalized timestamps, and the `shopTag`
   printed on that revision. The table exists; report creation and finalization

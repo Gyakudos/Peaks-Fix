@@ -76,6 +76,8 @@ class TicketDetailEntry {
     this.notes,
     this.intakeNotes,
     this.report1CompletedAt,
+    this.report2CompletedAt,
+    this.report3CompletedAt,
     this.estimateCents = 0,
     this.dueAt,
     this.completedAt,
@@ -91,10 +93,51 @@ class TicketDetailEntry {
 
   /// When Report 1 was completed; `null` keeps Report 2 locked.
   final DateTime? report1CompletedAt;
+
+  /// When the technical stage (Report 2) was marked complete.
+  final DateTime? report2CompletedAt;
+
+  /// When the client report (Report 3) was marked complete. Completing it also
+  /// sends the ticket to Checkout.
+  final DateTime? report3CompletedAt;
   final int estimateCents;
   final DateTime? dueAt;
   final DateTime? completedAt;
   final DateTime? pickedUpAt;
+
+  TicketDetailEntry copyWith({
+    TicketBoardEntry? summary,
+    String? diagnosis,
+    String? notes,
+    String? intakeNotes,
+    DateTime? report1CompletedAt,
+    DateTime? report2CompletedAt,
+    DateTime? report3CompletedAt,
+    int? estimateCents,
+    DateTime? dueAt,
+    DateTime? completedAt,
+    DateTime? pickedUpAt,
+    bool clearReport1 = false,
+    bool clearReport2 = false,
+    bool clearReport3 = false,
+  }) {
+    return TicketDetailEntry(
+      summary: summary ?? this.summary,
+      diagnosis: diagnosis ?? this.diagnosis,
+      notes: notes ?? this.notes,
+      intakeNotes: intakeNotes ?? this.intakeNotes,
+      report1CompletedAt:
+          clearReport1 ? null : report1CompletedAt ?? this.report1CompletedAt,
+      report2CompletedAt:
+          clearReport2 ? null : report2CompletedAt ?? this.report2CompletedAt,
+      report3CompletedAt:
+          clearReport3 ? null : report3CompletedAt ?? this.report3CompletedAt,
+      estimateCents: estimateCents ?? this.estimateCents,
+      dueAt: dueAt ?? this.dueAt,
+      completedAt: completedAt ?? this.completedAt,
+      pickedUpAt: pickedUpAt ?? this.pickedUpAt,
+    );
+  }
 
   TicketDates get dates => TicketDates(
         dropOffAt: summary.dropOffAt,
@@ -582,6 +625,13 @@ abstract class TicketsRepository {
 
   /// Marks Report 1 complete (unlocking Report 2) or reopens it.
   Future<void> setReport1Completed(int ticketId, bool completed);
+
+  /// Marks the technical stage (Report 2) complete or reopens it.
+  Future<void> setReport2Completed(int ticketId, bool completed);
+
+  /// Marks the client report (Report 3) complete or reopens it. Completing it
+  /// sends the ticket to Checkout.
+  Future<void> setReport3Completed(int ticketId, bool completed);
 
   Future<void> ensureTechnicalReports(int ticketId);
 
@@ -1106,6 +1156,8 @@ class DriftTicketsRepository implements TicketsRepository {
         notes: row.readTable(_db.tickets).notes,
         intakeNotes: row.readTable(_db.tickets).intakeNotes,
         report1CompletedAt: row.readTable(_db.tickets).report1CompletedAt,
+        report2CompletedAt: row.readTable(_db.tickets).report2CompletedAt,
+        report3CompletedAt: row.readTable(_db.tickets).report3CompletedAt,
         estimateCents: row.readTable(_db.tickets).estimateCents,
         dueAt: row.readTable(_db.tickets).dueAt,
         completedAt: row.readTable(_db.tickets).completedAt,
@@ -1227,6 +1279,14 @@ class DriftTicketsRepository implements TicketsRepository {
   @override
   Future<void> setReport1Completed(int ticketId, bool completed) =>
       _db.setReport1Completed(ticketId, completed);
+
+  @override
+  Future<void> setReport2Completed(int ticketId, bool completed) =>
+      _db.setReport2Completed(ticketId, completed);
+
+  @override
+  Future<void> setReport3Completed(int ticketId, bool completed) =>
+      _db.setReport3Completed(ticketId, completed);
 
   @override
   Future<void> ensureTechnicalReports(int ticketId) =>

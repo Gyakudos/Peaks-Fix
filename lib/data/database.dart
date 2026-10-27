@@ -234,6 +234,14 @@ class Tickets extends Table {
   /// set; reopening Report 1 clears it.
   DateTimeColumn get report1CompletedAt => dateTime().nullable()();
 
+  /// When the technical (report 2) stage was marked complete. The client report
+  /// stays editable either way.
+  DateTimeColumn get report2CompletedAt => dateTime().nullable()();
+
+  /// When the client report (report 3) was marked complete. Completing it also
+  /// moves the ticket to [TicketStatus.ready] so it appears in Checkout.
+  DateTimeColumn get report3CompletedAt => dateTime().nullable()();
+
   /// Shop workflow dates. Drop-off falls back to the ticket creation date on
   /// older records; pickup reuses [pickedUpAt].
   DateTimeColumn get dropOffAt => dateTime().nullable()();
@@ -576,7 +584,7 @@ class AppDatabase extends _$AppDatabase {
   static final Random _random = Random.secure();
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -593,6 +601,8 @@ class AppDatabase extends _$AppDatabase {
   /// v11 added customer-owned device records and linked tickets to them.
   /// v12 added ticket drop-off, technician-start, parts-arrival, and
   /// customer-contacted dates. Pickup already existed as `picked_up_at`.
+  /// v13 added `report2_completed_at` and `report3_completed_at` so the
+  /// technical and client stages can be marked complete.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -681,6 +691,10 @@ class AppDatabase extends _$AppDatabase {
               'UPDATE tickets SET drop_off_at = created_at '
               'WHERE drop_off_at IS NULL',
             );
+          }
+          if (from < 13) {
+            await m.addColumn(tickets, tickets.report2CompletedAt);
+            await m.addColumn(tickets, tickets.report3CompletedAt);
           }
         },
       );
@@ -1668,6 +1682,41 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// Marks the technical stage (Report 2) complete or reopens it. The report
+  /// stays editable either way; the timestamp only records the hand-off.
+  Future<void> setReport2Completed(int ticketId, bool completed) async {
+    await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
+      TicketsCompanion(
+        report2CompletedAt: Value(completed ? DateTime.now() : null),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Marks the client report (Report 3) complete or reopens it. Completing it
+  /// sends the ticket to Checkout by moving it to [TicketStatus.ready], unless
+  /// the job is already closed, cancelled or picked up.
+  Future<void> setReport3Completed(int ticketId, bool completed) async {
+    await transaction(() async {
+      final ticket = await (select(tickets)
+            ..where((t) => t.id.equals(ticketId)))
+          .getSingle();
+      final sendToCheckout = completed &&
+          ticket.status != TicketStatus.closed &&
+          ticket.status != TicketStatus.cancelled &&
+          ticket.status != TicketStatus.pickedUp;
+      await (update(tickets)..where((t) => t.id.equals(ticketId))).write(
+        TicketsCompanion(
+          report3CompletedAt: Value(completed ? DateTime.now() : null),
+          status: sendToCheckout
+              ? const Value(TicketStatus.ready)
+              : const Value.absent(),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    });
   }
 
   Future<void> ensureTechnicalReports(int ticketId) async {
