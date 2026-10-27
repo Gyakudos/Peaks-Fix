@@ -258,8 +258,13 @@ class InventoryPart {
     this.rawCostCents = 0,
     this.retailPriceCents = 0,
     this.sku,
+    this.vendorId,
+    this.vendorSku,
     this.category,
     this.location,
+    this.purchaseType = PartPurchaseType.single,
+    this.bulkQuantity = 1,
+    this.bulkTotalCents = 0,
   });
 
   final int id;
@@ -268,8 +273,13 @@ class InventoryPart {
   final int rawCostCents;
   final int retailPriceCents;
   final String? sku;
+  final String? vendorId;
+  final String? vendorSku;
   final String? category;
   final String? location;
+  final PartPurchaseType purchaseType;
+  final int bulkQuantity;
+  final int bulkTotalCents;
 }
 
 class RequiredPart {
@@ -517,22 +527,32 @@ abstract class TicketsRepository {
   Future<void> createInventoryPart({
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int startingStock,
     int rawCostCents = 0,
     int retailPriceCents = 0,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   });
 
   Future<void> updateInventoryPart({
     required int partId,
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int stock,
     required int rawCostCents,
     required int retailPriceCents,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   });
 
   Future<void> removeInventoryPart(int partId);
@@ -848,8 +868,13 @@ class DriftTicketsRepository implements TicketsRepository {
               rawCostCents: part.costCents,
               retailPriceCents: part.priceCents,
               sku: part.sku,
+              vendorId: part.vendorId,
+              vendorSku: part.vendorSku,
               category: part.category,
               location: part.location,
+              purchaseType: part.purchaseType,
+              bulkQuantity: part.bulkQuantity,
+              bulkTotalCents: part.bulkTotalCents,
             ),
         ],
       );
@@ -1060,20 +1085,30 @@ class DriftTicketsRepository implements TicketsRepository {
   Future<void> createInventoryPart({
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int startingStock,
     int rawCostCents = 0,
     int retailPriceCents = 0,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   }) async {
     await _db.createInventoryPart(
       name: name,
       sku: sku,
+      vendorId: vendorId,
+      vendorSku: vendorSku,
       category: category,
       location: location,
       startingStock: startingStock,
       rawCostCents: rawCostCents,
       retailPriceCents: retailPriceCents,
+      purchaseType: purchaseType,
+      bulkQuantity: bulkQuantity,
+      bulkTotalCents: bulkTotalCents,
     );
   }
 
@@ -1082,21 +1117,31 @@ class DriftTicketsRepository implements TicketsRepository {
     required int partId,
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int stock,
     required int rawCostCents,
     required int retailPriceCents,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   }) =>
       _db.updateInventoryPart(
         partId: partId,
         name: name,
         sku: sku,
+        vendorId: vendorId,
+        vendorSku: vendorSku,
         category: category,
         location: location,
         stock: stock,
         rawCostCents: rawCostCents,
         retailPriceCents: retailPriceCents,
+        purchaseType: purchaseType,
+        bulkQuantity: bulkQuantity,
+        bulkTotalCents: bulkTotalCents,
       );
 
   @override

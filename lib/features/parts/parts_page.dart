@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/database.dart';
 import '../../data/tickets_repository.dart';
 import '../../data/shop_scope.dart';
 import 'add_inventory_part_dialog.dart';
@@ -128,6 +129,12 @@ class PartsPage extends StatelessWidget {
                         subtitle: Text([
                           if (part.category != null) part.category!,
                           if (part.sku != null) 'SKU ${part.sku}',
+                          if (part.vendorId != null) 'Vendor ${part.vendorId}',
+                          if (part.vendorSku != null)
+                            'Vendor SKU ${part.vendorSku}',
+                          if (part.purchaseType == PartPurchaseType.bulk)
+                            'Bulk ${part.bulkQuantity} · '
+                                '${_money(part.bulkTotalCents)} total',
                           if (part.location != null)
                             'Location ${part.location}',
                           'Raw Parts Cost ${_money(part.rawCostCents)}',

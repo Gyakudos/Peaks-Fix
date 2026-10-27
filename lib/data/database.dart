@@ -63,6 +63,16 @@ enum TicketItemKind { service, part, custom }
 
 enum InvoiceDiscountKind { none, percentage, fixed }
 
+/// Whether a part was bought on its own or as part of a bulk lot.
+enum PartPurchaseType { single, bulk }
+
+extension PartPurchaseTypeLabel on PartPurchaseType {
+  String get label => switch (this) {
+        PartPurchaseType.single => 'Single item',
+        PartPurchaseType.bulk => 'Bulk purchase',
+      };
+}
+
 enum PaymentKind { deposit, balance, refund }
 
 enum PaymentMethod { cash, card, other }
@@ -450,11 +460,27 @@ class Parts extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 120)();
   TextColumn get sku => text().nullable()();
+
+  /// Where the part is purchased, e.g. a supplier account or store name.
+  TextColumn get vendorId => text().nullable()();
+
+  /// The vendor's catalogue SKU for the exact item ordered.
+  TextColumn get vendorSku => text().nullable()();
   TextColumn get category => text().nullable()();
   TextColumn get location => text().nullable()();
   IntColumn get stock => integer().withDefault(const Constant(0))();
   IntColumn get costCents => integer().withDefault(const Constant(0))();
   IntColumn get priceCents => integer().withDefault(const Constant(0))();
+
+  /// Single-item or bulk-lot purchase. [costCents] is always the per-item cost.
+  IntColumn get purchaseType =>
+      intEnum<PartPurchaseType>().withDefault(const Constant(0))();
+
+  /// How many items were in the bulk lot (1 for a single item).
+  IntColumn get bulkQuantity => integer().withDefault(const Constant(1))();
+
+  /// What the whole bulk lot cost, kept so the calculator can be reopened.
+  IntColumn get bulkTotalCents => integer().withDefault(const Constant(0))();
   IntColumn get reorderLevel => integer().withDefault(const Constant(0))();
   TextColumn get supplier => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
@@ -589,8 +615,10 @@ class AppDatabase extends _$AppDatabase {
   /// about how many jobs the shop has done.
   static final Random _random = Random.secure();
 
+  /// v15 added the inventory part vendor ID and vendor SKU, plus purchase type
+  /// and bulk-lot quantity/total so cost per item can be recalculated.
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -610,6 +638,7 @@ class AppDatabase extends _$AppDatabase {
   /// v13 added `report2_completed_at` and `report3_completed_at` so the
   /// technical and client stages can be marked complete.
   /// v14 added the GST/PST amounts snapshotted when a ticket closes.
+  /// v15 added the inventory part vendor ID and vendor SKU.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
@@ -706,6 +735,13 @@ class AppDatabase extends _$AppDatabase {
           if (from < 14) {
             await m.addColumn(tickets, tickets.gstCents);
             await m.addColumn(tickets, tickets.pstCents);
+          }
+          if (from < 15) {
+            await m.addColumn(parts, parts.vendorId);
+            await m.addColumn(parts, parts.vendorSku);
+            await m.addColumn(parts, parts.purchaseType);
+            await m.addColumn(parts, parts.bulkQuantity);
+            await m.addColumn(parts, parts.bulkTotalCents);
           }
         },
       );
@@ -2121,11 +2157,16 @@ class AppDatabase extends _$AppDatabase {
   Future<int> createInventoryPart({
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int startingStock,
     int rawCostCents = 0,
     int retailPriceCents = 0,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2138,7 +2179,20 @@ class AppDatabase extends _$AppDatabase {
         'must not be negative',
       );
     }
-    if (rawCostCents < 0 || retailPriceCents < 0) {
+    if (purchaseType == PartPurchaseType.bulk && bulkQuantity < 1) {
+      throw ArgumentError.value(
+        bulkQuantity,
+        'bulkQuantity',
+        'must be at least 1',
+      );
+    }
+    if (bulkTotalCents < 0) {
+      throw ArgumentError('Part costs must not be negative.');
+    }
+    final isBulk = purchaseType == PartPurchaseType.bulk;
+    final unitCostCents =
+        isBulk ? (bulkTotalCents / bulkQuantity).round() : rawCostCents;
+    if (unitCostCents < 0 || retailPriceCents < 0) {
       throw ArgumentError('Part costs must not be negative.');
     }
     return transaction(() async {
@@ -2146,11 +2200,16 @@ class AppDatabase extends _$AppDatabase {
         PartsCompanion.insert(
           name: cleanName,
           sku: Value(_clean(sku)),
+          vendorId: Value(_clean(vendorId)),
+          vendorSku: Value(_clean(vendorSku)),
           category: Value(_clean(category)),
           location: Value(_clean(location)),
           stock: Value(startingStock),
-          costCents: Value(rawCostCents),
+          costCents: Value(unitCostCents),
           priceCents: Value(retailPriceCents),
+          purchaseType: Value(purchaseType),
+          bulkQuantity: Value(isBulk ? bulkQuantity : 1),
+          bulkTotalCents: Value(isBulk ? bulkTotalCents : 0),
         ),
       );
       if (startingStock > 0) {
@@ -2170,11 +2229,16 @@ class AppDatabase extends _$AppDatabase {
     required int partId,
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int stock,
     required int rawCostCents,
     required int retailPriceCents,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2183,7 +2247,20 @@ class AppDatabase extends _$AppDatabase {
     if (stock < 0) {
       throw ArgumentError.value(stock, 'stock', 'must not be negative');
     }
-    if (rawCostCents < 0 || retailPriceCents < 0) {
+    if (purchaseType == PartPurchaseType.bulk && bulkQuantity < 1) {
+      throw ArgumentError.value(
+        bulkQuantity,
+        'bulkQuantity',
+        'must be at least 1',
+      );
+    }
+    if (bulkTotalCents < 0) {
+      throw ArgumentError('Part costs must not be negative.');
+    }
+    final isBulk = purchaseType == PartPurchaseType.bulk;
+    final unitCostCents =
+        isBulk ? (bulkTotalCents / bulkQuantity).round() : rawCostCents;
+    if (unitCostCents < 0 || retailPriceCents < 0) {
       throw ArgumentError('Part costs must not be negative.');
     }
     await transaction(() async {
@@ -2198,11 +2275,16 @@ class AppDatabase extends _$AppDatabase {
         PartsCompanion(
           name: Value(cleanName),
           sku: Value(_clean(sku)),
+          vendorId: Value(_clean(vendorId)),
+          vendorSku: Value(_clean(vendorSku)),
           category: Value(_clean(category)),
           location: Value(_clean(location)),
           stock: Value(stock),
-          costCents: Value(rawCostCents),
+          costCents: Value(unitCostCents),
           priceCents: Value(retailPriceCents),
+          purchaseType: Value(purchaseType),
+          bulkQuantity: Value(isBulk ? bulkQuantity : 1),
+          bulkTotalCents: Value(isBulk ? bulkTotalCents : 0),
         ),
       );
       final stockDelta = stock - existing.stock;

@@ -71,6 +71,13 @@ printing are still being built.
   (GST defaults to 5%, PST defaults to 7% and starts off). Tax is calculated on
   the discounted invoice subtotal, shown on the invoice and Checkout, included
   in the balance due, and snapshotted when a ticket closes.
+- **Parts vendor tracking** — inventory parts record a **Vendor ID** (where the
+  part is purchased) and a **Vendor SKU** (the exact item ordered). Both fields
+  appear when adding or editing a part and in the parts list.
+- **Bulk purchase calculator** — choose **Bulk purchase**, enter the quantity
+  purchased and the total lot cost, and the part's per-item cost is calculated
+  automatically. Retail pricing still uses that per-item cost and the shop
+  markup.
 - **Phone capture** — on the shop PC, **Capture with phone** shows a QR code;
   scan it with a phone on the same Wi-Fi and shoot the Report 1 slots straight
   into the open ticket. Photos land as thumbnails on the PC as they arrive.

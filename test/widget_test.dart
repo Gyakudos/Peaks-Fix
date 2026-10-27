@@ -227,22 +227,32 @@ class FakeTicketsRepository implements TicketsRepository {
   Future<void> createInventoryPart({
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int startingStock,
     int rawCostCents = 0,
     int retailPriceCents = 0,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   }) async {
     inventoryParts.add(
       InventoryPart(
         id: inventoryParts.length + 1,
         name: name,
         sku: sku,
+        vendorId: vendorId,
+        vendorSku: vendorSku,
         category: category,
         location: location,
         stock: startingStock,
         rawCostCents: rawCostCents,
         retailPriceCents: retailPriceCents,
+        purchaseType: purchaseType,
+        bulkQuantity: bulkQuantity,
+        bulkTotalCents: bulkTotalCents,
       ),
     );
     _inventoryUpdates.add(List.unmodifiable(inventoryParts));
@@ -253,11 +263,16 @@ class FakeTicketsRepository implements TicketsRepository {
     required int partId,
     required String name,
     String? sku,
+    String? vendorId,
+    String? vendorSku,
     String? category,
     String? location,
     required int stock,
     required int rawCostCents,
     required int retailPriceCents,
+    PartPurchaseType purchaseType = PartPurchaseType.single,
+    int bulkQuantity = 1,
+    int bulkTotalCents = 0,
   }) async {
     final index = inventoryParts.indexWhere((part) => part.id == partId);
     if (index == -1) throw StateError('Inventory part not found.');
@@ -265,11 +280,16 @@ class FakeTicketsRepository implements TicketsRepository {
       id: partId,
       name: name,
       sku: sku,
+      vendorId: vendorId,
+      vendorSku: vendorSku,
       category: category,
       location: location,
       stock: stock,
       rawCostCents: rawCostCents,
       retailPriceCents: retailPriceCents,
+      purchaseType: purchaseType,
+      bulkQuantity: bulkQuantity,
+      bulkTotalCents: bulkTotalCents,
     );
     _inventoryUpdates.add(List.unmodifiable(inventoryParts));
   }
@@ -927,6 +947,8 @@ void main() {
     await repository.createInventoryPart(
       name: 'USB-C charging port',
       sku: 'PORT-1',
+      vendorId: 'PartsPro',
+      vendorSku: 'TYPE-C-16PIN',
       category: 'Ports',
       location: 'Shelf A1',
       startingStock: 4,
@@ -964,10 +986,36 @@ void main() {
           .text,
       'USB-C charging port',
     );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('inventory-part-vendor-id')),
+          )
+          .controller!
+          .text,
+      'PartsPro',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('inventory-part-vendor-sku')),
+          )
+          .controller!
+          .text,
+      'TYPE-C-16PIN',
+    );
 
     await tester.enterText(
       find.byKey(const Key('inventory-part-name')),
       'USB-C replacement port',
+    );
+    await tester.enterText(
+      find.byKey(const Key('inventory-part-vendor-id')),
+      'Mouser',
+    );
+    await tester.enterText(
+      find.byKey(const Key('inventory-part-vendor-sku')),
+      'USB-C-24PIN',
     );
     await tester.enterText(
       find.byKey(const Key('inventory-part-stock')),
@@ -995,10 +1043,84 @@ void main() {
 
     final edited = repository.inventoryParts.single;
     expect(edited.name, 'USB-C replacement port');
+    expect(edited.vendorId, 'Mouser');
+    expect(edited.vendorSku, 'USB-C-24PIN');
     expect(edited.stock, 6);
     expect(edited.location, 'Bin B4');
     expect(edited.rawCostCents, 2000);
     expect(edited.retailPriceCents, 2700);
+  });
+
+  testWidgets('parts area calculates cost per item for a bulk purchase',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.createInventoryPart(
+      name: 'USB-C charging port',
+      startingStock: 10,
+      rawCostCents: 1000,
+      retailPriceCents: 1350,
+    );
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.tap(find.text('Parts'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-inventory-part-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('inventory-part-purchase-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bulk purchase').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('inventory-part-bulk-quantity')),
+      '10',
+    );
+    await tester.enterText(
+      find.byKey(const Key('inventory-part-bulk-total')),
+      '50.00',
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Cost per item: \$5.00'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('inventory-part-raw-cost')),
+          )
+          .controller!
+          .text,
+      '5.00',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('inventory-part-retail-cost')),
+          )
+          .controller!
+          .text,
+      '6.75',
+    );
+
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+
+    final edited = repository.inventoryParts.single;
+    expect(edited.purchaseType, PartPurchaseType.bulk);
+    expect(edited.bulkQuantity, 10);
+    expect(edited.bulkTotalCents, 5000);
+    expect(edited.rawCostCents, 500);
+    expect(edited.retailPriceCents, 675);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 50));
   });
 
   testWidgets('parts area asks before removing inventory part',

@@ -216,11 +216,16 @@ void main() {
     final partId = await database.createInventoryPart(
       name: 'USB-C charging port',
       sku: 'USB-C-01',
+      vendorId: 'AliExpress - PartsPro',
+      vendorSku: 'TYPE-C-16PIN',
       category: 'Ports',
       location: 'Shelf A1',
       startingStock: 4,
       rawCostCents: 1234,
       retailPriceCents: 1666,
+      purchaseType: PartPurchaseType.bulk,
+      bulkQuantity: 10,
+      bulkTotalCents: 12340,
     );
 
     await database.addRequiredPart(
@@ -248,22 +253,38 @@ void main() {
     expect(part.stock, 4);
     expect(part.costCents, 1234);
     expect(part.priceCents, 1666);
+    expect(part.vendorId, 'AliExpress - PartsPro');
+    expect(part.vendorSku, 'TYPE-C-16PIN');
+    expect(part.purchaseType, PartPurchaseType.bulk);
+    expect(part.bulkQuantity, 10);
+    expect(part.bulkTotalCents, 12340);
 
     await database.updateInventoryPart(
       partId: partId,
       name: 'USB-C replacement port',
       sku: 'USB-C-02',
+      vendorId: 'Mouser',
+      vendorSku: 'USB-C-24PIN',
       category: 'Ports',
       location: 'Bin B4',
       stock: 6,
       rawCostCents: 2000,
       retailPriceCents: 2700,
+      purchaseType: PartPurchaseType.bulk,
+      bulkQuantity: 3,
+      bulkTotalCents: 6000,
     );
     final edited = await (database.select(database.parts)
           ..where((row) => row.id.equals(partId)))
         .getSingle();
     expect(edited.name, 'USB-C replacement port');
     expect(edited.sku, 'USB-C-02');
+    expect(edited.vendorId, 'Mouser');
+    expect(edited.vendorSku, 'USB-C-24PIN');
+    expect(edited.purchaseType, PartPurchaseType.bulk);
+    expect(edited.bulkQuantity, 3);
+    expect(edited.bulkTotalCents, 6000);
+    expect(edited.costCents, 2000);
     expect(edited.location, 'Bin B4');
     expect(edited.stock, 6);
     expect(edited.costCents, 2000);

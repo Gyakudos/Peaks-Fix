@@ -64,8 +64,12 @@ both be true.
 
 Separate tables on purpose:
 
-- **Parts** are internal consumables attached to a ticket: cost, supplier,
-  stock, consumed during a repair.
+- **Parts** are internal consumables attached to a ticket: cost, stock, and
+  consumed during a repair. Each part records its **Vendor ID** (where it is
+  purchased) and **Vendor SKU** (the exact item ordered), alongside its own
+  internal SKU and storage location. A part can be marked as a **single item**
+  or a **bulk purchase**; bulk parts store the quantity and total cost, and the
+  cost per item is calculated from them.
 - **Merch** is customer-facing retail: variants (size/colour), SKU/barcode, and
   sales that happen independently of any ticket.
 
@@ -107,6 +111,10 @@ Merging them would corrupt both stock counts and revenue reporting.
   when a paid ticket closes. Invoices calculate GST/PST on the discounted
   subtotal; settings store the enabled flags and rates in basis points (500 =
   5%). The first-run seed turns GST on at 5% and leaves PST off at 7%.
+- Schema v15 adds `parts.vendor_id` and `parts.vendor_sku`, so inventory parts
+  remember where they were purchased and the vendor's catalogue SKU. It also
+  adds the purchase type, bulk quantity and bulk total used to calculate the
+  per-item cost of a bulk lot.
 - **Financial** is calculated from existing records, not a separate ledger.
   Revenue is each closed ticket's invoice subtotal minus its saved discount and
   before tax; cost is the recorded `ticket_items.unit_cost_cents` for parts and
