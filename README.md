@@ -96,12 +96,20 @@ For Android, connect a device or start an emulator and run `flutter run`.
 # After changing the drift schema:
 dart run build_runner build --delete-conflicting-outputs
 
-flutter build windows --release
+flutter build windows --release --no-tree-shake-icons
+dart run tool/check_icon_font.dart
 flutter build apk --release
 ```
 
 - Windows: `build\windows\x64\runner\Release\vola_fix.exe`
 - Android: `build\app\outputs\flutter-apk\app-release.apk`
+
+Windows builds skip icon font tree shaking on purpose. Flutter otherwise
+writes a subset font containing only the icons the Dart code uses, and
+incremental Windows builds can keep serving an older subset after new icons
+are added, so tabs and pages render with blank icons. `check_icon_font.dart`
+reads the built font and fails if any `Icons.*` used in `lib/` is missing; run
+it after `flutter clean` builds too.
 
 The APK is currently signed with the debug key so it installs for testing. Add
 your own keystore before distributing it, and change the placeholder

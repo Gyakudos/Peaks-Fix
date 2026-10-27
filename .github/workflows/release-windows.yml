@@ -21,7 +21,9 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build windows --release
+      - run: flutter build windows --release --no-tree-shake-icons
+      - name: Check the icon font
+        run: dart run tool/check_icon_font.dart
       - name: Smoke test Windows startup
         shell: pwsh
         run: |
