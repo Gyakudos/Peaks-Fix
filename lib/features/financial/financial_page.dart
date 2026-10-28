@@ -65,6 +65,19 @@ class _FinancialPageState extends State<FinancialPage> {
                 final cost = tickets.fold<int>(
                     0, (sum, ticket) => sum + ticket.costCents);
                 final grossProfit = revenue - cost;
+                final partsRevenue = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.partsRevenueCents);
+                final partsCost = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.partsCostCents);
+                final partsQuantity = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.partsQuantity);
+                final merchRevenue = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.merchRevenueCents);
+                final merchCost = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.merchCostCents);
+                final merchQuantity = tickets.fold<int>(
+                    0, (sum, ticket) => sum + ticket.merchQuantity);
+                final servicesRevenue = revenue - partsRevenue - merchRevenue;
                 final tracked = staffRows.fold<Duration>(
                   Duration.zero,
                   (sum, row) => sum + row.hours,
@@ -117,7 +130,6 @@ class _FinancialPageState extends State<FinancialPage> {
                                 children: [
                                   _SummaryCards(
                                     revenueCents: revenue,
-                                    costCents: cost,
                                     grossProfitCents: grossProfit,
                                     staffPayCents: staffPay,
                                     netEstimateCents: netEstimate,
@@ -131,6 +143,80 @@ class _FinancialPageState extends State<FinancialPage> {
                                     pstRateBp: taxes.pstEnabled
                                         ? taxes.pstRateBp
                                         : null,
+                                  ),
+                                  const Divider(height: 36),
+                                  const _SectionHeading(
+                                    title: 'Parts & merchandise',
+                                  ),
+                                  Text(
+                                    'Inventory parts and checkout merchandise '
+                                    'are tracked separately. Revenue is after '
+                                    'each line group’s share of the invoice '
+                                    'discount.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          height: 1.4,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: [
+                                      _TrackerCard(
+                                        key: const Key(
+                                          'financial-parts-tracker',
+                                        ),
+                                        icon: Icons.inventory_2_outlined,
+                                        title: 'Parts',
+                                        revenueCents: partsRevenue,
+                                        costCents: partsCost,
+                                        profitCents: partsRevenue - partsCost,
+                                        margin: partsRevenue <= 0
+                                            ? 0
+                                            : (partsRevenue - partsCost) /
+                                                partsRevenue,
+                                        quantity: partsQuantity,
+                                        unitLabel: 'part',
+                                      ),
+                                      _TrackerCard(
+                                        key: const Key(
+                                          'financial-merch-tracker',
+                                        ),
+                                        icon: Icons.storefront_outlined,
+                                        title: 'Merchandise',
+                                        revenueCents: merchRevenue,
+                                        costCents: merchCost,
+                                        profitCents: merchRevenue - merchCost,
+                                        margin: merchRevenue <= 0
+                                            ? 0
+                                            : (merchRevenue - merchCost) /
+                                                merchRevenue,
+                                        quantity: merchQuantity,
+                                        unitLabel: 'item',
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Services & labour ${_money(servicesRevenue)} '
+                                    '· no recorded cost, so it counts toward '
+                                    'gross profit in full.',
+                                    key:
+                                        const Key('financial-services-revenue'),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
                                   ),
                                   const Divider(height: 36),
                                   const _SectionHeading(
@@ -182,8 +268,10 @@ class _FinancialPageState extends State<FinancialPage> {
                                   const SizedBox(height: 20),
                                   Text(
                                     'Revenue is the invoice total after discounts '
-                                    'and before tax. Cost is the recorded part and '
-                                    'merchandise cost. GST/PST are shown separately '
+                                    'and before tax. Parts and merchandise keep '
+                                    'their own sold/cost/profit figures; discounts '
+                                    'are split across the groups in proportion to '
+                                    'their subtotals. GST/PST are shown separately '
                                     'from closed-ticket snapshots. Staff pay uses '
                                     'tracked shifts × hourly rate, so net profit is '
                                     'an estimate before rent, tools and other '
@@ -352,7 +440,6 @@ class _Header extends StatelessWidget {
 class _SummaryCards extends StatelessWidget {
   const _SummaryCards({
     required this.revenueCents,
-    required this.costCents,
     required this.grossProfitCents,
     required this.staffPayCents,
     required this.netEstimateCents,
@@ -365,7 +452,6 @@ class _SummaryCards extends StatelessWidget {
   });
 
   final int revenueCents;
-  final int costCents;
   final int grossProfitCents;
   final int staffPayCents;
   final int netEstimateCents;
@@ -410,12 +496,6 @@ class _SummaryCards extends StatelessWidget {
                 : '${formatTaxRate(pstRateBp!)} on taxable sales',
           ),
         _SummaryCard(
-          icon: Icons.inventory_2_outlined,
-          label: 'Parts & merch cost',
-          value: _money(costCents),
-          note: 'Recorded bill costs',
-        ),
-        _SummaryCard(
           icon: Icons.trending_up,
           label: 'Gross profit',
           value: _money(grossProfitCents),
@@ -436,6 +516,120 @@ class _SummaryCards extends StatelessWidget {
           valueColor: _profitColor(context, netEstimateCents),
         ),
       ],
+    );
+  }
+}
+
+/// One side of the Parts & merchandise split: sold, cost, profit and margin.
+class _TrackerCard extends StatelessWidget {
+  const _TrackerCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.revenueCents,
+    required this.costCents,
+    required this.profitCents,
+    required this.margin,
+    required this.quantity,
+    required this.unitLabel,
+  });
+
+  final IconData icon;
+  final String title;
+  final int revenueCents;
+  final int costCents;
+  final int profitCents;
+  final double margin;
+  final int quantity;
+  final String unitLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 290,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _TrackerLine(label: 'Sold', value: _money(revenueCents)),
+              _TrackerLine(label: 'Cost', value: _money(costCents)),
+              const Divider(height: 16),
+              _TrackerLine(
+                label: 'Gross profit',
+                value: _money(profitCents),
+                valueColor: _profitColor(context, profitCents),
+              ),
+              _TrackerLine(
+                label: 'Margin',
+                value: revenueCents <= 0 ? '—' : '${(margin * 100).round()}%',
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '$quantity $unitLabel${quantity == 1 ? '' : 's'} sold',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackerLine extends StatelessWidget {
+  const _TrackerLine({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: valueColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -636,8 +830,11 @@ class _ClosedTicketCard extends StatelessWidget {
         subtitle: Text(
           '${ticket.device}\n'
           'Closed ${shortDate(ticket.closedAt)} · '
-          'cost ${_money(ticket.costCents)}',
+          'parts cost ${_money(ticket.partsCostCents)} · '
+          'merch cost ${_money(ticket.merchCostCents)}',
           style: theme.textTheme.bodySmall,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
         ),
         isThreeLine: true,
         trailing: SizedBox(

@@ -10,6 +10,11 @@ import 'database.dart';
 /// Revenue is the invoice total after discounts. Cost is the recorded part and
 /// merchandise cost on the bill, so labour does not count against gross profit;
 /// staff pay is tracked separately from the time clock.
+///
+/// Parts and merchandise are also tracked on their own. Their revenue figures
+/// are net of a proportional share of any invoice discount, so
+/// [partsRevenueCents] + [merchRevenueCents] + [servicesRevenueCents] always
+/// equals [revenueCents].
 class FinancialTicket {
   const FinancialTicket({
     required this.ticketId,
@@ -21,6 +26,12 @@ class FinancialTicket {
     required this.costCents,
     this.gstCents = 0,
     this.pstCents = 0,
+    this.partsRevenueCents = 0,
+    this.partsCostCents = 0,
+    this.partsQuantity = 0,
+    this.merchRevenueCents = 0,
+    this.merchCostCents = 0,
+    this.merchQuantity = 0,
   });
 
   final int ticketId;
@@ -35,13 +46,40 @@ class FinancialTicket {
   final int gstCents;
   final int pstCents;
 
+  /// Inventory parts: revenue after their share of the discount, recorded cost
+  /// and how many units left the shelf.
+  final int partsRevenueCents;
+  final int partsCostCents;
+  final int partsQuantity;
+
+  /// Checkout merchandise: the same fields, tracked separately from parts.
+  final int merchRevenueCents;
+  final int merchCostCents;
+  final int merchQuantity;
+
   int get taxCents => gstCents + pstCents;
 
   int get profitCents => revenueCents - costCents;
 
+  int get partsProfitCents => partsRevenueCents - partsCostCents;
+
+  int get merchProfitCents => merchRevenueCents - merchCostCents;
+
+  /// Services and labour, which carry no recorded cost.
+  int get servicesRevenueCents =>
+      revenueCents - partsRevenueCents - merchRevenueCents;
+
   /// Gross margin as a fraction, e.g. `0.42` for 42%.
   double get margin =>
       revenueCents <= 0 ? 0 : profitCents / revenueCents.toDouble();
+
+  double get partsMargin => partsRevenueCents <= 0
+      ? 0
+      : partsProfitCents / partsRevenueCents.toDouble();
+
+  double get merchMargin => merchRevenueCents <= 0
+      ? 0
+      : merchProfitCents / merchRevenueCents.toDouble();
 }
 
 /// One clock-in / clock-out pair from the staff time clock.
@@ -110,6 +148,12 @@ class FinancialSummary {
     required this.ticketCount,
     this.gstCents = 0,
     this.pstCents = 0,
+    this.partsRevenueCents = 0,
+    this.partsCostCents = 0,
+    this.partsQuantity = 0,
+    this.merchRevenueCents = 0,
+    this.merchCostCents = 0,
+    this.merchQuantity = 0,
   });
 
   final int revenueCents;
@@ -120,11 +164,34 @@ class FinancialSummary {
   final int gstCents;
   final int pstCents;
 
+  final int partsRevenueCents;
+  final int partsCostCents;
+  final int partsQuantity;
+  final int merchRevenueCents;
+  final int merchCostCents;
+  final int merchQuantity;
+
   int get taxCents => gstCents + pstCents;
 
   int get grossProfitCents => revenueCents - costCents;
 
   int get netEstimateCents => grossProfitCents - staffPayCents;
+
+  int get partsProfitCents => partsRevenueCents - partsCostCents;
+
+  int get merchProfitCents => merchRevenueCents - merchCostCents;
+
+  /// Services and labour, which carry no recorded cost.
+  int get servicesRevenueCents =>
+      revenueCents - partsRevenueCents - merchRevenueCents;
+
+  double get partsMargin => partsRevenueCents <= 0
+      ? 0
+      : partsProfitCents / partsRevenueCents.toDouble();
+
+  double get merchMargin => merchRevenueCents <= 0
+      ? 0
+      : merchProfitCents / merchRevenueCents.toDouble();
 }
 
 /// Reporting window for the Financial tab.
@@ -191,30 +258,60 @@ extension FinancialQueries on AppDatabase {
         );
         final item = row.readTableOrNull(ticketItems);
         if (item == null) continue;
-        accumulator.subtotalCents += item.quantity * item.unitPriceCents;
-        accumulator.costCents += item.quantity * (item.unitCostCents ?? 0);
+        final lineTotalCents = item.quantity * item.unitPriceCents;
+        final lineCostCents = item.quantity * (item.unitCostCents ?? 0);
+        accumulator.subtotalCents += lineTotalCents;
+        accumulator.costCents += lineCostCents;
+        if (item.kind == TicketItemKind.part) {
+          accumulator.partsSubtotalCents += lineTotalCents;
+          accumulator.partsCostCents += lineCostCents;
+          accumulator.partsQuantity += item.quantity;
+        } else if (item.kind == TicketItemKind.custom &&
+            item.unitCostCents != null) {
+          // Checkout merchandise is a custom line with a recorded cost;
+          // labour lines are custom with no cost.
+          accumulator.merchSubtotalCents += lineTotalCents;
+          accumulator.merchCostCents += lineCostCents;
+          accumulator.merchQuantity += item.quantity;
+        }
       }
 
       final result = [
         for (final accumulator in byTicket.values)
-          FinancialTicket(
-            ticketId: accumulator.ticket.id,
-            number: accumulator.ticket.number,
-            customerName: accumulator.customerName,
-            device: accumulator.device,
-            closedAt: accumulator.ticket.completedAt ??
-                accumulator.ticket.pickedUpAt ??
-                accumulator.ticket.updatedAt,
-            revenueCents: accumulator.subtotalCents -
-                _discountCents(
-                  subtotalCents: accumulator.subtotalCents,
-                  kind: accumulator.ticket.invoiceDiscountKind,
-                  value: accumulator.ticket.invoiceDiscountValue,
-                ),
-            costCents: accumulator.costCents,
-            gstCents: accumulator.ticket.gstCents,
-            pstCents: accumulator.ticket.pstCents,
-          ),
+          () {
+            final discount = _discountCents(
+              subtotalCents: accumulator.subtotalCents,
+              kind: accumulator.ticket.invoiceDiscountKind,
+              value: accumulator.ticket.invoiceDiscountValue,
+            );
+            final split = splitDiscountedRevenue(
+              partsSubtotalCents: accumulator.partsSubtotalCents,
+              merchSubtotalCents: accumulator.merchSubtotalCents,
+              servicesSubtotalCents: accumulator.subtotalCents -
+                  accumulator.partsSubtotalCents -
+                  accumulator.merchSubtotalCents,
+              discountCents: discount,
+            );
+            return FinancialTicket(
+              ticketId: accumulator.ticket.id,
+              number: accumulator.ticket.number,
+              customerName: accumulator.customerName,
+              device: accumulator.device,
+              closedAt: accumulator.ticket.completedAt ??
+                  accumulator.ticket.pickedUpAt ??
+                  accumulator.ticket.updatedAt,
+              revenueCents: accumulator.subtotalCents - discount,
+              costCents: accumulator.costCents,
+              gstCents: accumulator.ticket.gstCents,
+              pstCents: accumulator.ticket.pstCents,
+              partsRevenueCents: split.partsCents,
+              partsCostCents: accumulator.partsCostCents,
+              partsQuantity: accumulator.partsQuantity,
+              merchRevenueCents: split.merchCents,
+              merchCostCents: accumulator.merchCostCents,
+              merchQuantity: accumulator.merchQuantity,
+            );
+          }(),
       ]..sort((a, b) => b.closedAt.compareTo(a.closedAt));
       return result;
     });
@@ -287,6 +384,18 @@ FinancialSummary summarizeFinancials({
   final cost = tickets.fold<int>(0, (sum, ticket) => sum + ticket.costCents);
   final gst = tickets.fold<int>(0, (sum, ticket) => sum + ticket.gstCents);
   final pst = tickets.fold<int>(0, (sum, ticket) => sum + ticket.pstCents);
+  final partsRevenue =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.partsRevenueCents);
+  final partsCost =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.partsCostCents);
+  final partsQuantity =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.partsQuantity);
+  final merchRevenue =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.merchRevenueCents);
+  final merchCost =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.merchCostCents);
+  final merchQuantity =
+      tickets.fold<int>(0, (sum, ticket) => sum + ticket.merchQuantity);
   var tracked = Duration.zero;
   var staffPay = 0;
   for (final member in staff) {
@@ -302,6 +411,55 @@ FinancialSummary summarizeFinancials({
     ticketCount: tickets.length,
     gstCents: gst,
     pstCents: pst,
+    partsRevenueCents: partsRevenue,
+    partsCostCents: partsCost,
+    partsQuantity: partsQuantity,
+    merchRevenueCents: merchRevenue,
+    merchCostCents: merchCost,
+    merchQuantity: merchQuantity,
+  );
+}
+
+/// Applies an invoice discount across parts, merchandise and services in
+/// proportion to their subtotals and returns the net revenue for each.
+///
+/// Cents are allocated with the largest subtotal first, so the three results
+/// add up to exactly `subtotal − discount` with no lost or invented cent.
+({int partsCents, int merchCents, int servicesCents}) splitDiscountedRevenue({
+  required int partsSubtotalCents,
+  required int merchSubtotalCents,
+  required int servicesSubtotalCents,
+  required int discountCents,
+}) {
+  final subtotals = [
+    partsSubtotalCents,
+    merchSubtotalCents,
+    servicesSubtotalCents,
+  ];
+  final total = subtotals.fold<int>(0, (sum, value) => sum + value);
+  if (total <= 0) {
+    return (partsCents: 0, merchCents: 0, servicesCents: 0);
+  }
+  final cappedDiscount = discountCents.clamp(0, total).toInt();
+  final cuts = [
+    for (final subtotal in subtotals) (cappedDiscount * subtotal) ~/ total,
+  ];
+  var remainder = cappedDiscount - cuts.fold<int>(0, (sum, cut) => sum + cut);
+  final order = [0, 1, 2]..sort((a, b) => subtotals[b].compareTo(subtotals[a]));
+  var index = 0;
+  while (remainder > 0) {
+    final bucket = order[index % order.length];
+    if (cuts[bucket] < subtotals[bucket]) {
+      cuts[bucket]++;
+      remainder--;
+    }
+    index++;
+    if (index > 1000) break;
+  }
+  return (
+    partsCents: partsSubtotalCents - cuts[0],
+    merchCents: merchSubtotalCents - cuts[1],
+    servicesCents: servicesSubtotalCents - cuts[2],
   );
 }
 
@@ -317,6 +475,12 @@ class _TicketAccumulator {
   final String device;
   int subtotalCents = 0;
   int costCents = 0;
+  int partsSubtotalCents = 0;
+  int partsCostCents = 0;
+  int partsQuantity = 0;
+  int merchSubtotalCents = 0;
+  int merchCostCents = 0;
+  int merchQuantity = 0;
 }
 
 class _StaffAccumulator {

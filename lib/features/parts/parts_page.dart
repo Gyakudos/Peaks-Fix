@@ -89,7 +89,10 @@ class PartsPage extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             'Inventory linked to ticket parts invoices. '
-                            'Adding a part to a ticket does not change stock.',
+                            'Adding a part does not change inventory; closing '
+                            'the ticket takes it out of inventory. Stock is the '
+                            'minimum level. Committed shows what open tickets '
+                            'still need.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -122,60 +125,91 @@ class PartsPage extends StatelessWidget {
                   )
                 else
                   for (final part in parts)
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.memory_outlined),
-                        title: Text(part.name),
-                        subtitle: Text([
-                          if (part.description != null &&
-                              part.description!.trim().isNotEmpty)
-                            part.description!.trim(),
-                          if (part.category != null) part.category!,
-                          if (part.sku != null) 'SKU ${part.sku}',
-                          if (part.vendorId != null) 'Vendor ${part.vendorId}',
-                          if (part.vendorSku != null)
-                            'Vendor SKU ${part.vendorSku}',
-                          if (part.purchaseType == PartPurchaseType.bulk)
-                            'Bulk ${part.bulkQuantity} · '
-                                '${_money(part.bulkTotalCents)} total',
-                          if (part.location != null)
-                            'Location ${part.location}',
-                          'Raw Parts Cost ${_money(part.rawCostCents)}',
-                          'Retail Parts Cost ${_money(part.retailPriceCents)}',
-                        ].join(' · ')),
-                        trailing: Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 4,
-                          children: [
-                            Chip(
-                              label: Text('Stock ${part.stock}'),
+                    ListTile(
+                      leading: const Icon(Icons.memory_outlined),
+                      title: Text(part.name),
+                      subtitle: Text([
+                        if (part.description != null &&
+                            part.description!.trim().isNotEmpty)
+                          part.description!.trim(),
+                        if (part.category != null) part.category!,
+                        if (part.sku != null) 'SKU ${part.sku}',
+                        if (part.vendorId != null) 'Vendor ${part.vendorId}',
+                        if (part.vendorSku != null)
+                          'Vendor SKU ${part.vendorSku}',
+                        if (part.purchaseType == PartPurchaseType.bulk)
+                          'Bulk ${part.bulkQuantity} · '
+                              '${_money(part.bulkTotalCents)} total',
+                        if (part.location != null) 'Location ${part.location}',
+                        'Raw Parts Cost ${_money(part.rawCostCents)}',
+                        'Retail Parts Cost ${_money(part.retailPriceCents)}',
+                      ].join(' · ')),
+                      trailing: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
+                        children: [
+                          Tooltip(
+                            message:
+                                'Current on-hand inventory. Deducted when a '
+                                'ticket is closed.',
+                            child: Chip(
+                              key: Key('part-inventory-${part.id}'),
+                              label: Text('Inventory ${part.inventory}'),
                               visualDensity: VisualDensity.compact,
                             ),
-                            TextButton.icon(
-                              key: Key('edit-inventory-part-${part.id}'),
-                              onPressed: () => showEditInventoryPartDialog(
-                                context,
-                                repository: repository,
-                                part: part,
-                              ),
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF0D47A1),
-                                visualDensity: VisualDensity.compact,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                              ),
-                              icon: const Icon(Icons.build),
-                              label: const Text('Edit'),
+                          ),
+                          Tooltip(
+                            message:
+                                'Minimum stock level (Stock). Alerts/target '
+                                'for reordering.',
+                            child: Chip(
+                              key: Key('part-stock-min-${part.id}'),
+                              label: Text('Stock ${part.minimumStock}'),
+                              visualDensity: VisualDensity.compact,
                             ),
-                            IconButton(
-                              key: Key('delete-inventory-part-${part.id}'),
-                              tooltip: 'Remove ${part.name} from inventory',
-                              onPressed: () =>
-                                  _removePart(context, repository, part),
-                              icon: const Icon(Icons.delete_outline),
+                          ),
+                          Tooltip(
+                            message: 'Committed: quantity still needed by open '
+                                'tickets. Closing a ticket takes its parts '
+                                'out of inventory.',
+                            child: Chip(
+                              key: Key('part-committed-${part.id}'),
+                              label: Text(
+                                'Committed ${part.committedQuantity}',
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor:
+                                  theme.colorScheme.secondaryContainer,
+                              side: BorderSide(
+                                color: theme.colorScheme.outlineVariant,
+                              ),
                             ),
-                          ],
-                        ),
+                          ),
+                          TextButton.icon(
+                            key: Key('edit-inventory-part-${part.id}'),
+                            onPressed: () => showEditInventoryPartDialog(
+                              context,
+                              repository: repository,
+                              part: part,
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF0D47A1),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                            ),
+                            icon: const Icon(Icons.build),
+                            label: const Text('Edit'),
+                          ),
+                          IconButton(
+                            key: Key('delete-inventory-part-${part.id}'),
+                            tooltip: 'Remove ${part.name} from inventory',
+                            onPressed: () =>
+                                _removePart(context, repository, part),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
                       ),
                     ),
               ],

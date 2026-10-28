@@ -260,6 +260,8 @@ class InventoryPart {
     required this.id,
     required this.name,
     required this.stock,
+    int? inventory,
+    int? minimumStock,
     this.description,
     this.rawCostCents = 0,
     this.retailPriceCents = 0,
@@ -271,12 +273,23 @@ class InventoryPart {
     this.purchaseType = PartPurchaseType.single,
     this.bulkQuantity = 1,
     this.bulkTotalCents = 0,
-  });
+    this.committedQuantity = 0,
+    int? reorderLevel,
+  }) : minimumStock = minimumStock ?? reorderLevel ?? 0;
 
   final int id;
   final String name;
   final String? description;
+
+  /// Current on-hand inventory. This is deducted when a ticket is closed.
   final int stock;
+  int get inventory => stock;
+  int get inventoryValue => stock;
+
+  /// Minimum stock level (shown as "Stock" on the parts page).
+  final int minimumStock;
+  int get reorderLevel => minimumStock;
+
   final int rawCostCents;
   final int retailPriceCents;
   final String? sku;
@@ -287,6 +300,39 @@ class InventoryPart {
   final PartPurchaseType purchaseType;
   final int bulkQuantity;
   final int bulkTotalCents;
+
+  /// How many of this part are still needed by tickets that are open. Closing
+  /// a ticket takes its parts out of inventory and stops counting them here, so
+  /// this is the quantity already spoken for by jobs in the shop.
+  final int committedQuantity;
+}
+
+/// A retail item on the Merch page: something sold over the counter rather
+/// than fitted to a repair ticket.
+class InventoryMerchItem {
+  const InventoryMerchItem({
+    required this.id,
+    required this.name,
+    required this.stock,
+    this.description,
+    this.costCents = 0,
+    this.priceCents = 0,
+    this.sku,
+    this.category,
+    this.location,
+  });
+
+  final int id;
+  final String name;
+  final String? description;
+  final int stock;
+  final int costCents;
+  final int priceCents;
+  final String? sku;
+  final String? category;
+  final String? location;
+
+  int get profitCents => priceCents - costCents;
 }
 
 class RequiredPart {
@@ -550,6 +596,7 @@ abstract class TicketsRepository {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   });
 
   Future<void> updateInventoryPart({
@@ -567,9 +614,40 @@ abstract class TicketsRepository {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   });
 
   Future<void> removeInventoryPart(int partId);
+
+  Stream<List<InventoryMerchItem>> watchMerchItems();
+
+  /// The next auto-assigned `NNN-NNN` merchandise SKU.
+  Future<String> nextMerchSku();
+
+  Future<void> createMerchItem({
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int startingStock,
+    int costCents = 0,
+    int priceCents = 0,
+  });
+
+  Future<void> updateMerchItem({
+    required int itemId,
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int stock,
+    required int costCents,
+    required int priceCents,
+  });
+
+  Future<void> removeMerchItem(int itemId);
 
   Future<void> addRequiredPart({
     required int ticketId,
@@ -922,31 +1000,103 @@ class DriftTicketsRepository implements TicketsRepository {
   }
 
   @override
-  Stream<List<InventoryPart>> watchInventoryParts() => (_db.select(_db.parts)
-        ..where((part) => part.isActive.equals(true))
-        ..orderBy([(part) => OrderingTerm.asc(part.name)]))
-      .watch()
-      .map(
-        (rows) => [
-          for (final part in rows)
-            InventoryPart(
-              id: part.id,
-              name: part.name,
-              description: part.description,
-              stock: part.stock,
-              rawCostCents: part.costCents,
-              retailPriceCents: part.priceCents,
-              sku: part.sku,
-              vendorId: part.vendorId,
-              vendorSku: part.vendorSku,
-              category: part.category,
-              location: part.location,
-              purchaseType: part.purchaseType,
-              bulkQuantity: part.bulkQuantity,
-              bulkTotalCents: part.bulkTotalCents,
+  Stream<List<InventoryPart>> watchInventoryParts() {
+    final query = _db.select(_db.parts).join([
+      leftOuterJoin(
+        _db.ticketItems,
+        _db.ticketItems.partId.equalsExp(_db.parts.id) &
+            _db.ticketItems.kind.equals(TicketItemKind.part.index),
+      ),
+      leftOuterJoin(
+        _db.tickets,
+        _db.tickets.id.equalsExp(_db.ticketItems.ticketId),
+      ),
+    ])
+      ..where(_db.parts.isActive.equals(true))
+      ..orderBy([
+        OrderingTerm.asc(_db.parts.name),
+        OrderingTerm.asc(_db.parts.id),
+      ]);
+
+    return query.watch().map((rows) {
+      // Parts on closed or cancelled tickets are no longer spoken for, so they
+      // release their quantity back to the shelf.
+      final committed = <int, int>{};
+      for (final row in rows) {
+        final item = row.readTableOrNull(_db.ticketItems);
+        final ticket = row.readTableOrNull(_db.tickets);
+        if (item == null || ticket == null) continue;
+        if (ticket.status == TicketStatus.closed ||
+            ticket.status == TicketStatus.cancelled) {
+          continue;
+        }
+        final partId = item.partId;
+        if (partId == null) continue;
+        // Parts a reopened warranty job already took out of stock stay
+        // consumed, so only the outstanding quantity is still spoken for.
+        final outstanding = item.quantity - item.consumedQuantity;
+        if (outstanding <= 0) continue;
+        committed.update(
+          partId,
+          (quantity) => quantity + outstanding,
+          ifAbsent: () => outstanding,
+        );
+      }
+
+      final seen = <int>{};
+      return [
+        for (final row in rows)
+          if (seen.add(row.readTable(_db.parts).id))
+            _inventoryPart(
+              row.readTable(_db.parts),
+              committed[row.readTable(_db.parts).id] ?? 0,
             ),
-        ],
+      ];
+    });
+  }
+
+  InventoryPart _inventoryPart(Part part, int committedQuantity) =>
+      InventoryPart(
+        id: part.id,
+        name: part.name,
+        description: part.description,
+        stock: part.stock,
+        minimumStock: part.reorderLevel,
+        rawCostCents: part.costCents,
+        retailPriceCents: part.priceCents,
+        sku: part.sku,
+        vendorId: part.vendorId,
+        vendorSku: part.vendorSku,
+        category: part.category,
+        location: part.location,
+        purchaseType: part.purchaseType,
+        bulkQuantity: part.bulkQuantity,
+        bulkTotalCents: part.bulkTotalCents,
+        committedQuantity: committedQuantity,
       );
+
+  @override
+  Stream<List<InventoryMerchItem>> watchMerchItems() =>
+      (_db.select(_db.merchProducts)
+            ..where((item) => item.isActive.equals(true))
+            ..orderBy([(item) => OrderingTerm.asc(item.name)]))
+          .watch()
+          .map(
+            (rows) => [
+              for (final item in rows)
+                InventoryMerchItem(
+                  id: item.id,
+                  name: item.name,
+                  description: item.description,
+                  stock: item.stock,
+                  costCents: item.costCents,
+                  priceCents: item.priceCents,
+                  sku: item.sku,
+                  category: item.category,
+                  location: item.location,
+                ),
+            ],
+          );
 
   @override
   Stream<List<RequiredPart>> watchRequiredParts(int ticketId) {
@@ -1169,23 +1319,24 @@ class DriftTicketsRepository implements TicketsRepository {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
-  }) async {
-    await _db.createInventoryPart(
-      name: name,
-      description: description,
-      sku: sku,
-      vendorId: vendorId,
-      vendorSku: vendorSku,
-      category: category,
-      location: location,
-      startingStock: startingStock,
-      rawCostCents: rawCostCents,
-      retailPriceCents: retailPriceCents,
-      purchaseType: purchaseType,
-      bulkQuantity: bulkQuantity,
-      bulkTotalCents: bulkTotalCents,
-    );
-  }
+    int minimumStock = 0,
+  }) =>
+      _db.createInventoryPart(
+        name: name,
+        description: description,
+        sku: sku,
+        vendorId: vendorId,
+        vendorSku: vendorSku,
+        category: category,
+        location: location,
+        startingStock: startingStock,
+        rawCostCents: rawCostCents,
+        retailPriceCents: retailPriceCents,
+        purchaseType: purchaseType,
+        bulkQuantity: bulkQuantity,
+        bulkTotalCents: bulkTotalCents,
+        minimumStock: minimumStock,
+      );
 
   @override
   Future<void> updateInventoryPart({
@@ -1203,6 +1354,7 @@ class DriftTicketsRepository implements TicketsRepository {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   }) =>
       _db.updateInventoryPart(
         partId: partId,
@@ -1219,11 +1371,65 @@ class DriftTicketsRepository implements TicketsRepository {
         purchaseType: purchaseType,
         bulkQuantity: bulkQuantity,
         bulkTotalCents: bulkTotalCents,
+        minimumStock: minimumStock,
       );
 
   @override
   Future<void> removeInventoryPart(int partId) =>
       _db.removeInventoryPart(partId);
+
+  @override
+  Future<String> nextMerchSku() => _db.nextMerchSku();
+
+  @override
+  Future<void> createMerchItem({
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int startingStock,
+    int costCents = 0,
+    int priceCents = 0,
+  }) async {
+    await _db.createMerchItem(
+      name: name,
+      description: description,
+      sku: sku,
+      category: category,
+      location: location,
+      startingStock: startingStock,
+      costCents: costCents,
+      priceCents: priceCents,
+    );
+  }
+
+  @override
+  Future<void> updateMerchItem({
+    required int itemId,
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int stock,
+    required int costCents,
+    required int priceCents,
+  }) =>
+      _db.updateMerchItem(
+        itemId: itemId,
+        name: name,
+        description: description,
+        sku: sku,
+        category: category,
+        location: location,
+        stock: stock,
+        costCents: costCents,
+        priceCents: priceCents,
+      );
+
+  @override
+  Future<void> removeMerchItem(int itemId) => _db.removeMerchItem(itemId);
 
   @override
   Future<void> addRequiredPart({

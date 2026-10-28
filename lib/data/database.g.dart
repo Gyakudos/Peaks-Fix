@@ -5601,6 +5601,14 @@ class $TicketItemsTable extends TicketItems
   late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
       'unit_cost_cents', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _consumedQuantityMeta =
+      const VerificationMeta('consumedQuantity');
+  @override
+  late final GeneratedColumn<int> consumedQuantity = GeneratedColumn<int>(
+      'consumed_quantity', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -5611,7 +5619,8 @@ class $TicketItemsTable extends TicketItems
         description,
         quantity,
         unitPriceCents,
-        unitCostCents
+        unitCostCents,
+        consumedQuantity
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5664,6 +5673,12 @@ class $TicketItemsTable extends TicketItems
           unitCostCents.isAcceptableOrUnknown(
               data['unit_cost_cents']!, _unitCostCentsMeta));
     }
+    if (data.containsKey('consumed_quantity')) {
+      context.handle(
+          _consumedQuantityMeta,
+          consumedQuantity.isAcceptableOrUnknown(
+              data['consumed_quantity']!, _consumedQuantityMeta));
+    }
     return context;
   }
 
@@ -5692,6 +5707,8 @@ class $TicketItemsTable extends TicketItems
           .read(DriftSqlType.int, data['${effectivePrefix}unit_price_cents'])!,
       unitCostCents: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}unit_cost_cents']),
+      consumedQuantity: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}consumed_quantity'])!,
     );
   }
 
@@ -5714,6 +5731,11 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
   final int quantity;
   final int unitPriceCents;
   final int? unitCostCents;
+
+  /// How many of a part line have already been taken out of stock by closing
+  /// its ticket. Reopened tickets keep this value, so closing again only
+  /// deducts the parts added since.
+  final int consumedQuantity;
   const TicketItem(
       {required this.id,
       required this.ticketId,
@@ -5723,7 +5745,8 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
       required this.description,
       required this.quantity,
       required this.unitPriceCents,
-      this.unitCostCents});
+      this.unitCostCents,
+      required this.consumedQuantity});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -5744,6 +5767,7 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
     if (!nullToAbsent || unitCostCents != null) {
       map['unit_cost_cents'] = Variable<int>(unitCostCents);
     }
+    map['consumed_quantity'] = Variable<int>(consumedQuantity);
     return map;
   }
 
@@ -5763,6 +5787,7 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
       unitCostCents: unitCostCents == null && nullToAbsent
           ? const Value.absent()
           : Value(unitCostCents),
+      consumedQuantity: Value(consumedQuantity),
     );
   }
 
@@ -5780,6 +5805,7 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
       quantity: serializer.fromJson<int>(json['quantity']),
       unitPriceCents: serializer.fromJson<int>(json['unitPriceCents']),
       unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
+      consumedQuantity: serializer.fromJson<int>(json['consumedQuantity']),
     );
   }
   @override
@@ -5796,6 +5822,7 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
       'quantity': serializer.toJson<int>(quantity),
       'unitPriceCents': serializer.toJson<int>(unitPriceCents),
       'unitCostCents': serializer.toJson<int?>(unitCostCents),
+      'consumedQuantity': serializer.toJson<int>(consumedQuantity),
     };
   }
 
@@ -5808,7 +5835,8 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
           String? description,
           int? quantity,
           int? unitPriceCents,
-          Value<int?> unitCostCents = const Value.absent()}) =>
+          Value<int?> unitCostCents = const Value.absent(),
+          int? consumedQuantity}) =>
       TicketItem(
         id: id ?? this.id,
         ticketId: ticketId ?? this.ticketId,
@@ -5820,6 +5848,7 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
         unitPriceCents: unitPriceCents ?? this.unitPriceCents,
         unitCostCents:
             unitCostCents.present ? unitCostCents.value : this.unitCostCents,
+        consumedQuantity: consumedQuantity ?? this.consumedQuantity,
       );
   TicketItem copyWithCompanion(TicketItemsCompanion data) {
     return TicketItem(
@@ -5837,6 +5866,9 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
       unitCostCents: data.unitCostCents.present
           ? data.unitCostCents.value
           : this.unitCostCents,
+      consumedQuantity: data.consumedQuantity.present
+          ? data.consumedQuantity.value
+          : this.consumedQuantity,
     );
   }
 
@@ -5851,14 +5883,15 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
           ..write('description: $description, ')
           ..write('quantity: $quantity, ')
           ..write('unitPriceCents: $unitPriceCents, ')
-          ..write('unitCostCents: $unitCostCents')
+          ..write('unitCostCents: $unitCostCents, ')
+          ..write('consumedQuantity: $consumedQuantity')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, ticketId, kind, serviceId, partId,
-      description, quantity, unitPriceCents, unitCostCents);
+      description, quantity, unitPriceCents, unitCostCents, consumedQuantity);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5871,7 +5904,8 @@ class TicketItem extends DataClass implements Insertable<TicketItem> {
           other.description == this.description &&
           other.quantity == this.quantity &&
           other.unitPriceCents == this.unitPriceCents &&
-          other.unitCostCents == this.unitCostCents);
+          other.unitCostCents == this.unitCostCents &&
+          other.consumedQuantity == this.consumedQuantity);
 }
 
 class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
@@ -5884,6 +5918,7 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
   final Value<int> quantity;
   final Value<int> unitPriceCents;
   final Value<int?> unitCostCents;
+  final Value<int> consumedQuantity;
   const TicketItemsCompanion({
     this.id = const Value.absent(),
     this.ticketId = const Value.absent(),
@@ -5894,6 +5929,7 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
     this.quantity = const Value.absent(),
     this.unitPriceCents = const Value.absent(),
     this.unitCostCents = const Value.absent(),
+    this.consumedQuantity = const Value.absent(),
   });
   TicketItemsCompanion.insert({
     this.id = const Value.absent(),
@@ -5905,6 +5941,7 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
     this.quantity = const Value.absent(),
     this.unitPriceCents = const Value.absent(),
     this.unitCostCents = const Value.absent(),
+    this.consumedQuantity = const Value.absent(),
   })  : ticketId = Value(ticketId),
         kind = Value(kind),
         description = Value(description);
@@ -5918,6 +5955,7 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
     Expression<int>? quantity,
     Expression<int>? unitPriceCents,
     Expression<int>? unitCostCents,
+    Expression<int>? consumedQuantity,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -5929,6 +5967,7 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
       if (quantity != null) 'quantity': quantity,
       if (unitPriceCents != null) 'unit_price_cents': unitPriceCents,
       if (unitCostCents != null) 'unit_cost_cents': unitCostCents,
+      if (consumedQuantity != null) 'consumed_quantity': consumedQuantity,
     });
   }
 
@@ -5941,7 +5980,8 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
       Value<String>? description,
       Value<int>? quantity,
       Value<int>? unitPriceCents,
-      Value<int?>? unitCostCents}) {
+      Value<int?>? unitCostCents,
+      Value<int>? consumedQuantity}) {
     return TicketItemsCompanion(
       id: id ?? this.id,
       ticketId: ticketId ?? this.ticketId,
@@ -5952,6 +5992,7 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
       quantity: quantity ?? this.quantity,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       unitCostCents: unitCostCents ?? this.unitCostCents,
+      consumedQuantity: consumedQuantity ?? this.consumedQuantity,
     );
   }
 
@@ -5986,6 +6027,9 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
     if (unitCostCents.present) {
       map['unit_cost_cents'] = Variable<int>(unitCostCents.value);
     }
+    if (consumedQuantity.present) {
+      map['consumed_quantity'] = Variable<int>(consumedQuantity.value);
+    }
     return map;
   }
 
@@ -6000,7 +6044,8 @@ class TicketItemsCompanion extends UpdateCompanion<TicketItem> {
           ..write('description: $description, ')
           ..write('quantity: $quantity, ')
           ..write('unitPriceCents: $unitPriceCents, ')
-          ..write('unitCostCents: $unitCostCents')
+          ..write('unitCostCents: $unitCostCents, ')
+          ..write('consumedQuantity: $consumedQuantity')
           ..write(')'))
         .toString();
   }
@@ -10057,6 +10102,40 @@ class $MerchProductsTable extends MerchProducts
   late final GeneratedColumn<String> description = GeneratedColumn<String>(
       'description', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _skuMeta = const VerificationMeta('sku');
+  @override
+  late final GeneratedColumn<String> sku = GeneratedColumn<String>(
+      'sku', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _locationMeta =
+      const VerificationMeta('location');
+  @override
+  late final GeneratedColumn<String> location = GeneratedColumn<String>(
+      'location', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _stockMeta = const VerificationMeta('stock');
+  @override
+  late final GeneratedColumn<int> stock = GeneratedColumn<int>(
+      'stock', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _costCentsMeta =
+      const VerificationMeta('costCents');
+  @override
+  late final GeneratedColumn<int> costCents = GeneratedColumn<int>(
+      'cost_cents', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _priceCentsMeta =
+      const VerificationMeta('priceCents');
+  @override
+  late final GeneratedColumn<int> priceCents = GeneratedColumn<int>(
+      'price_cents', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _isActiveMeta =
       const VerificationMeta('isActive');
   @override
@@ -10068,8 +10147,18 @@ class $MerchProductsTable extends MerchProducts
           GeneratedColumn.constraintIsAlways('CHECK ("is_active" IN (0, 1))'),
       defaultValue: const Constant(true));
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, name, category, description, isActive];
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        category,
+        description,
+        sku,
+        location,
+        stock,
+        costCents,
+        priceCents,
+        isActive
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -10099,6 +10188,28 @@ class $MerchProductsTable extends MerchProducts
           description.isAcceptableOrUnknown(
               data['description']!, _descriptionMeta));
     }
+    if (data.containsKey('sku')) {
+      context.handle(
+          _skuMeta, sku.isAcceptableOrUnknown(data['sku']!, _skuMeta));
+    }
+    if (data.containsKey('location')) {
+      context.handle(_locationMeta,
+          location.isAcceptableOrUnknown(data['location']!, _locationMeta));
+    }
+    if (data.containsKey('stock')) {
+      context.handle(
+          _stockMeta, stock.isAcceptableOrUnknown(data['stock']!, _stockMeta));
+    }
+    if (data.containsKey('cost_cents')) {
+      context.handle(_costCentsMeta,
+          costCents.isAcceptableOrUnknown(data['cost_cents']!, _costCentsMeta));
+    }
+    if (data.containsKey('price_cents')) {
+      context.handle(
+          _priceCentsMeta,
+          priceCents.isAcceptableOrUnknown(
+              data['price_cents']!, _priceCentsMeta));
+    }
     if (data.containsKey('is_active')) {
       context.handle(_isActiveMeta,
           isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
@@ -10120,6 +10231,16 @@ class $MerchProductsTable extends MerchProducts
           .read(DriftSqlType.string, data['${effectivePrefix}category']),
       description: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}description']),
+      sku: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sku']),
+      location: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}location']),
+      stock: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}stock'])!,
+      costCents: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}cost_cents'])!,
+      priceCents: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}price_cents'])!,
       isActive: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
     );
@@ -10136,12 +10257,24 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
   final String name;
   final String? category;
   final String? description;
+
+  /// Shop SKU in `NNN-NNN` form, separate from the parts SKU sequence.
+  final String? sku;
+  final String? location;
+  final int stock;
+  final int costCents;
+  final int priceCents;
   final bool isActive;
   const MerchProduct(
       {required this.id,
       required this.name,
       this.category,
       this.description,
+      this.sku,
+      this.location,
+      required this.stock,
+      required this.costCents,
+      required this.priceCents,
       required this.isActive});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -10154,6 +10287,15 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
     if (!nullToAbsent || description != null) {
       map['description'] = Variable<String>(description);
     }
+    if (!nullToAbsent || sku != null) {
+      map['sku'] = Variable<String>(sku);
+    }
+    if (!nullToAbsent || location != null) {
+      map['location'] = Variable<String>(location);
+    }
+    map['stock'] = Variable<int>(stock);
+    map['cost_cents'] = Variable<int>(costCents);
+    map['price_cents'] = Variable<int>(priceCents);
     map['is_active'] = Variable<bool>(isActive);
     return map;
   }
@@ -10168,6 +10310,13 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
       description: description == null && nullToAbsent
           ? const Value.absent()
           : Value(description),
+      sku: sku == null && nullToAbsent ? const Value.absent() : Value(sku),
+      location: location == null && nullToAbsent
+          ? const Value.absent()
+          : Value(location),
+      stock: Value(stock),
+      costCents: Value(costCents),
+      priceCents: Value(priceCents),
       isActive: Value(isActive),
     );
   }
@@ -10180,6 +10329,11 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
       name: serializer.fromJson<String>(json['name']),
       category: serializer.fromJson<String?>(json['category']),
       description: serializer.fromJson<String?>(json['description']),
+      sku: serializer.fromJson<String?>(json['sku']),
+      location: serializer.fromJson<String?>(json['location']),
+      stock: serializer.fromJson<int>(json['stock']),
+      costCents: serializer.fromJson<int>(json['costCents']),
+      priceCents: serializer.fromJson<int>(json['priceCents']),
       isActive: serializer.fromJson<bool>(json['isActive']),
     );
   }
@@ -10191,6 +10345,11 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
       'name': serializer.toJson<String>(name),
       'category': serializer.toJson<String?>(category),
       'description': serializer.toJson<String?>(description),
+      'sku': serializer.toJson<String?>(sku),
+      'location': serializer.toJson<String?>(location),
+      'stock': serializer.toJson<int>(stock),
+      'costCents': serializer.toJson<int>(costCents),
+      'priceCents': serializer.toJson<int>(priceCents),
       'isActive': serializer.toJson<bool>(isActive),
     };
   }
@@ -10200,12 +10359,22 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
           String? name,
           Value<String?> category = const Value.absent(),
           Value<String?> description = const Value.absent(),
+          Value<String?> sku = const Value.absent(),
+          Value<String?> location = const Value.absent(),
+          int? stock,
+          int? costCents,
+          int? priceCents,
           bool? isActive}) =>
       MerchProduct(
         id: id ?? this.id,
         name: name ?? this.name,
         category: category.present ? category.value : this.category,
         description: description.present ? description.value : this.description,
+        sku: sku.present ? sku.value : this.sku,
+        location: location.present ? location.value : this.location,
+        stock: stock ?? this.stock,
+        costCents: costCents ?? this.costCents,
+        priceCents: priceCents ?? this.priceCents,
         isActive: isActive ?? this.isActive,
       );
   MerchProduct copyWithCompanion(MerchProductsCompanion data) {
@@ -10215,6 +10384,12 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
       category: data.category.present ? data.category.value : this.category,
       description:
           data.description.present ? data.description.value : this.description,
+      sku: data.sku.present ? data.sku.value : this.sku,
+      location: data.location.present ? data.location.value : this.location,
+      stock: data.stock.present ? data.stock.value : this.stock,
+      costCents: data.costCents.present ? data.costCents.value : this.costCents,
+      priceCents:
+          data.priceCents.present ? data.priceCents.value : this.priceCents,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
     );
   }
@@ -10226,13 +10401,19 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
           ..write('name: $name, ')
           ..write('category: $category, ')
           ..write('description: $description, ')
+          ..write('sku: $sku, ')
+          ..write('location: $location, ')
+          ..write('stock: $stock, ')
+          ..write('costCents: $costCents, ')
+          ..write('priceCents: $priceCents, ')
           ..write('isActive: $isActive')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, category, description, isActive);
+  int get hashCode => Object.hash(id, name, category, description, sku,
+      location, stock, costCents, priceCents, isActive);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -10241,6 +10422,11 @@ class MerchProduct extends DataClass implements Insertable<MerchProduct> {
           other.name == this.name &&
           other.category == this.category &&
           other.description == this.description &&
+          other.sku == this.sku &&
+          other.location == this.location &&
+          other.stock == this.stock &&
+          other.costCents == this.costCents &&
+          other.priceCents == this.priceCents &&
           other.isActive == this.isActive);
 }
 
@@ -10249,12 +10435,22 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
   final Value<String> name;
   final Value<String?> category;
   final Value<String?> description;
+  final Value<String?> sku;
+  final Value<String?> location;
+  final Value<int> stock;
+  final Value<int> costCents;
+  final Value<int> priceCents;
   final Value<bool> isActive;
   const MerchProductsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.category = const Value.absent(),
     this.description = const Value.absent(),
+    this.sku = const Value.absent(),
+    this.location = const Value.absent(),
+    this.stock = const Value.absent(),
+    this.costCents = const Value.absent(),
+    this.priceCents = const Value.absent(),
     this.isActive = const Value.absent(),
   });
   MerchProductsCompanion.insert({
@@ -10262,6 +10458,11 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
     required String name,
     this.category = const Value.absent(),
     this.description = const Value.absent(),
+    this.sku = const Value.absent(),
+    this.location = const Value.absent(),
+    this.stock = const Value.absent(),
+    this.costCents = const Value.absent(),
+    this.priceCents = const Value.absent(),
     this.isActive = const Value.absent(),
   }) : name = Value(name);
   static Insertable<MerchProduct> custom({
@@ -10269,6 +10470,11 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
     Expression<String>? name,
     Expression<String>? category,
     Expression<String>? description,
+    Expression<String>? sku,
+    Expression<String>? location,
+    Expression<int>? stock,
+    Expression<int>? costCents,
+    Expression<int>? priceCents,
     Expression<bool>? isActive,
   }) {
     return RawValuesInsertable({
@@ -10276,6 +10482,11 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
       if (name != null) 'name': name,
       if (category != null) 'category': category,
       if (description != null) 'description': description,
+      if (sku != null) 'sku': sku,
+      if (location != null) 'location': location,
+      if (stock != null) 'stock': stock,
+      if (costCents != null) 'cost_cents': costCents,
+      if (priceCents != null) 'price_cents': priceCents,
       if (isActive != null) 'is_active': isActive,
     });
   }
@@ -10285,12 +10496,22 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
       Value<String>? name,
       Value<String?>? category,
       Value<String?>? description,
+      Value<String?>? sku,
+      Value<String?>? location,
+      Value<int>? stock,
+      Value<int>? costCents,
+      Value<int>? priceCents,
       Value<bool>? isActive}) {
     return MerchProductsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       category: category ?? this.category,
       description: description ?? this.description,
+      sku: sku ?? this.sku,
+      location: location ?? this.location,
+      stock: stock ?? this.stock,
+      costCents: costCents ?? this.costCents,
+      priceCents: priceCents ?? this.priceCents,
       isActive: isActive ?? this.isActive,
     );
   }
@@ -10310,6 +10531,21 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
     if (description.present) {
       map['description'] = Variable<String>(description.value);
     }
+    if (sku.present) {
+      map['sku'] = Variable<String>(sku.value);
+    }
+    if (location.present) {
+      map['location'] = Variable<String>(location.value);
+    }
+    if (stock.present) {
+      map['stock'] = Variable<int>(stock.value);
+    }
+    if (costCents.present) {
+      map['cost_cents'] = Variable<int>(costCents.value);
+    }
+    if (priceCents.present) {
+      map['price_cents'] = Variable<int>(priceCents.value);
+    }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
@@ -10323,6 +10559,11 @@ class MerchProductsCompanion extends UpdateCompanion<MerchProduct> {
           ..write('name: $name, ')
           ..write('category: $category, ')
           ..write('description: $description, ')
+          ..write('sku: $sku, ')
+          ..write('location: $location, ')
+          ..write('stock: $stock, ')
+          ..write('costCents: $costCents, ')
+          ..write('priceCents: $priceCents, ')
           ..write('isActive: $isActive')
           ..write(')'))
         .toString();
@@ -17245,6 +17486,7 @@ typedef $$TicketItemsTableCreateCompanionBuilder = TicketItemsCompanion
   Value<int> quantity,
   Value<int> unitPriceCents,
   Value<int?> unitCostCents,
+  Value<int> consumedQuantity,
 });
 typedef $$TicketItemsTableUpdateCompanionBuilder = TicketItemsCompanion
     Function({
@@ -17257,6 +17499,7 @@ typedef $$TicketItemsTableUpdateCompanionBuilder = TicketItemsCompanion
   Value<int> quantity,
   Value<int> unitPriceCents,
   Value<int?> unitCostCents,
+  Value<int> consumedQuantity,
 });
 
 final class $$TicketItemsTableReferences
@@ -17335,6 +17578,10 @@ class $$TicketItemsTableFilterComposer
 
   ColumnFilters<int> get unitCostCents => $composableBuilder(
       column: $table.unitCostCents, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get consumedQuantity => $composableBuilder(
+      column: $table.consumedQuantity,
+      builder: (column) => ColumnFilters(column));
 
   $$TicketsTableFilterComposer get ticketId {
     final $$TicketsTableFilterComposer composer = $composerBuilder(
@@ -17426,6 +17673,10 @@ class $$TicketItemsTableOrderingComposer
       column: $table.unitCostCents,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get consumedQuantity => $composableBuilder(
+      column: $table.consumedQuantity,
+      builder: (column) => ColumnOrderings(column));
+
   $$TicketsTableOrderingComposer get ticketId {
     final $$TicketsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -17513,6 +17764,9 @@ class $$TicketItemsTableAnnotationComposer
 
   GeneratedColumn<int> get unitCostCents => $composableBuilder(
       column: $table.unitCostCents, builder: (column) => column);
+
+  GeneratedColumn<int> get consumedQuantity => $composableBuilder(
+      column: $table.consumedQuantity, builder: (column) => column);
 
   $$TicketsTableAnnotationComposer get ticketId {
     final $$TicketsTableAnnotationComposer composer = $composerBuilder(
@@ -17607,6 +17861,7 @@ class $$TicketItemsTableTableManager extends RootTableManager<
             Value<int> quantity = const Value.absent(),
             Value<int> unitPriceCents = const Value.absent(),
             Value<int?> unitCostCents = const Value.absent(),
+            Value<int> consumedQuantity = const Value.absent(),
           }) =>
               TicketItemsCompanion(
             id: id,
@@ -17618,6 +17873,7 @@ class $$TicketItemsTableTableManager extends RootTableManager<
             quantity: quantity,
             unitPriceCents: unitPriceCents,
             unitCostCents: unitCostCents,
+            consumedQuantity: consumedQuantity,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -17629,6 +17885,7 @@ class $$TicketItemsTableTableManager extends RootTableManager<
             Value<int> quantity = const Value.absent(),
             Value<int> unitPriceCents = const Value.absent(),
             Value<int?> unitCostCents = const Value.absent(),
+            Value<int> consumedQuantity = const Value.absent(),
           }) =>
               TicketItemsCompanion.insert(
             id: id,
@@ -17640,6 +17897,7 @@ class $$TicketItemsTableTableManager extends RootTableManager<
             quantity: quantity,
             unitPriceCents: unitPriceCents,
             unitCostCents: unitCostCents,
+            consumedQuantity: consumedQuantity,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
@@ -21130,6 +21388,11 @@ typedef $$MerchProductsTableCreateCompanionBuilder = MerchProductsCompanion
   required String name,
   Value<String?> category,
   Value<String?> description,
+  Value<String?> sku,
+  Value<String?> location,
+  Value<int> stock,
+  Value<int> costCents,
+  Value<int> priceCents,
   Value<bool> isActive,
 });
 typedef $$MerchProductsTableUpdateCompanionBuilder = MerchProductsCompanion
@@ -21138,6 +21401,11 @@ typedef $$MerchProductsTableUpdateCompanionBuilder = MerchProductsCompanion
   Value<String> name,
   Value<String?> category,
   Value<String?> description,
+  Value<String?> sku,
+  Value<String?> location,
+  Value<int> stock,
+  Value<int> costCents,
+  Value<int> priceCents,
   Value<bool> isActive,
 });
 
@@ -21181,6 +21449,21 @@ class $$MerchProductsTableFilterComposer
 
   ColumnFilters<String> get description => $composableBuilder(
       column: $table.description, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sku => $composableBuilder(
+      column: $table.sku, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get location => $composableBuilder(
+      column: $table.location, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get stock => $composableBuilder(
+      column: $table.stock, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get costCents => $composableBuilder(
+      column: $table.costCents, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get priceCents => $composableBuilder(
+      column: $table.priceCents, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnFilters(column));
@@ -21228,6 +21511,21 @@ class $$MerchProductsTableOrderingComposer
   ColumnOrderings<String> get description => $composableBuilder(
       column: $table.description, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get sku => $composableBuilder(
+      column: $table.sku, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get location => $composableBuilder(
+      column: $table.location, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get stock => $composableBuilder(
+      column: $table.stock, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get costCents => $composableBuilder(
+      column: $table.costCents, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get priceCents => $composableBuilder(
+      column: $table.priceCents, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnOrderings(column));
 }
@@ -21252,6 +21550,21 @@ class $$MerchProductsTableAnnotationComposer
 
   GeneratedColumn<String> get description => $composableBuilder(
       column: $table.description, builder: (column) => column);
+
+  GeneratedColumn<String> get sku =>
+      $composableBuilder(column: $table.sku, builder: (column) => column);
+
+  GeneratedColumn<String> get location =>
+      $composableBuilder(column: $table.location, builder: (column) => column);
+
+  GeneratedColumn<int> get stock =>
+      $composableBuilder(column: $table.stock, builder: (column) => column);
+
+  GeneratedColumn<int> get costCents =>
+      $composableBuilder(column: $table.costCents, builder: (column) => column);
+
+  GeneratedColumn<int> get priceCents => $composableBuilder(
+      column: $table.priceCents, builder: (column) => column);
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
@@ -21305,6 +21618,11 @@ class $$MerchProductsTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<String?> category = const Value.absent(),
             Value<String?> description = const Value.absent(),
+            Value<String?> sku = const Value.absent(),
+            Value<String?> location = const Value.absent(),
+            Value<int> stock = const Value.absent(),
+            Value<int> costCents = const Value.absent(),
+            Value<int> priceCents = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
           }) =>
               MerchProductsCompanion(
@@ -21312,6 +21630,11 @@ class $$MerchProductsTableTableManager extends RootTableManager<
             name: name,
             category: category,
             description: description,
+            sku: sku,
+            location: location,
+            stock: stock,
+            costCents: costCents,
+            priceCents: priceCents,
             isActive: isActive,
           ),
           createCompanionCallback: ({
@@ -21319,6 +21642,11 @@ class $$MerchProductsTableTableManager extends RootTableManager<
             required String name,
             Value<String?> category = const Value.absent(),
             Value<String?> description = const Value.absent(),
+            Value<String?> sku = const Value.absent(),
+            Value<String?> location = const Value.absent(),
+            Value<int> stock = const Value.absent(),
+            Value<int> costCents = const Value.absent(),
+            Value<int> priceCents = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
           }) =>
               MerchProductsCompanion.insert(
@@ -21326,6 +21654,11 @@ class $$MerchProductsTableTableManager extends RootTableManager<
             name: name,
             category: category,
             description: description,
+            sku: sku,
+            location: location,
+            stock: stock,
+            costCents: costCents,
+            priceCents: priceCents,
             isActive: isActive,
           ),
           withReferenceMapper: (p0) => p0

@@ -57,6 +57,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   final _retailCostController = TextEditingController(text: '0.00');
   final _bulkQuantityController = TextEditingController(text: '1');
   final _bulkTotalController = TextEditingController(text: '0.00');
+  final _minimumStockController = TextEditingController(text: '0');
   String? _error;
   bool _saving = false;
   int _markupPercent = 35;
@@ -78,7 +79,8 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _vendorSkuController.text = part.vendorSku ?? '';
     _categoryController.text = part.category ?? '';
     _locationController.text = part.location ?? '';
-    _stockController.text = '${part.stock}';
+    _stockController.text = '${part.inventoryValue}';
+    _minimumStockController.text = '${part.reorderLevel}';
     _rawCostController.text = (part.rawCostCents / 100).toStringAsFixed(2);
     _retailCostController.text =
         (part.retailPriceCents / 100).toStringAsFixed(2);
@@ -116,6 +118,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _categoryController.dispose();
     _locationController.dispose();
     _stockController.dispose();
+    _minimumStockController.dispose();
     _rawCostController.dispose();
     _retailCostController.dispose();
     _bulkQuantityController.dispose();
@@ -190,6 +193,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
 
   Future<void> _save() async {
     final startingStock = int.tryParse(_stockController.text.trim());
+    final minimumStock = int.tryParse(_minimumStockController.text.trim()) ?? 0;
     final rawCostCents = _moneyCents(_rawCostController.text);
     final retailCostCents = _moneyCents(_retailCostController.text);
     final isBulk = _purchaseType == PartPurchaseType.bulk;
@@ -199,6 +203,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     if (_nameController.text.trim().isEmpty ||
         startingStock == null ||
         startingStock < 0 ||
+        minimumStock < 0 ||
         rawCostCents == null ||
         retailCostCents == null ||
         (isBulk &&
@@ -206,7 +211,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 bulkQuantity < 1 ||
                 bulkTotalCents == null))) {
       setState(() => _error =
-          'Enter a part name, valid stock quantity, and non-negative costs.');
+          'Enter a part name, valid inventory and stock quantities, and non-negative costs.');
       return;
     }
     if (widget.part == null && sku.isNotEmpty && !PartSku.isValid(sku)) {
@@ -237,6 +242,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           purchaseType: _purchaseType,
           bulkQuantity: isBulk ? bulkQuantity! : 1,
           bulkTotalCents: isBulk ? bulkTotalCents! : 0,
+          minimumStock: minimumStock,
         );
       } else {
         await widget.repository.updateInventoryPart(
@@ -254,6 +260,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           purchaseType: _purchaseType,
           bulkQuantity: isBulk ? bulkQuantity! : 1,
           bulkTotalCents: isBulk ? bulkTotalCents! : 0,
+          minimumStock: minimumStock,
         );
       }
       if (mounted) Navigator.of(context).pop();
@@ -399,9 +406,18 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 key: const Key('inventory-part-stock'),
                 controller: _stockController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText:
-                      widget.part == null ? 'Starting stock' : 'Stock quantity',
+                decoration: const InputDecoration(
+                  labelText: 'Inventory',
+                  helperText: 'On-hand quantity; deducted when tickets close.',
+                ),
+              ),
+              TextField(
+                key: const Key('inventory-part-min-stock'),
+                controller: _minimumStockController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Stock (minimum)',
+                  helperText: 'Minimum stock level for reordering.',
                 ),
               ),
               TextField(

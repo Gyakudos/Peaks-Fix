@@ -77,6 +77,124 @@ void main() {
     expect(ticket.profitCents, 14000);
     expect(ticket.margin, closeTo(0.875, 0.0001));
     expect(ticket.closedAt, isNotNull);
+
+    // The $20 discount is split across the $60 merch and $120 labour lines.
+    expect(ticket.partsRevenueCents, 0);
+    expect(ticket.partsCostCents, 0);
+    expect(ticket.partsQuantity, 0);
+    expect(ticket.merchRevenueCents, 5334);
+    expect(ticket.merchCostCents, 2000);
+    expect(ticket.merchQuantity, 2);
+    expect(ticket.merchProfitCents, 3334);
+    expect(ticket.servicesRevenueCents, 10666);
+    expect(
+      ticket.partsRevenueCents +
+          ticket.merchRevenueCents +
+          ticket.servicesRevenueCents,
+      ticket.revenueCents,
+    );
+  });
+
+  test('parts and merchandise keep separate revenue, cost and profit',
+      () async {
+    final ticket = await database.createTicket(
+      customerName: 'Split Customer',
+      customerPhone: '555-0210',
+      customerEmail: 'split@example.com',
+      deviceName: 'Switch Lite',
+      complaint: 'Charging port and cable',
+    );
+    await database.setTicketStatus(ticket.id, TicketStatus.ready);
+    final partId = await database.createInventoryPart(
+      name: 'USB-C charging port',
+      startingStock: 4,
+      rawCostCents: 1000,
+      retailPriceCents: 4000,
+    );
+    await database.addRequiredPart(
+      ticketId: ticket.id,
+      partId: partId,
+      quantity: 2,
+    );
+    await database.addInvoiceLaborLine(
+      ticketId: ticket.id,
+      description: 'Port replacement',
+      quantity: 1,
+      unitPriceCents: 5000,
+    );
+    await database.addCheckoutMerchLine(
+      ticketId: ticket.id,
+      description: 'USB-C cable',
+      quantity: 1,
+      unitCostCents: 500,
+      unitPriceCents: 2000,
+    );
+    await database.setInvoiceDiscount(
+      ticketId: ticket.id,
+      kind: InvoiceDiscountKind.fixed,
+      value: 1500,
+    );
+    await database.recordTicketPayment(
+      ticketId: ticket.id,
+      amountCents: 13500,
+      method: PaymentMethod.card,
+    );
+    await database.closeTicketAfterPayment(ticket.id);
+
+    final row = (await database.watchFinancialTickets().first).single;
+    expect(row.revenueCents, 13500);
+    expect(row.partsRevenueCents, 7200);
+    expect(row.partsCostCents, 2000);
+    expect(row.partsQuantity, 2);
+    expect(row.partsProfitCents, 5200);
+    expect(row.merchRevenueCents, 1800);
+    expect(row.merchCostCents, 500);
+    expect(row.merchQuantity, 1);
+    expect(row.merchProfitCents, 1300);
+    expect(row.servicesRevenueCents, 4500);
+    expect(row.costCents, 2500);
+    expect(row.profitCents, 11000);
+
+    final summary = summarizeFinancials(
+      tickets: [row],
+      staff: const [],
+      now: DateTime.now(),
+    );
+    expect(summary.partsRevenueCents, 7200);
+    expect(summary.partsCostCents, 2000);
+    expect(summary.partsQuantity, 2);
+    expect(summary.partsProfitCents, 5200);
+    expect(summary.merchRevenueCents, 1800);
+    expect(summary.merchCostCents, 500);
+    expect(summary.merchQuantity, 1);
+    expect(summary.merchProfitCents, 1300);
+    expect(summary.servicesRevenueCents, 4500);
+    // Cost is the combined parts + merchandise cost.
+    expect(summary.costCents, 2500);
+    expect(summary.grossProfitCents, 11000);
+  });
+
+  test('discount cents split without losing or inventing a cent', () {
+    final split = splitDiscountedRevenue(
+      partsSubtotalCents: 333,
+      merchSubtotalCents: 333,
+      servicesSubtotalCents: 334,
+      discountCents: 100,
+    );
+    expect(
+      split.partsCents + split.merchCents + split.servicesCents,
+      900,
+    );
+
+    final full = splitDiscountedRevenue(
+      partsSubtotalCents: 1000,
+      merchSubtotalCents: 2000,
+      servicesSubtotalCents: 0,
+      discountCents: 5000,
+    );
+    expect(full.partsCents, 0);
+    expect(full.merchCents, 0);
+    expect(full.servicesCents, 0);
   });
 
   test('reopening a closed ticket removes it from closed-ticket financials',
@@ -271,8 +389,11 @@ void main() {
     expect(find.text('Financial'), findsOneWidget);
     expect(find.text('Net \$102.50'), findsOneWidget);
     expect(find.text('Revenue'), findsOneWidget);
-    expect(find.text('Parts & merch cost'), findsOneWidget);
-    expect(find.text('Gross profit'), findsOneWidget);
+    expect(find.byKey(const Key('financial-parts-tracker')), findsOneWidget);
+    expect(find.byKey(const Key('financial-merch-tracker')), findsOneWidget);
+    expect(find.text('Parts'), findsOneWidget);
+    expect(find.text('Merchandise'), findsOneWidget);
+    expect(find.text('Gross profit'), findsWidgets);
     expect(find.text('Staff pay'), findsOneWidget);
     expect(find.text('Net estimate'), findsOneWidget);
 
@@ -280,13 +401,20 @@ void main() {
     expect(find.text('\$160.00'), findsWidgets);
     expect(find.text('\$140.00'), findsWidgets);
     expect(find.text('\$37.50'), findsWidgets);
+    expect(find.text('\$53.34'), findsWidgets);
+    expect(find.text('\$33.34'), findsWidgets);
+    expect(
+      find.byKey(const Key('financial-services-revenue')),
+      findsOneWidget,
+    );
 
     expect(find.text('Hours by staff'), findsOneWidget);
     expect(find.text('Alex Tech'), findsOneWidget);
     expect(find.text('1h 30m'), findsWidgets);
     expect(find.text('Closed tickets'), findsOneWidget);
     expect(find.textContaining('PF-000001'), findsOneWidget);
-    expect(find.textContaining('cost \$20.00'), findsOneWidget);
+    expect(find.textContaining('parts cost \$0.00'), findsOneWidget);
+    expect(find.textContaining('merch cost \$20.00'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 50));

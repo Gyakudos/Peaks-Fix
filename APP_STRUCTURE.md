@@ -9,9 +9,9 @@
 | 3 | **Checkout** | Ready tickets: bill lines, merchandise, payment and closing. |
 | 4 | **Calendar** | Monthly view of drop-off, technician start, parts arrival, customer contact and pickup dates. |
 | 5 | **Customers** | Contact records, devices owned, repair and merch history. |
-| 6 | **Merch** | Planned retail counter; still a placeholder. |
-| 7 | **Parts** | Repair components, consumed from tickets. |
-| 8 | **Financial** | Revenue, part/merch cost and profit from closed tickets, plus tracked hours and estimated pay per staff member. |
+| 6 | **Merch** | Retail stock list: add, edit and remove items with SKU, stock, cost and price. |
+| 7 | **Parts** | Repair components with stock and committed quantities, consumed from tickets. |
+| 8 | **Financial** | Revenue, separate parts and merchandise trackers, profit, tracked hours and estimated pay per staff member. |
 | 9 | **Settings** | Staff directory and time clock, markup, device catalog, shop settings. |
 
 Deliberately **not** tabs:
@@ -71,9 +71,22 @@ Separate tables on purpose:
   `000-000` format and are assigned automatically when left blank. The **Parts
   Invoice** picker searches by either SKU or part name. A part can be marked as
   a **single item** or a **bulk purchase**; bulk parts store the quantity and
-  total cost, and the cost per item is calculated from them.
-- **Merch** is customer-facing retail: variants (size/colour), SKU/barcode, and
-  sales that happen independently of any ticket.
+  total cost, and the cost per item is calculated from them. Each part card
+  also shows **Committed**, the quantity open tickets still need. Adding a part
+  to a ticket does not touch **Inventory** (on-hand); **closing the ticket
+  deducts the fitted parts from Inventory and logs a movement**. Each ticket
+  line remembers how much it has already consumed
+  (`ticket_items.consumed_quantity`), so reopening a closed job for warranty
+  does not deduct the same part again — only parts added for the second visit
+  are taken out when it closes. Inventory never goes below zero; a shortfall is
+  written into the movement note. **Stock** is the minimum level and is edited
+  separately in the part dialog.
+- **Merch** is customer-facing retail: a flat stock list with its own
+  `000-000` SKU sequence, category, description, location, stock, cost and
+  retail price. The Merch page mirrors the Parts page layout. Merchandise sold
+  through Checkout records its cost and price on the ticket line, so retail
+  revenue stays independent of any repair ticket while still feeding the
+  Financial trackers. Size/colour variants remain a future addition.
 
 Merging them would corrupt both stock counts and revenue reporting.
 
@@ -124,6 +137,17 @@ Merging them would corrupt both stock counts and revenue reporting.
 - Schema v17 adds `device_categories.warranty_days`, the warranty period each
   category offers on Report 3. It defaults to 90 days, so existing categories
   pick up the shop default without touching their other settings.
+- Schema v18 adds `merch_products.sku`, `location`, `stock`, `cost_cents` and
+  `price_cents`, so the Merch page can list retail stock like the Parts page.
+  Merchandise SKUs use their own `000-000` sequence and do not consume part
+  numbers.
+- Schema v19 adds `ticket_items.consumed_quantity`, the amount of each part line
+  already taken out of stock when its ticket closed. Tickets that were already
+  closed at upgrade time are marked fully consumed so their stock is not changed
+  retroactively.
+- Schema v20 adds `parts.reorder_level` as the minimum stock threshold.
+  `parts.stock` remains the on-hand inventory count; it is only deducted when a
+  ticket is closed. Both fields can be edited from the part dialog.
 - Report 3 **warranty coverage** resolves its default from the ticket's device
   category (`device_categories.warranty_days`), falling back to the shop's
   `warranty_days` setting and its `warranty_terms`. The per-ticket length and
@@ -134,7 +158,11 @@ Merging them would corrupt both stock counts and revenue reporting.
 - **Financial** is calculated from existing records, not a separate ledger.
   Revenue is each closed ticket's invoice subtotal minus its saved discount and
   before tax; cost is the recorded `ticket_items.unit_cost_cents` for parts and
-  merchandise. GST and PST are reported separately from the stored snapshots,
+  merchandise. Parts and merchandise also keep separate sold/cost/profit and
+  margin trackers. Each line group's revenue is its subtotal minus a
+  proportional share of the invoice discount, allocated to the cent, so parts
+  revenue + merchandise revenue + services revenue always equals total revenue.
+  GST and PST are reported separately from the stored snapshots,
   so later rate changes do not rewrite old tickets. Gross profit is revenue
   minus that cost, and net profit is an
   estimate after subtracting tracked staff time × hourly rate. Labour lines
@@ -238,12 +266,14 @@ Merging them would corrupt both stock counts and revenue reporting.
 - **Customers** — searchable and editable profiles with devices, their latest
   warranty, and repair history. Intake can select existing customers and
   devices.
-- **Merch** — still a placeholder. **Settings** is live: staff directory and
-  time clock, parts/merch markup, shop values and the device catalog, including
-  each category's warranty period.
+- **Merch** — retail stock list with its own SKUs, stock, cost and calculated
+  retail price, laid out like the Parts page. **Settings** is live: staff
+  directory and time clock, parts/merch markup, shop values and the device
+  catalog, including each category's warranty period.
 - **Staff** — directory with inline edit (name, job, active, hourly pay), a
   shared sign-in/time clock, per-person tracked hours and estimated pay, and a
   per-person list of tickets assigned on any report stage.
-- **Financial** — closed-ticket revenue, part/merch cost, gross profit, tracked
+- **Financial** — closed-ticket revenue, separate parts and merchandise
+  trackers, gross profit, tracked
   staff hours and pay, and a net profit estimate, with All time / This month /
   Last 30 days / This year filters.

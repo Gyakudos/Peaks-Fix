@@ -326,6 +326,11 @@ class TicketItems extends Table {
   IntColumn get quantity => integer().withDefault(const Constant(1))();
   IntColumn get unitPriceCents => integer().withDefault(const Constant(0))();
   IntColumn get unitCostCents => integer().nullable()();
+
+  /// How many of a part line have already been taken out of stock by closing
+  /// its ticket. Reopened tickets keep this value, so closing again only
+  /// deducts the parts added since.
+  IntColumn get consumedQuantity => integer().withDefault(const Constant(0))();
 }
 
 class TicketPhotos extends Table {
@@ -509,6 +514,13 @@ class MerchProducts extends Table {
   TextColumn get name => text().withLength(min: 1, max: 120)();
   TextColumn get category => text().nullable()();
   TextColumn get description => text().nullable()();
+
+  /// Shop SKU in `NNN-NNN` form, separate from the parts SKU sequence.
+  TextColumn get sku => text().nullable()();
+  TextColumn get location => text().nullable()();
+  IntColumn get stock => integer().withDefault(const Constant(0))();
+  IntColumn get costCents => integer().withDefault(const Constant(0))();
+  IntColumn get priceCents => integer().withDefault(const Constant(0))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 }
 
@@ -630,8 +642,13 @@ class AppDatabase extends _$AppDatabase {
   /// did not have one.
   /// v17 added a warranty period to each device category, feeding the default
   /// on Report 3.
+  /// v18 gave merchandise products their own SKU, location, stock, cost and
+  /// retail price so the Merch page mirrors the parts inventory.
+  /// v19 records how much of each part line has already left stock when its
+  /// ticket was closed.
+  /// v20 adds a minimum stock threshold separate from on-hand inventory.
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 20;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -762,6 +779,30 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 17) {
             await m.addColumn(deviceCategories, deviceCategories.warrantyDays);
+          }
+          if (from < 18) {
+            await m.addColumn(merchProducts, merchProducts.sku);
+            await m.addColumn(merchProducts, merchProducts.location);
+            await m.addColumn(merchProducts, merchProducts.stock);
+            await m.addColumn(merchProducts, merchProducts.costCents);
+            await m.addColumn(merchProducts, merchProducts.priceCents);
+          }
+          if (from < 19) {
+            await m.addColumn(ticketItems, ticketItems.consumedQuantity);
+            // Parts on tickets that closed before this change never left stock,
+            // so mark them consumed. Upgrading cannot drop their stock now, and
+            // reopening an old job for warranty does not deduct them either.
+            await customStatement(
+              'UPDATE ticket_items SET consumed_quantity = quantity '
+              'WHERE kind = ${TicketItemKind.part.index} AND ticket_id IN ('
+              'SELECT id FROM tickets '
+              'WHERE status = ${TicketStatus.closed.index})',
+            );
+          }
+          if (from < 20) {
+            await m.addColumn(parts, parts.reorderLevel);
+            // Old columns kept for compatibility; parts now track inventory
+            // separately from the minimum stock threshold.
           }
         },
       );
@@ -2352,6 +2393,7 @@ class AppDatabase extends _$AppDatabase {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2397,6 +2439,7 @@ class AppDatabase extends _$AppDatabase {
           purchaseType: Value(purchaseType),
           bulkQuantity: Value(isBulk ? bulkQuantity : 1),
           bulkTotalCents: Value(isBulk ? bulkTotalCents : 0),
+          reorderLevel: Value(minimumStock),
         ),
       );
       if (startingStock > 0) {
@@ -2427,6 +2470,7 @@ class AppDatabase extends _$AppDatabase {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2477,6 +2521,7 @@ class AppDatabase extends _$AppDatabase {
           purchaseType: Value(purchaseType),
           bulkQuantity: Value(isBulk ? bulkQuantity : 1),
           bulkTotalCents: Value(isBulk ? bulkTotalCents : 0),
+          reorderLevel: Value(minimumStock),
         ),
       );
       final stockDelta = stock - existing.stock;
@@ -2495,6 +2540,111 @@ class AppDatabase extends _$AppDatabase {
   Future<void> removeInventoryPart(int partId) async {
     await (update(parts)..where((part) => part.id.equals(partId))).write(
       const PartsCompanion(isActive: Value(false)),
+    );
+  }
+
+  /// The next free merchandise SKU in `NNN-NNN` form.
+  ///
+  /// Merchandise has its own sequence so the retail list starts clean and
+  /// adding a shirt never skips a repair part number.
+  Future<String> nextMerchSku() async {
+    final query = selectOnly(merchProducts)..addColumns([merchProducts.sku]);
+    final rows = await query.get();
+    return PartSku.next(rows.map((row) => row.read(merchProducts.sku)));
+  }
+
+  Future<int> createMerchItem({
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int startingStock,
+    int costCents = 0,
+    int priceCents = 0,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
+    if (startingStock < 0) {
+      throw ArgumentError.value(
+        startingStock,
+        'startingStock',
+        'must not be negative',
+      );
+    }
+    if (costCents < 0 || priceCents < 0) {
+      throw ArgumentError('Merchandise costs must not be negative.');
+    }
+    final cleanSku = _clean(sku);
+    return transaction(() async {
+      return into(merchProducts).insert(
+        MerchProductsCompanion.insert(
+          name: cleanName,
+          description: Value(_clean(description)),
+          sku: Value(cleanSku ?? await nextMerchSku()),
+          category: Value(_clean(category)),
+          location: Value(_clean(location)),
+          stock: Value(startingStock),
+          costCents: Value(costCents),
+          priceCents: Value(priceCents),
+        ),
+      );
+    });
+  }
+
+  Future<void> updateMerchItem({
+    required int itemId,
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int stock,
+    required int costCents,
+    required int priceCents,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
+    if (stock < 0) {
+      throw ArgumentError.value(stock, 'stock', 'must not be negative');
+    }
+    if (costCents < 0 || priceCents < 0) {
+      throw ArgumentError('Merchandise costs must not be negative.');
+    }
+    final cleanSku = _clean(sku);
+    await transaction(() async {
+      final existing = await (select(merchProducts)
+            ..where((item) => item.id.equals(itemId)))
+          .getSingleOrNull();
+      if (existing == null) {
+        throw StateError('The merchandise item was not found.');
+      }
+      await (update(merchProducts)..where((item) => item.id.equals(itemId)))
+          .write(
+        MerchProductsCompanion(
+          name: Value(cleanName),
+          description: Value(_clean(description)),
+          sku: Value(
+            cleanSku ?? _clean(existing.sku) ?? await nextMerchSku(),
+          ),
+          category: Value(_clean(category)),
+          location: Value(_clean(location)),
+          stock: Value(stock),
+          costCents: Value(costCents),
+          priceCents: Value(priceCents),
+        ),
+      );
+    });
+  }
+
+  Future<void> removeMerchItem(int itemId) async {
+    await (update(merchProducts)..where((item) => item.id.equals(itemId)))
+        .write(
+      const MerchProductsCompanion(isActive: Value(false)),
     );
   }
 
@@ -2728,7 +2878,56 @@ class AppDatabase extends _$AppDatabase {
           pstCents: Value(pst),
         ),
       );
+      await _consumeTicketParts(ticketId);
     });
+  }
+
+  /// Takes the parts fitted to [ticketId] out of stock when the ticket closes.
+  ///
+  /// Only the outstanding quantity per line is deducted, so reopening a closed
+  /// job and closing it again leaves the original parts alone and only counts
+  /// what was added for the new visit. Stock never drops below zero; any
+  /// shortfall is written into the movement note so the count can be fixed.
+  Future<void> _consumeTicketParts(int ticketId) async {
+    final lines = await (select(ticketItems)
+          ..where(
+            (item) =>
+                item.ticketId.equals(ticketId) &
+                item.kind.equals(TicketItemKind.part.index) &
+                item.partId.isNotNull(),
+          ))
+        .get();
+    for (final line in lines) {
+      final outstanding = line.quantity - line.consumedQuantity;
+      if (outstanding <= 0) continue;
+      final part = await (select(parts)
+            ..where((row) => row.id.equals(line.partId!)))
+          .getSingleOrNull();
+      if (part == null) continue;
+      final deducted = outstanding > part.stock ? part.stock : outstanding;
+      if (deducted > 0) {
+        await (update(parts)..where((row) => row.id.equals(part.id))).write(
+          PartsCompanion(stock: Value(part.stock - deducted)),
+        );
+        final short = outstanding - deducted;
+        await into(partMovements).insert(
+          PartMovementsCompanion.insert(
+            partId: part.id,
+            ticketId: Value(ticketId),
+            delta: -deducted,
+            note: Value(
+              short > 0
+                  ? 'Used on closed ticket (stock short by $short)'
+                  : 'Used on closed ticket',
+            ),
+          ),
+        );
+      }
+      await (update(ticketItems)..where((item) => item.id.equals(line.id)))
+          .write(
+        TicketItemsCompanion(consumedQuantity: Value(line.quantity)),
+      );
+    }
   }
 
   Future<void> removeInvoiceLaborLine({

@@ -80,6 +80,8 @@ class FakeTicketsRepository implements TicketsRepository {
       StreamController<List<RequiredPart>>.broadcast();
   final StreamController<List<InventoryPart>> _inventoryUpdates =
       StreamController<List<InventoryPart>>.broadcast();
+  final StreamController<List<InventoryMerchItem>> _merchUpdates =
+      StreamController<List<InventoryMerchItem>>.broadcast();
   final StreamController<TicketDetailEntry?> _detailUpdates =
       StreamController<TicketDetailEntry?>.broadcast();
   final Map<int, StreamController<InvoiceDraft?>> _invoiceUpdates = {};
@@ -91,6 +93,7 @@ class FakeTicketsRepository implements TicketsRepository {
   final List<TechnicalReportBlock> technicalEntries = [];
   final List<TicketBoardEntry> boardTickets = [];
   final List<InventoryPart> inventoryParts = [];
+  final List<InventoryMerchItem> merchItems = [];
   final List<RequiredPart> requiredParts = [];
   final List<CustomerRecord> customers = [];
   final List<StaffMemberEntry> staffRoster = [];
@@ -218,9 +221,35 @@ class FakeTicketsRepository implements TicketsRepository {
 
   @override
   Stream<List<InventoryPart>> watchInventoryParts() async* {
-    yield List.unmodifiable(inventoryParts);
-    yield* _inventoryUpdates.stream;
+    yield _inventorySnapshot();
+    yield* _inventoryUpdates.stream.map((_) => _inventorySnapshot());
   }
+
+  /// Stands in for the SQLite join: committed is the quantity on parts already
+  /// billed to a ticket.
+  List<InventoryPart> _inventorySnapshot() => [
+        for (final part in inventoryParts)
+          InventoryPart(
+            id: part.id,
+            name: part.name,
+            description: part.description,
+            stock: part.stock,
+            minimumStock: part.minimumStock,
+            rawCostCents: part.rawCostCents,
+            retailPriceCents: part.retailPriceCents,
+            sku: part.sku,
+            vendorId: part.vendorId,
+            vendorSku: part.vendorSku,
+            category: part.category,
+            location: part.location,
+            purchaseType: part.purchaseType,
+            bulkQuantity: part.bulkQuantity,
+            bulkTotalCents: part.bulkTotalCents,
+            committedQuantity: requiredParts
+                .where((item) => item.partId == part.id)
+                .fold<int>(0, (sum, item) => sum + item.quantity),
+          ),
+      ];
 
   @override
   Stream<List<RequiredPart>> watchRequiredParts(int ticketId) async* {
@@ -247,6 +276,7 @@ class FakeTicketsRepository implements TicketsRepository {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   }) async {
     final cleanSku = sku?.trim();
     inventoryParts.add(
@@ -262,6 +292,7 @@ class FakeTicketsRepository implements TicketsRepository {
         category: category,
         location: location,
         stock: startingStock,
+        minimumStock: minimumStock,
         rawCostCents: rawCostCents,
         retailPriceCents: retailPriceCents,
         purchaseType: purchaseType,
@@ -288,6 +319,7 @@ class FakeTicketsRepository implements TicketsRepository {
     PartPurchaseType purchaseType = PartPurchaseType.single,
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
+    int minimumStock = 0,
   }) async {
     final index = inventoryParts.indexWhere((part) => part.id == partId);
     if (index == -1) throw StateError('Inventory part not found.');
@@ -305,6 +337,7 @@ class FakeTicketsRepository implements TicketsRepository {
       category: category,
       location: location,
       stock: stock,
+      minimumStock: minimumStock,
       rawCostCents: rawCostCents,
       retailPriceCents: retailPriceCents,
       purchaseType: purchaseType,
@@ -318,6 +351,84 @@ class FakeTicketsRepository implements TicketsRepository {
   Future<void> removeInventoryPart(int partId) async {
     inventoryParts.removeWhere((part) => part.id == partId);
     _inventoryUpdates.add(List.unmodifiable(inventoryParts));
+  }
+
+  @override
+  Stream<List<InventoryMerchItem>> watchMerchItems() async* {
+    yield List.unmodifiable(merchItems);
+    yield* _merchUpdates.stream;
+  }
+
+  @override
+  Future<String> nextMerchSku() async =>
+      PartSku.next(merchItems.map((item) => item.sku));
+
+  @override
+  Future<void> createMerchItem({
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int startingStock,
+    int costCents = 0,
+    int priceCents = 0,
+  }) async {
+    final cleanSku = sku?.trim();
+    merchItems.add(
+      InventoryMerchItem(
+        id: merchItems.isEmpty ? 1 : merchItems.last.id + 1,
+        name: name,
+        description: description,
+        sku: cleanSku == null || cleanSku.isEmpty
+            ? PartSku.next(merchItems.map((item) => item.sku))
+            : cleanSku,
+        category: category,
+        location: location,
+        stock: startingStock,
+        costCents: costCents,
+        priceCents: priceCents,
+      ),
+    );
+    _merchUpdates.add(List.unmodifiable(merchItems));
+  }
+
+  @override
+  Future<void> updateMerchItem({
+    required int itemId,
+    required String name,
+    String? description,
+    String? sku,
+    String? category,
+    String? location,
+    required int stock,
+    required int costCents,
+    required int priceCents,
+  }) async {
+    final index = merchItems.indexWhere((item) => item.id == itemId);
+    if (index == -1) throw StateError('Merchandise item not found.');
+    final existing = merchItems[index];
+    final cleanSku = sku?.trim();
+    merchItems[index] = InventoryMerchItem(
+      id: itemId,
+      name: name,
+      description: description,
+      sku: cleanSku == null || cleanSku.isEmpty
+          ? existing.sku ?? PartSku.next(merchItems.map((item) => item.sku))
+          : cleanSku,
+      category: category,
+      location: location,
+      stock: stock,
+      costCents: costCents,
+      priceCents: priceCents,
+    );
+    _merchUpdates.add(List.unmodifiable(merchItems));
+  }
+
+  @override
+  Future<void> removeMerchItem(int itemId) async {
+    merchItems.removeWhere((item) => item.id == itemId);
+    _merchUpdates.add(List.unmodifiable(merchItems));
   }
 
   @override
@@ -1244,6 +1355,167 @@ void main() {
     expect(repository.inventoryParts, isEmpty);
     expect(find.textContaining('USB-C charging port removed from inventory'),
         findsOneWidget);
+  });
+
+  testWidgets('parts area shows how many are committed to open tickets',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.createInventoryPart(
+      name: 'USB-C charging port',
+      startingStock: 4,
+    );
+    await repository.addRequiredPart(ticketId: 7, partId: 1, quantity: 2);
+
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.tap(find.text('Parts'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inventory 4'), findsOneWidget);
+    expect(find.byKey(const Key('part-inventory-1')), findsOneWidget);
+    expect(find.byKey(const Key('part-stock-min-1')), findsOneWidget);
+    expect(find.text('Stock 0'), findsOneWidget);
+    expect(find.byKey(const Key('part-committed-1')), findsOneWidget);
+    expect(find.text('Committed 2'), findsOneWidget);
+  });
+
+  testWidgets('merch area adds and edits stock, SKU and prices',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.tap(find.text('Merch'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No merchandise yet'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('merch-add-item')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add merchandise'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('merch-item-sku')))
+          .controller!
+          .text,
+      '001-001',
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('merch-item-name')),
+      'Peaks Fix T-shirt',
+    );
+    await tester.enterText(
+      find.byKey(const Key('merch-item-description')),
+      'Black cotton shirt',
+    );
+    await tester.enterText(
+      find.byKey(const Key('merch-item-category')),
+      'Apparel',
+    );
+    await tester.enterText(
+      find.byKey(const Key('merch-item-location')),
+      'Shelf A2',
+    );
+    await tester.enterText(find.byKey(const Key('merch-item-stock')), '12');
+    await tester.enterText(find.byKey(const Key('merch-item-cost')), '10.00');
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('merch-item-price')))
+          .controller!
+          .text,
+      '14.50',
+    );
+    await tester.tap(find.byKey(const Key('merch-item-save')));
+    await tester.pumpAndSettle();
+
+    final added = repository.merchItems.single;
+    expect(added.name, 'Peaks Fix T-shirt');
+    expect(added.description, 'Black cotton shirt');
+    expect(added.category, 'Apparel');
+    expect(added.location, 'Shelf A2');
+    expect(added.sku, '001-001');
+    expect(added.stock, 12);
+    expect(added.costCents, 1000);
+    expect(added.priceCents, 1450);
+    expect(find.text('Stock 12'), findsOneWidget);
+    expect(find.byKey(const Key('edit-merch-item-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('edit-merch-item-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit merchandise'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('merch-item-name')))
+          .controller!
+          .text,
+      'Peaks Fix T-shirt',
+    );
+    await tester.enterText(
+      find.byKey(const Key('merch-item-name')),
+      'Peaks Fix hoodie',
+    );
+    await tester.enterText(find.byKey(const Key('merch-item-stock')), '8');
+    await tester.enterText(find.byKey(const Key('merch-item-cost')), '20.00');
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('merch-item-price')))
+          .controller!
+          .text,
+      '29.00',
+    );
+    await tester.tap(find.byKey(const Key('merch-item-save')));
+    await tester.pumpAndSettle();
+
+    final edited = repository.merchItems.single;
+    expect(edited.name, 'Peaks Fix hoodie');
+    expect(edited.stock, 8);
+    expect(edited.costCents, 2000);
+    expect(edited.priceCents, 2900);
+    expect(find.text('Stock 8'), findsOneWidget);
+  });
+
+  testWidgets('merch area asks before removing an item',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = FakeTicketsRepository();
+    await repository.createMerchItem(
+      name: 'Logo sticker',
+      startingStock: 30,
+      costCents: 100,
+      priceCents: 300,
+    );
+    await tester.pumpWidget(VolaFixApp(tickets: repository));
+    await tester.tap(find.text('Merch'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('delete-merch-item-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove item from merchandise?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('cancel-remove-merch-item-1')));
+    await tester.pumpAndSettle();
+    expect(repository.merchItems, hasLength(1));
+
+    await tester.tap(find.byKey(const Key('delete-merch-item-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-remove-merch-item-1')));
+    await tester.pumpAndSettle();
+
+    expect(repository.merchItems, isEmpty);
+    expect(
+      find.textContaining('Logo sticker removed from merchandise'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ticket delete requires confirmation and removes the ticket',

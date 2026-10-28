@@ -72,10 +72,17 @@ printing are still being built.
 - **Staff and time clock** — a lightweight roster with optional hourly pay, a
   shared sign-in/clock-out page, per-person hours, estimated pay and the
   tickets assigned to that person on any report stage.
-- **Financial** — closed-ticket revenue, recorded parts/merch cost, gross
-  profit, tracked staff hours and pay, and a net profit estimate. Opens on
+- **Financial** — closed-ticket revenue, recorded parts and merchandise cost,
+  gross profit, tracked staff hours and pay, and a net profit estimate. Parts
+  and merchandise have their own sold/cost/profit trackers, and the invoice
+  discount is split across parts, merchandise and services in proportion to
+  their subtotals so the three always add up to total revenue. Opens on
   **This month**, with **Yearly view** and other period filters. GST and PST
   collected on closed tickets appear as separate figures.
+- **Merch inventory** — the Merch tab lists retail stock in the same style as
+  the Parts page: add, edit or remove an item with its SKU, category,
+  description, location, stock, cost and calculated retail price. Merchandise
+  has its own `000-000` SKU sequence and markup, separate from repair parts.
 - **Sales tax** — Settings turns GST and PST on or off and sets each rate
   (GST defaults to 5%, PST defaults to 7% and starts off). Tax is calculated on
   the discounted invoice subtotal, shown on the invoice and Checkout, included
@@ -83,9 +90,18 @@ printing are still being built.
 - **Parts vendor tracking** — inventory parts record a **Vendor ID** (where the
   part is purchased) and a **Vendor SKU** (the exact item ordered). Both fields
   appear when adding or editing a part and in the parts list.
-- **Part descriptions and shop SKUs** — each part can carry a description, and
+- **Part descriptions and shop SKUs** - each part can carry a description, and
   its shop SKU follows the `000-000` format. New parts get the next free SKU
   automatically (for example `001-003`); a SKU you type is kept as-is.
+- **Committed parts** - each part card shows **Committed**: the quantity still
+  needed by tickets that are open. **Inventory** is on-hand quantity; **Stock**
+  is the minimum stock level. Adding a part to a ticket leaves inventory alone;
+  **closing the ticket takes the fitted parts out of inventory** and logs the
+  movement. Reopening a closed job keeps its parts consumed, so a warranty
+  re-close only deducts what was added for the new visit, never the same part
+  twice. Inventory stops at zero; if a ticket uses more than is on hand the
+  movement note records the shortfall. Minimum stock can be edited from the
+  part dialog.
 - **Parts Invoice search** — the ticket's **Parts Invoice** (formerly Required
   Parts) picker filters as you type, matching either the SKU or the part name.
 - **Bulk purchase calculator** — choose **Bulk purchase**, enter the quantity
@@ -101,7 +117,8 @@ printing are still being built.
 
 - Structured Report 2 tests, findings, estimates and contact log; Report 3
   printing of the job summary and warranty pages.
-- Merch checkout and the remaining Settings screens (backup, shop details).
+- Quick-sell from the Merch list, variant support and the remaining Settings
+  screens (backup, shop details).
 
 ## Requirements
 
