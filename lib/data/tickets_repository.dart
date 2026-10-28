@@ -274,8 +274,23 @@ class InventoryPart {
     this.bulkQuantity = 1,
     this.bulkTotalCents = 0,
     this.committedQuantity = 0,
+    this.chargeShopSupply = false,
     int? reorderLevel,
   }) : minimumStock = minimumStock ?? reorderLevel ?? 0;
+
+  /// Shop supplies only: bills [retailPriceCents] per use on the invoice.
+  final bool chargeShopSupply;
+
+  /// Whole tubes on hand when this part is a [PartPurchaseType.tube].
+  int get fullTubes => purchaseType == PartPurchaseType.tube && bulkQuantity > 0
+      ? stock ~/ bulkQuantity
+      : 0;
+
+  /// Uses left in the opened tube.
+  int get usesInOpenTube =>
+      purchaseType == PartPurchaseType.tube && bulkQuantity > 0
+          ? stock % bulkQuantity
+          : 0;
 
   final int id;
   final String name;
@@ -369,6 +384,7 @@ class InvoiceLine {
     required this.quantity,
     required this.unitPriceCents,
     this.isMerch = false,
+    this.isShopSupply = false,
   });
 
   final int ticketItemId;
@@ -377,6 +393,9 @@ class InvoiceLine {
   final int quantity;
   final int unitPriceCents;
   final bool isMerch;
+
+  /// A shop supply used on the repair: listed on the invoice, never billed.
+  final bool isShopSupply;
 
   int get lineTotalCents => quantity * unitPriceCents;
 }
@@ -582,7 +601,7 @@ abstract class TicketsRepository {
 
   Stream<List<RequiredPart>> watchRequiredParts(int ticketId);
 
-  Future<void> createInventoryPart({
+  Future<int> createInventoryPart({
     required String name,
     String? description,
     String? sku,
@@ -597,7 +616,16 @@ abstract class TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   });
+
+  /// Parts that come with each labour item, keyed by the labour part id.
+  Stream<Map<int, List<LabourIncludedPart>>> watchLabourIncludedParts();
+
+  Future<void> setLabourIncludedParts(
+    int labourId,
+    List<LabourIncludedPart> included,
+  );
 
   Future<void> updateInventoryPart({
     required int partId,
@@ -615,6 +643,7 @@ abstract class TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   });
 
   Future<void> removeInventoryPart(int partId);
@@ -679,6 +708,28 @@ abstract class TicketsRepository {
   });
 
   Future<void> closeTicketAfterPayment(int ticketId);
+
+  Future<void> recordTicketRefund({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  });
+
+  Future<void> recordTicketDeposit({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  });
+
+  Future<void> setSupplyLineCharged(int ticketItemId, bool charged);
+
+  Future<int> createQuickSale({
+    String? customerName,
+    required List<({int partId, int quantity})> parts,
+    required List<({String description, int quantity, int unitPriceCents})>
+        customLines,
+    required PaymentMethod method,
+  });
 
   Future<int> getPartsMarkupPercent();
 
@@ -1073,6 +1124,7 @@ class DriftTicketsRepository implements TicketsRepository {
         bulkQuantity: part.bulkQuantity,
         bulkTotalCents: part.bulkTotalCents,
         committedQuantity: committedQuantity,
+        chargeShopSupply: part.chargeShopSupply,
       );
 
   @override
@@ -1177,6 +1229,10 @@ class DriftTicketsRepository implements TicketsRepository {
                   unitPriceCents: item.unitPriceCents,
                   isMerch: item.kind == TicketItemKind.custom &&
                       item.unitCostCents != null,
+                  isShopSupply: item.kind == TicketItemKind.part &&
+                      isShopSupplyCategory(
+                        row.readTableOrNull(_db.parts)?.category,
+                      ),
                 ),
           ],
         ),
@@ -1250,6 +1306,49 @@ class DriftTicketsRepository implements TicketsRepository {
       _db.closeTicketAfterPayment(ticketId);
 
   @override
+  Future<void> recordTicketRefund({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) =>
+      _db.recordTicketRefund(
+        ticketId: ticketId,
+        amountCents: amountCents,
+        method: method,
+      );
+
+  @override
+  Future<void> recordTicketDeposit({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) =>
+      _db.recordTicketDeposit(
+        ticketId: ticketId,
+        amountCents: amountCents,
+        method: method,
+      );
+
+  @override
+  Future<void> setSupplyLineCharged(int ticketItemId, bool charged) =>
+      _db.setSupplyLineCharged(ticketItemId, charged);
+
+  @override
+  Future<int> createQuickSale({
+    String? customerName,
+    required List<({int partId, int quantity})> parts,
+    required List<({String description, int quantity, int unitPriceCents})>
+        customLines,
+    required PaymentMethod method,
+  }) =>
+      _db.createQuickSale(
+        customerName: customerName,
+        parts: parts,
+        customLines: customLines,
+        method: method,
+      );
+
+  @override
   Future<int> getPartsMarkupPercent() =>
       _db.markupPercent('parts_markup_percent', 35);
 
@@ -1305,7 +1404,7 @@ class DriftTicketsRepository implements TicketsRepository {
   Future<String> nextPartSku() => _db.nextPartSku();
 
   @override
-  Future<void> createInventoryPart({
+  Future<int> createInventoryPart({
     required String name,
     String? description,
     String? sku,
@@ -1320,6 +1419,7 @@ class DriftTicketsRepository implements TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   }) =>
       _db.createInventoryPart(
         name: name,
@@ -1336,6 +1436,7 @@ class DriftTicketsRepository implements TicketsRepository {
         bulkQuantity: bulkQuantity,
         bulkTotalCents: bulkTotalCents,
         minimumStock: minimumStock,
+        chargeShopSupply: chargeShopSupply,
       );
 
   @override
@@ -1355,6 +1456,7 @@ class DriftTicketsRepository implements TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   }) =>
       _db.updateInventoryPart(
         partId: partId,
@@ -1372,7 +1474,19 @@ class DriftTicketsRepository implements TicketsRepository {
         bulkQuantity: bulkQuantity,
         bulkTotalCents: bulkTotalCents,
         minimumStock: minimumStock,
+        chargeShopSupply: chargeShopSupply,
       );
+
+  @override
+  Stream<Map<int, List<LabourIncludedPart>>> watchLabourIncludedParts() =>
+      _db.watchLabourIncludedParts();
+
+  @override
+  Future<void> setLabourIncludedParts(
+    int labourId,
+    List<LabourIncludedPart> included,
+  ) =>
+      _db.setLabourIncludedParts(labourId, included);
 
   @override
   Future<void> removeInventoryPart(int partId) =>

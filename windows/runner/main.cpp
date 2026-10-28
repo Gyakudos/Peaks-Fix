@@ -21,11 +21,21 @@ void ActivateExistingInstance() {
   if (existing == nullptr) {
     return;
   }
+
+  // If the window was minimized to the tray we hid it; show and restore it.
+  if (!::IsWindowVisible(existing)) {
+    ::ShowWindow(existing, SW_SHOW);
+  }
   if (::IsIconic(existing)) {
     ::ShowWindow(existing, SW_RESTORE);
+  } else {
+    ::ShowWindow(existing, SW_RESTORE);
   }
-  ::ShowWindow(existing, SW_SHOW);
+
+  // Ensure it's not minimized and is on top
   ::SetForegroundWindow(existing);
+  ::SetActiveWindow(existing);
+  ::BringWindowToTop(existing);
 }
 
 }  // namespace

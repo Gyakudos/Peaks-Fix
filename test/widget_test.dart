@@ -262,7 +262,7 @@ class FakeTicketsRepository implements TicketsRepository {
       PartSku.next(inventoryParts.map((part) => part.sku));
 
   @override
-  Future<void> createInventoryPart({
+  Future<int> createInventoryPart({
     required String name,
     String? description,
     String? sku,
@@ -277,11 +277,13 @@ class FakeTicketsRepository implements TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   }) async {
     final cleanSku = sku?.trim();
+    final id = inventoryParts.length + 1;
     inventoryParts.add(
       InventoryPart(
-        id: inventoryParts.length + 1,
+        id: id,
         name: name,
         description: description,
         sku: cleanSku == null || cleanSku.isEmpty
@@ -298,9 +300,26 @@ class FakeTicketsRepository implements TicketsRepository {
         purchaseType: purchaseType,
         bulkQuantity: bulkQuantity,
         bulkTotalCents: bulkTotalCents,
+        chargeShopSupply: chargeShopSupply,
       ),
     );
     _inventoryUpdates.add(List.unmodifiable(inventoryParts));
+    return id;
+  }
+
+  final Map<int, List<LabourIncludedPart>> labourIncluded = {};
+
+  @override
+  Stream<Map<int, List<LabourIncludedPart>>> watchLabourIncludedParts() async* {
+    yield Map.of(labourIncluded);
+  }
+
+  @override
+  Future<void> setLabourIncludedParts(
+    int labourId,
+    List<LabourIncludedPart> included,
+  ) async {
+    labourIncluded[labourId] = included;
   }
 
   @override
@@ -320,6 +339,7 @@ class FakeTicketsRepository implements TicketsRepository {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   }) async {
     final index = inventoryParts.indexWhere((part) => part.id == partId);
     if (index == -1) throw StateError('Inventory part not found.');
@@ -343,6 +363,7 @@ class FakeTicketsRepository implements TicketsRepository {
       purchaseType: purchaseType,
       bulkQuantity: bulkQuantity,
       bulkTotalCents: bulkTotalCents,
+      chargeShopSupply: chargeShopSupply,
     );
     _inventoryUpdates.add(List.unmodifiable(inventoryParts));
   }
@@ -551,6 +572,51 @@ class FakeTicketsRepository implements TicketsRepository {
     final payments = ticketPayments.putIfAbsent(ticketId, () => []);
     payments.add(entry);
     _paymentUpdates[ticketId]?.add(List.unmodifiable(payments));
+  }
+
+  @override
+  Future<void> setSupplyLineCharged(int ticketItemId, bool charged) async {}
+
+  @override
+  Future<int> createQuickSale({
+    String? customerName,
+    required List<({int partId, int quantity})> parts,
+    required List<({String description, int quantity, int unitPriceCents})>
+        customLines,
+    required PaymentMethod method,
+  }) async =>
+      0;
+
+  @override
+  Future<void> recordTicketRefund({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) async {
+    final entry = PaymentEntry(
+      id: (ticketPayments[ticketId]?.length ?? 0) + 1,
+      at: DateTime.now(),
+      amountCents: amountCents,
+      method: method,
+      kind: PaymentKind.refund,
+    );
+    ticketPayments.putIfAbsent(ticketId, () => []).add(entry);
+  }
+
+  @override
+  Future<void> recordTicketDeposit({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) async {
+    final entry = PaymentEntry(
+      id: (ticketPayments[ticketId]?.length ?? 0) + 1,
+      at: DateTime.now(),
+      amountCents: amountCents,
+      method: method,
+      kind: PaymentKind.deposit,
+    );
+    ticketPayments.putIfAbsent(ticketId, () => []).add(entry);
   }
 
   @override
@@ -1143,8 +1209,10 @@ void main() {
       retailPriceCents: 1350,
     );
     await tester.pumpWidget(VolaFixApp(tickets: repository));
-    await tester.tap(find.text('Parts'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Parts').last);
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
     expect(find.text('Edit'), findsOneWidget);
     expect(
@@ -1267,8 +1335,10 @@ void main() {
       retailPriceCents: 1350,
     );
     await tester.pumpWidget(VolaFixApp(tickets: repository));
-    await tester.tap(find.text('Parts'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Parts').last);
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
     await tester.tap(find.byKey(const Key('edit-inventory-part-1')));
     await tester.pumpAndSettle();
@@ -1337,8 +1407,10 @@ void main() {
       startingStock: 2,
     );
     await tester.pumpWidget(VolaFixApp(tickets: repository));
-    await tester.tap(find.text('Parts'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Parts').last);
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
     await tester.tap(find.byKey(const Key('delete-inventory-part-1')));
     await tester.pumpAndSettle();
@@ -1372,13 +1444,15 @@ void main() {
     await repository.addRequiredPart(ticketId: 7, partId: 1, quantity: 2);
 
     await tester.pumpWidget(VolaFixApp(tickets: repository));
-    await tester.tap(find.text('Parts'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Parts').last);
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
     expect(find.text('Inventory 4'), findsOneWidget);
     expect(find.byKey(const Key('part-inventory-1')), findsOneWidget);
     expect(find.byKey(const Key('part-stock-min-1')), findsOneWidget);
-    expect(find.text('Stock 0'), findsOneWidget);
+    expect(find.text('Stock Min 0'), findsOneWidget);
     expect(find.byKey(const Key('part-committed-1')), findsOneWidget);
     expect(find.text('Committed 2'), findsOneWidget);
   });
@@ -1392,10 +1466,12 @@ void main() {
 
     final repository = FakeTicketsRepository();
     await tester.pumpWidget(VolaFixApp(tickets: repository));
-    await tester.tap(find.text('Merch'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Merch'));
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
-    expect(find.textContaining('No merchandise yet'), findsOneWidget);
+    expect(find.textContaining('No merchandise'), findsOneWidget);
     await tester.tap(find.byKey(const Key('merch-add-item')));
     await tester.pumpAndSettle();
     expect(find.text('Add merchandise'), findsOneWidget);
@@ -1496,8 +1572,10 @@ void main() {
       priceCents: 300,
     );
     await tester.pumpWidget(VolaFixApp(tickets: repository));
-    await tester.tap(find.text('Merch'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Merch'));
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
     await tester.tap(find.byKey(const Key('delete-merch-item-1')));
     await tester.pumpAndSettle();
@@ -1614,21 +1692,18 @@ void main() {
     expect(repository.reportStaffAssignments[(7, ReportKind.intake)], 'tech-1');
   });
 
-  testWidgets('app builds with all nine tabs', (WidgetTester tester) async {
+  testWidgets('app builds with all eight tabs', (WidgetTester tester) async {
     await tester.pumpWidget(VolaFixApp(tickets: FakeTicketsRepository()));
 
     expect(find.text('Peaks Fix'), findsWidgets);
     expect(find.text('Tickets'), findsWidgets);
-    expect(find.text('Closed Tickets'), findsWidgets);
-    expect(find.text('Checkout'), findsWidgets);
+    expect(find.text('Invoicing'), findsWidgets);
     expect(find.text('Calendar'), findsWidgets);
     expect(find.text('Customers'), findsWidgets);
-    expect(find.text('Merch'), findsWidgets);
-    expect(find.text('Parts'), findsWidgets);
+    expect(find.text('Inventory'), findsWidgets);
     expect(find.text('Financial'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
     expect(find.byKey(const Key('nav-badge-checkout')), findsOneWidget);
-    expect(find.byKey(const Key('nav-badge-closed')), findsOneWidget);
     expect(find.byKey(const Key('nav-badge-financial')), findsOneWidget);
   });
 
@@ -1725,9 +1800,9 @@ void main() {
     await tester.pumpWidget(VolaFixApp(tickets: repository));
     await tester.pumpAndSettle();
     expect(find.text('PF-000001'), findsNothing);
-    expect(find.byKey(const Key('nav-badge-closed')), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
 
+    await tester.tap(find.text('Invoicing').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Closed Tickets').first);
     await tester.pumpAndSettle();
     expect(find.text('PF-000001'), findsOneWidget);
@@ -1835,11 +1910,11 @@ void main() {
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
 
-    await tester.tap(find.text('Merch'));
+    await tester.tap(find.text('Inventory'));
     await tester.pumpAndSettle();
 
     final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-    expect(rail.selectedIndex, 5);
+    expect(rail.selectedIndex, 4);
   });
 
   testWidgets('narrow layout uses the bottom bar', (WidgetTester tester) async {

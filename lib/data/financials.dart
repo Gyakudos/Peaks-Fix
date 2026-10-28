@@ -32,6 +32,9 @@ class FinancialTicket {
     this.merchRevenueCents = 0,
     this.merchCostCents = 0,
     this.merchQuantity = 0,
+    this.supplyCostCents = 0,
+    this.supplyQuantity = 0,
+    this.supplyRevenueCents = 0,
   });
 
   final int ticketId;
@@ -56,6 +59,14 @@ class FinancialTicket {
   final int merchRevenueCents;
   final int merchCostCents;
   final int merchQuantity;
+
+  /// Shop supplies used on the job: never billed, but their cost is counted in
+  /// [costCents].
+  final int supplyCostCents;
+  final int supplyQuantity;
+
+  /// Billed shop-supply revenue (before discount) for supplies set to charge.
+  final int supplyRevenueCents;
 
   int get taxCents => gstCents + pstCents;
 
@@ -219,6 +230,33 @@ extension FinancialPeriodInfo on FinancialPeriod {
   }
 }
 
+/// A deposit taken at intake.
+class FinancialDeposit {
+  const FinancialDeposit({
+    required this.amountCents,
+    required this.at,
+    required this.applied,
+    required this.cancelled,
+  });
+
+  final int amountCents;
+  final DateTime at;
+
+  /// The ticket closed, so the deposit went toward its final invoice.
+  final bool applied;
+
+  /// The ticket was cancelled, so the deposit is not held for a repair.
+  final bool cancelled;
+}
+
+/// Money handed back to a customer; it comes straight off revenue.
+class FinancialRefund {
+  const FinancialRefund({required this.amountCents, required this.at});
+
+  final int amountCents;
+  final DateTime at;
+}
+
 /// Closed-ticket money and staff hours for the Financial tab.
 extension FinancialQueries on AppDatabase {
   Stream<List<FinancialTicket>> watchFinancialTickets() {
@@ -234,6 +272,10 @@ extension FinancialQueries on AppDatabase {
       leftOuterJoin(
         ticketItems,
         ticketItems.ticketId.equalsExp(tickets.id),
+      ),
+      leftOuterJoin(
+        parts,
+        parts.id.equalsExp(ticketItems.partId),
       ),
     ])
       ..where(tickets.status.equalsValue(TicketStatus.closed))
@@ -258,6 +300,22 @@ extension FinancialQueries on AppDatabase {
         );
         final item = row.readTableOrNull(ticketItems);
         if (item == null) continue;
+        if (item.kind == TicketItemKind.part &&
+            isShopSupplyCategory(row.readTableOrNull(parts)?.category)) {
+          final supplyCost = item.quantity *
+              (item.unitCostCents ??
+                  row.readTableOrNull(parts)?.costCents ??
+                  0);
+          accumulator.costCents += supplyCost;
+          accumulator.supplyCostCents += supplyCost;
+          accumulator.supplyQuantity += item.quantity;
+          if (item.unitPriceCents > 0) {
+            final billed = item.quantity * item.unitPriceCents;
+            accumulator.subtotalCents += billed;
+            accumulator.supplyRevenueCents += billed;
+          }
+          continue;
+        }
         final lineTotalCents = item.quantity * item.unitPriceCents;
         final lineCostCents = item.quantity * (item.unitCostCents ?? 0);
         accumulator.subtotalCents += lineTotalCents;
@@ -310,11 +368,41 @@ extension FinancialQueries on AppDatabase {
               merchRevenueCents: split.merchCents,
               merchCostCents: accumulator.merchCostCents,
               merchQuantity: accumulator.merchQuantity,
+              supplyCostCents: accumulator.supplyCostCents,
+              supplyQuantity: accumulator.supplyQuantity,
+              supplyRevenueCents: accumulator.supplyRevenueCents,
             );
           }(),
       ]..sort((a, b) => b.closedAt.compareTo(a.closedAt));
       return result;
     });
+  }
+
+  /// Every intake deposit with whether its ticket has been closed out.
+  Stream<List<FinancialDeposit>> watchFinancialDeposits() {
+    final query = select(payments).join([
+      innerJoin(tickets, tickets.id.equalsExp(payments.ticketId)),
+    ])
+      ..where(payments.kind.equalsValue(PaymentKind.deposit));
+    return query.watch().map((rows) => [
+          for (final row in rows)
+            FinancialDeposit(
+              amountCents: row.readTable(payments).amountCents,
+              at: row.readTable(payments).at,
+              applied: row.readTable(tickets).status == TicketStatus.closed,
+              cancelled:
+                  row.readTable(tickets).status == TicketStatus.cancelled,
+            ),
+        ]);
+  }
+
+  Stream<List<FinancialRefund>> watchFinancialRefunds() {
+    final query = select(payments)
+      ..where((payment) => payment.kind.equalsValue(PaymentKind.refund));
+    return query.watch().map((rows) => [
+          for (final row in rows)
+            FinancialRefund(amountCents: row.amountCents, at: row.at),
+        ]);
   }
 
   Stream<List<FinancialStaff>> watchFinancialStaff() {
@@ -481,6 +569,9 @@ class _TicketAccumulator {
   int merchSubtotalCents = 0;
   int merchCostCents = 0;
   int merchQuantity = 0;
+  int supplyCostCents = 0;
+  int supplyQuantity = 0;
+  int supplyRevenueCents = 0;
 }
 
 class _StaffAccumulator {

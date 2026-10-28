@@ -4818,6 +4818,16 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _chargeShopSupplyMeta =
+      const VerificationMeta('chargeShopSupply');
+  @override
+  late final GeneratedColumn<bool> chargeShopSupply = GeneratedColumn<bool>(
+      'charge_shop_supply', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("charge_shop_supply" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _reorderLevelMeta =
       const VerificationMeta('reorderLevel');
   @override
@@ -4858,6 +4868,7 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
         purchaseType,
         bulkQuantity,
         bulkTotalCents,
+        chargeShopSupply,
         reorderLevel,
         supplier,
         isActive
@@ -4933,6 +4944,12 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
           bulkTotalCents.isAcceptableOrUnknown(
               data['bulk_total_cents']!, _bulkTotalCentsMeta));
     }
+    if (data.containsKey('charge_shop_supply')) {
+      context.handle(
+          _chargeShopSupplyMeta,
+          chargeShopSupply.isAcceptableOrUnknown(
+              data['charge_shop_supply']!, _chargeShopSupplyMeta));
+    }
     if (data.containsKey('reorder_level')) {
       context.handle(
           _reorderLevelMeta,
@@ -4985,6 +5002,8 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
           .read(DriftSqlType.int, data['${effectivePrefix}bulk_quantity'])!,
       bulkTotalCents: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}bulk_total_cents'])!,
+      chargeShopSupply: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}charge_shop_supply'])!,
       reorderLevel: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}reorder_level'])!,
       supplier: attachedDatabase.typeMapping
@@ -5030,6 +5049,9 @@ class Part extends DataClass implements Insertable<Part> {
 
   /// What the whole bulk lot cost, kept so the calculator can be reopened.
   final int bulkTotalCents;
+
+  /// Shop supplies only: bill the retail price per use instead of nothing.
+  final bool chargeShopSupply;
   final int reorderLevel;
   final String? supplier;
   final bool isActive;
@@ -5048,6 +5070,7 @@ class Part extends DataClass implements Insertable<Part> {
       required this.purchaseType,
       required this.bulkQuantity,
       required this.bulkTotalCents,
+      required this.chargeShopSupply,
       required this.reorderLevel,
       this.supplier,
       required this.isActive});
@@ -5083,6 +5106,7 @@ class Part extends DataClass implements Insertable<Part> {
     }
     map['bulk_quantity'] = Variable<int>(bulkQuantity);
     map['bulk_total_cents'] = Variable<int>(bulkTotalCents);
+    map['charge_shop_supply'] = Variable<bool>(chargeShopSupply);
     map['reorder_level'] = Variable<int>(reorderLevel);
     if (!nullToAbsent || supplier != null) {
       map['supplier'] = Variable<String>(supplier);
@@ -5117,6 +5141,7 @@ class Part extends DataClass implements Insertable<Part> {
       purchaseType: Value(purchaseType),
       bulkQuantity: Value(bulkQuantity),
       bulkTotalCents: Value(bulkTotalCents),
+      chargeShopSupply: Value(chargeShopSupply),
       reorderLevel: Value(reorderLevel),
       supplier: supplier == null && nullToAbsent
           ? const Value.absent()
@@ -5144,6 +5169,7 @@ class Part extends DataClass implements Insertable<Part> {
           .fromJson(serializer.fromJson<int>(json['purchaseType'])),
       bulkQuantity: serializer.fromJson<int>(json['bulkQuantity']),
       bulkTotalCents: serializer.fromJson<int>(json['bulkTotalCents']),
+      chargeShopSupply: serializer.fromJson<bool>(json['chargeShopSupply']),
       reorderLevel: serializer.fromJson<int>(json['reorderLevel']),
       supplier: serializer.fromJson<String?>(json['supplier']),
       isActive: serializer.fromJson<bool>(json['isActive']),
@@ -5168,6 +5194,7 @@ class Part extends DataClass implements Insertable<Part> {
           .toJson<int>($PartsTable.$converterpurchaseType.toJson(purchaseType)),
       'bulkQuantity': serializer.toJson<int>(bulkQuantity),
       'bulkTotalCents': serializer.toJson<int>(bulkTotalCents),
+      'chargeShopSupply': serializer.toJson<bool>(chargeShopSupply),
       'reorderLevel': serializer.toJson<int>(reorderLevel),
       'supplier': serializer.toJson<String?>(supplier),
       'isActive': serializer.toJson<bool>(isActive),
@@ -5189,6 +5216,7 @@ class Part extends DataClass implements Insertable<Part> {
           PartPurchaseType? purchaseType,
           int? bulkQuantity,
           int? bulkTotalCents,
+          bool? chargeShopSupply,
           int? reorderLevel,
           Value<String?> supplier = const Value.absent(),
           bool? isActive}) =>
@@ -5207,6 +5235,7 @@ class Part extends DataClass implements Insertable<Part> {
         purchaseType: purchaseType ?? this.purchaseType,
         bulkQuantity: bulkQuantity ?? this.bulkQuantity,
         bulkTotalCents: bulkTotalCents ?? this.bulkTotalCents,
+        chargeShopSupply: chargeShopSupply ?? this.chargeShopSupply,
         reorderLevel: reorderLevel ?? this.reorderLevel,
         supplier: supplier.present ? supplier.value : this.supplier,
         isActive: isActive ?? this.isActive,
@@ -5235,6 +5264,9 @@ class Part extends DataClass implements Insertable<Part> {
       bulkTotalCents: data.bulkTotalCents.present
           ? data.bulkTotalCents.value
           : this.bulkTotalCents,
+      chargeShopSupply: data.chargeShopSupply.present
+          ? data.chargeShopSupply.value
+          : this.chargeShopSupply,
       reorderLevel: data.reorderLevel.present
           ? data.reorderLevel.value
           : this.reorderLevel,
@@ -5260,6 +5292,7 @@ class Part extends DataClass implements Insertable<Part> {
           ..write('purchaseType: $purchaseType, ')
           ..write('bulkQuantity: $bulkQuantity, ')
           ..write('bulkTotalCents: $bulkTotalCents, ')
+          ..write('chargeShopSupply: $chargeShopSupply, ')
           ..write('reorderLevel: $reorderLevel, ')
           ..write('supplier: $supplier, ')
           ..write('isActive: $isActive')
@@ -5283,6 +5316,7 @@ class Part extends DataClass implements Insertable<Part> {
       purchaseType,
       bulkQuantity,
       bulkTotalCents,
+      chargeShopSupply,
       reorderLevel,
       supplier,
       isActive);
@@ -5304,6 +5338,7 @@ class Part extends DataClass implements Insertable<Part> {
           other.purchaseType == this.purchaseType &&
           other.bulkQuantity == this.bulkQuantity &&
           other.bulkTotalCents == this.bulkTotalCents &&
+          other.chargeShopSupply == this.chargeShopSupply &&
           other.reorderLevel == this.reorderLevel &&
           other.supplier == this.supplier &&
           other.isActive == this.isActive);
@@ -5324,6 +5359,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
   final Value<PartPurchaseType> purchaseType;
   final Value<int> bulkQuantity;
   final Value<int> bulkTotalCents;
+  final Value<bool> chargeShopSupply;
   final Value<int> reorderLevel;
   final Value<String?> supplier;
   final Value<bool> isActive;
@@ -5342,6 +5378,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     this.purchaseType = const Value.absent(),
     this.bulkQuantity = const Value.absent(),
     this.bulkTotalCents = const Value.absent(),
+    this.chargeShopSupply = const Value.absent(),
     this.reorderLevel = const Value.absent(),
     this.supplier = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5361,6 +5398,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     this.purchaseType = const Value.absent(),
     this.bulkQuantity = const Value.absent(),
     this.bulkTotalCents = const Value.absent(),
+    this.chargeShopSupply = const Value.absent(),
     this.reorderLevel = const Value.absent(),
     this.supplier = const Value.absent(),
     this.isActive = const Value.absent(),
@@ -5380,6 +5418,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     Expression<int>? purchaseType,
     Expression<int>? bulkQuantity,
     Expression<int>? bulkTotalCents,
+    Expression<bool>? chargeShopSupply,
     Expression<int>? reorderLevel,
     Expression<String>? supplier,
     Expression<bool>? isActive,
@@ -5399,6 +5438,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
       if (purchaseType != null) 'purchase_type': purchaseType,
       if (bulkQuantity != null) 'bulk_quantity': bulkQuantity,
       if (bulkTotalCents != null) 'bulk_total_cents': bulkTotalCents,
+      if (chargeShopSupply != null) 'charge_shop_supply': chargeShopSupply,
       if (reorderLevel != null) 'reorder_level': reorderLevel,
       if (supplier != null) 'supplier': supplier,
       if (isActive != null) 'is_active': isActive,
@@ -5420,6 +5460,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
       Value<PartPurchaseType>? purchaseType,
       Value<int>? bulkQuantity,
       Value<int>? bulkTotalCents,
+      Value<bool>? chargeShopSupply,
       Value<int>? reorderLevel,
       Value<String?>? supplier,
       Value<bool>? isActive}) {
@@ -5438,6 +5479,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
       purchaseType: purchaseType ?? this.purchaseType,
       bulkQuantity: bulkQuantity ?? this.bulkQuantity,
       bulkTotalCents: bulkTotalCents ?? this.bulkTotalCents,
+      chargeShopSupply: chargeShopSupply ?? this.chargeShopSupply,
       reorderLevel: reorderLevel ?? this.reorderLevel,
       supplier: supplier ?? this.supplier,
       isActive: isActive ?? this.isActive,
@@ -5490,6 +5532,9 @@ class PartsCompanion extends UpdateCompanion<Part> {
     if (bulkTotalCents.present) {
       map['bulk_total_cents'] = Variable<int>(bulkTotalCents.value);
     }
+    if (chargeShopSupply.present) {
+      map['charge_shop_supply'] = Variable<bool>(chargeShopSupply.value);
+    }
     if (reorderLevel.present) {
       map['reorder_level'] = Variable<int>(reorderLevel.value);
     }
@@ -5519,6 +5564,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
           ..write('purchaseType: $purchaseType, ')
           ..write('bulkQuantity: $bulkQuantity, ')
           ..write('bulkTotalCents: $bulkTotalCents, ')
+          ..write('chargeShopSupply: $chargeShopSupply, ')
           ..write('reorderLevel: $reorderLevel, ')
           ..write('supplier: $supplier, ')
           ..write('isActive: $isActive')
@@ -16986,6 +17032,7 @@ typedef $$PartsTableCreateCompanionBuilder = PartsCompanion Function({
   Value<PartPurchaseType> purchaseType,
   Value<int> bulkQuantity,
   Value<int> bulkTotalCents,
+  Value<bool> chargeShopSupply,
   Value<int> reorderLevel,
   Value<String?> supplier,
   Value<bool> isActive,
@@ -17005,6 +17052,7 @@ typedef $$PartsTableUpdateCompanionBuilder = PartsCompanion Function({
   Value<PartPurchaseType> purchaseType,
   Value<int> bulkQuantity,
   Value<int> bulkTotalCents,
+  Value<bool> chargeShopSupply,
   Value<int> reorderLevel,
   Value<String?> supplier,
   Value<bool> isActive,
@@ -17094,6 +17142,10 @@ class $$PartsTableFilterComposer extends Composer<_$AppDatabase, $PartsTable> {
 
   ColumnFilters<int> get bulkTotalCents => $composableBuilder(
       column: $table.bulkTotalCents,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get chargeShopSupply => $composableBuilder(
+      column: $table.chargeShopSupply,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get reorderLevel => $composableBuilder(
@@ -17202,6 +17254,10 @@ class $$PartsTableOrderingComposer
       column: $table.bulkTotalCents,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get chargeShopSupply => $composableBuilder(
+      column: $table.chargeShopSupply,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get reorderLevel => $composableBuilder(
       column: $table.reorderLevel,
       builder: (column) => ColumnOrderings(column));
@@ -17264,6 +17320,9 @@ class $$PartsTableAnnotationComposer
 
   GeneratedColumn<int> get bulkTotalCents => $composableBuilder(
       column: $table.bulkTotalCents, builder: (column) => column);
+
+  GeneratedColumn<bool> get chargeShopSupply => $composableBuilder(
+      column: $table.chargeShopSupply, builder: (column) => column);
 
   GeneratedColumn<int> get reorderLevel => $composableBuilder(
       column: $table.reorderLevel, builder: (column) => column);
@@ -17354,6 +17413,7 @@ class $$PartsTableTableManager extends RootTableManager<
             Value<PartPurchaseType> purchaseType = const Value.absent(),
             Value<int> bulkQuantity = const Value.absent(),
             Value<int> bulkTotalCents = const Value.absent(),
+            Value<bool> chargeShopSupply = const Value.absent(),
             Value<int> reorderLevel = const Value.absent(),
             Value<String?> supplier = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
@@ -17373,6 +17433,7 @@ class $$PartsTableTableManager extends RootTableManager<
             purchaseType: purchaseType,
             bulkQuantity: bulkQuantity,
             bulkTotalCents: bulkTotalCents,
+            chargeShopSupply: chargeShopSupply,
             reorderLevel: reorderLevel,
             supplier: supplier,
             isActive: isActive,
@@ -17392,6 +17453,7 @@ class $$PartsTableTableManager extends RootTableManager<
             Value<PartPurchaseType> purchaseType = const Value.absent(),
             Value<int> bulkQuantity = const Value.absent(),
             Value<int> bulkTotalCents = const Value.absent(),
+            Value<bool> chargeShopSupply = const Value.absent(),
             Value<int> reorderLevel = const Value.absent(),
             Value<String?> supplier = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
@@ -17411,6 +17473,7 @@ class $$PartsTableTableManager extends RootTableManager<
             purchaseType: purchaseType,
             bulkQuantity: bulkQuantity,
             bulkTotalCents: bulkTotalCents,
+            chargeShopSupply: chargeShopSupply,
             reorderLevel: reorderLevel,
             supplier: supplier,
             isActive: isActive,

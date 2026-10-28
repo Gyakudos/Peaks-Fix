@@ -4,6 +4,7 @@ import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../repairs/new_repair_page.dart';
+import 'quick_sale_dialog.dart';
 import 'ticket_detail_page.dart';
 import 'ticket_widgets.dart';
 
@@ -119,6 +120,16 @@ class _Header extends StatelessWidget {
                   onPressed: () => openNewRepair(context),
                   icon: const Icon(Icons.add),
                   label: const Text('New repair'),
+                ),
+              if (!closedOnly)
+                OutlinedButton.icon(
+                  key: const Key('quick-sale-button'),
+                  onPressed: () => showQuickSaleDialog(
+                    context,
+                    repository: ShopScope.of(context),
+                  ),
+                  icon: const Icon(Icons.point_of_sale_outlined),
+                  label: const Text('Quick Sale'),
                 ),
             ],
           ),
@@ -336,6 +347,20 @@ class _TicketCard extends StatelessWidget {
                     ageLabel(ticket.createdAt),
                     style: theme.textTheme.bodySmall?.copyWith(color: muted),
                   ),
+                  if (ticket.status == TicketStatus.closed)
+                    TextButton.icon(
+                      key: Key('refund-ticket-${ticket.id}'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: const Icon(Icons.currency_exchange, size: 18),
+                      label: const Text('Refund'),
+                      onPressed: () => showRefundTicketDialog(
+                        context,
+                        ticketId: ticket.id,
+                        ticketNumber: ticket.number,
+                      ),
+                    ),
                   if (ticket.status == TicketStatus.closed)
                     IconButton(
                       key: Key('reopen-ticket-${ticket.id}'),

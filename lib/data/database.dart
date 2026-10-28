@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:drift/drift.dart';
@@ -63,16 +64,68 @@ enum Severity { low, medium, high }
 
 enum TicketItemKind { service, part, custom }
 
+/// Whether an inventory category marks a shop supply: something used up on a
+/// repair (thermal paste, flux) that is listed on the invoice but not billed.
+bool isShopSupplyCategory(String? category) => const {
+      'shop',
+      'supplies',
+      'shop supply',
+      'shop supplies',
+    }.contains((category ?? '').trim().toLowerCase());
+
+/// A part that comes with a labour item. It is listed on the invoice at no
+/// charge, because its cost is covered by the labour price.
+class LabourIncludedPart {
+  const LabourIncludedPart({required this.partId, required this.quantity});
+
+  final int partId;
+  final int quantity;
+}
+
+bool isLabourCategory(String? category) =>
+    (category ?? '').trim().toLowerCase() == 'labour';
+
+const _labourPartsSettingKey = 'labour_included_parts';
+
+Map<int, List<LabourIncludedPart>> _decodeLabourParts(String? raw) {
+  if (raw == null || raw.isEmpty) return const {};
+  try {
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return {
+      for (final entry in decoded.entries)
+        int.parse(entry.key): [
+          for (final item in entry.value as List<dynamic>)
+            LabourIncludedPart(
+              partId: (item as Map<String, dynamic>)['p'] as int,
+              quantity: item['q'] as int,
+            ),
+        ],
+    };
+  } catch (_) {
+    return const {};
+  }
+}
+
+/// What one unit of [part] bills when first added to an invoice. Shop supplies
+/// start free; the invoice's "R" box switches a line to the retail price.
+int _billedUnitCents(Part part) =>
+    isShopSupplyCategory(part.category) ? 0 : part.priceCents;
+
 enum InvoiceDiscountKind { none, percentage, fixed }
 
 /// Whether a part was bought on its own or as part of a bulk lot.
-enum PartPurchaseType { single, bulk }
+enum PartPurchaseType { single, bulk, tube }
 
 extension PartPurchaseTypeLabel on PartPurchaseType {
   String get label => switch (this) {
         PartPurchaseType.single => 'Single item',
         PartPurchaseType.bulk => 'Bulk purchase',
+        PartPurchaseType.tube => 'Tube',
       };
+
+  /// Bought as a lot (or tube) whose cost is split across [Parts.bulkQuantity]
+  /// items or uses.
+  bool get isLot => this != PartPurchaseType.single;
 }
 
 enum PaymentKind { deposit, balance, refund }
@@ -495,6 +548,10 @@ class Parts extends Table {
 
   /// What the whole bulk lot cost, kept so the calculator can be reopened.
   IntColumn get bulkTotalCents => integer().withDefault(const Constant(0))();
+
+  /// Shop supplies only: bill the retail price per use instead of nothing.
+  BoolColumn get chargeShopSupply =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get reorderLevel => integer().withDefault(const Constant(0))();
   TextColumn get supplier => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
@@ -648,7 +705,7 @@ class AppDatabase extends _$AppDatabase {
   /// ticket was closed.
   /// v20 adds a minimum stock threshold separate from on-hand inventory.
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 23;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -673,6 +730,14 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
+          Future<bool> _columnExists(String table, String column) async {
+            final result = await customSelect(
+              "SELECT COUNT(*) AS cnt FROM pragma_table_info('$table') WHERE name = '$column'",
+            ).getSingle();
+            final cnt = result.data['cnt'] as int? ?? 0;
+            return cnt > 0;
+          }
+
           if (from < 2) {
             await m.addColumn(tickets, tickets.deviceVariant);
           }
@@ -759,36 +824,71 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 13) {
-            await m.addColumn(tickets, tickets.report2CompletedAt);
-            await m.addColumn(tickets, tickets.report3CompletedAt);
+            if (!await _columnExists('tickets', 'report2_completed_at')) {
+              await m.addColumn(tickets, tickets.report2CompletedAt);
+            }
+            if (!await _columnExists('tickets', 'report3_completed_at')) {
+              await m.addColumn(tickets, tickets.report3CompletedAt);
+            }
           }
           if (from < 14) {
-            await m.addColumn(tickets, tickets.gstCents);
-            await m.addColumn(tickets, tickets.pstCents);
+            if (!await _columnExists('tickets', 'gst_cents')) {
+              await m.addColumn(tickets, tickets.gstCents);
+            }
+            if (!await _columnExists('tickets', 'pst_cents')) {
+              await m.addColumn(tickets, tickets.pstCents);
+            }
           }
           if (from < 15) {
-            await m.addColumn(parts, parts.vendorId);
-            await m.addColumn(parts, parts.vendorSku);
-            await m.addColumn(parts, parts.purchaseType);
-            await m.addColumn(parts, parts.bulkQuantity);
-            await m.addColumn(parts, parts.bulkTotalCents);
+            if (!await _columnExists('parts', 'vendor_id')) {
+              await m.addColumn(parts, parts.vendorId);
+            }
+            if (!await _columnExists('parts', 'vendor_sku')) {
+              await m.addColumn(parts, parts.vendorSku);
+            }
+            if (!await _columnExists('parts', 'purchase_type')) {
+              await m.addColumn(parts, parts.purchaseType);
+            }
+            if (!await _columnExists('parts', 'bulk_quantity')) {
+              await m.addColumn(parts, parts.bulkQuantity);
+            }
+            if (!await _columnExists('parts', 'bulk_total_cents')) {
+              await m.addColumn(parts, parts.bulkTotalCents);
+            }
           }
           if (from < 16) {
-            await m.addColumn(parts, parts.description);
+            if (!await _columnExists('parts', 'description')) {
+              await m.addColumn(parts, parts.description);
+            }
             await _backfillPartSkus();
           }
           if (from < 17) {
-            await m.addColumn(deviceCategories, deviceCategories.warrantyDays);
+            if (!await _columnExists('device_categories', 'warranty_days')) {
+              await m.addColumn(
+                  deviceCategories, deviceCategories.warrantyDays);
+            }
           }
           if (from < 18) {
-            await m.addColumn(merchProducts, merchProducts.sku);
-            await m.addColumn(merchProducts, merchProducts.location);
-            await m.addColumn(merchProducts, merchProducts.stock);
-            await m.addColumn(merchProducts, merchProducts.costCents);
-            await m.addColumn(merchProducts, merchProducts.priceCents);
+            if (!await _columnExists('merch_products', 'sku')) {
+              await m.addColumn(merchProducts, merchProducts.sku);
+            }
+            if (!await _columnExists('merch_products', 'location')) {
+              await m.addColumn(merchProducts, merchProducts.location);
+            }
+            if (!await _columnExists('merch_products', 'stock')) {
+              await m.addColumn(merchProducts, merchProducts.stock);
+            }
+            if (!await _columnExists('merch_products', 'cost_cents')) {
+              await m.addColumn(merchProducts, merchProducts.costCents);
+            }
+            if (!await _columnExists('merch_products', 'price_cents')) {
+              await m.addColumn(merchProducts, merchProducts.priceCents);
+            }
           }
           if (from < 19) {
-            await m.addColumn(ticketItems, ticketItems.consumedQuantity);
+            if (!await _columnExists('ticket_items', 'consumed_quantity')) {
+              await m.addColumn(ticketItems, ticketItems.consumedQuantity);
+            }
             // Parts on tickets that closed before this change never left stock,
             // so mark them consumed. Upgrading cannot drop their stock now, and
             // reopening an old job for warranty does not deduct them either.
@@ -800,9 +900,43 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 20) {
-            await m.addColumn(parts, parts.reorderLevel);
+            if (!await _columnExists('parts', 'reorder_level')) {
+              await m.addColumn(parts, parts.reorderLevel);
+            }
             // Old columns kept for compatibility; parts now track inventory
             // separately from the minimum stock threshold.
+          }
+          if (from < 21) {
+            // Tickets that were closed and reopened before parts were taken out
+            // of stock were marked consumed by the v19 backfill without any
+            // stock movement, so closing them again deducted nothing. Parts on
+            // tickets that are still open and never had a deduction are
+            // outstanding again.
+            await customStatement(
+              'UPDATE ticket_items SET consumed_quantity = 0 '
+              'WHERE kind = ${TicketItemKind.part.index} '
+              'AND consumed_quantity > 0 AND ticket_id IN ('
+              'SELECT id FROM tickets WHERE status NOT IN ('
+              '${TicketStatus.closed.index}, ${TicketStatus.cancelled.index})) '
+              'AND NOT EXISTS ('
+              'SELECT 1 FROM part_movements m '
+              'WHERE m.ticket_id = ticket_items.ticket_id '
+              'AND m.part_id = ticket_items.part_id AND m.delta < 0)',
+            );
+          }
+          if (from < 22) {
+            if (!await _columnExists('parts', 'charge_shop_supply')) {
+              await m.addColumn(parts, parts.chargeShopSupply);
+            }
+          }
+          if (from < 23) {
+            // Shop supplies are free unless a line is marked "R" on the
+            // invoice, so clear any price stored before that existed.
+            await customStatement(
+              'UPDATE ticket_items SET unit_price_cents = 0 '
+              'WHERE part_id IN (SELECT id FROM parts WHERE lower(trim('
+              "category)) IN ('shop','supplies','shop supply','shop supplies'))",
+            );
           }
         },
       );
@@ -2394,6 +2528,7 @@ class AppDatabase extends _$AppDatabase {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2406,7 +2541,7 @@ class AppDatabase extends _$AppDatabase {
         'must not be negative',
       );
     }
-    if (purchaseType == PartPurchaseType.bulk && bulkQuantity < 1) {
+    if (purchaseType.isLot && bulkQuantity < 1) {
       throw ArgumentError.value(
         bulkQuantity,
         'bulkQuantity',
@@ -2416,7 +2551,7 @@ class AppDatabase extends _$AppDatabase {
     if (bulkTotalCents < 0) {
       throw ArgumentError('Part costs must not be negative.');
     }
-    final isBulk = purchaseType == PartPurchaseType.bulk;
+    final isBulk = purchaseType.isLot;
     final unitCostCents =
         isBulk ? (bulkTotalCents / bulkQuantity).round() : rawCostCents;
     if (unitCostCents < 0 || retailPriceCents < 0) {
@@ -2439,6 +2574,7 @@ class AppDatabase extends _$AppDatabase {
           purchaseType: Value(purchaseType),
           bulkQuantity: Value(isBulk ? bulkQuantity : 1),
           bulkTotalCents: Value(isBulk ? bulkTotalCents : 0),
+          chargeShopSupply: Value(chargeShopSupply),
           reorderLevel: Value(minimumStock),
         ),
       );
@@ -2471,6 +2607,7 @@ class AppDatabase extends _$AppDatabase {
     int bulkQuantity = 1,
     int bulkTotalCents = 0,
     int minimumStock = 0,
+    bool chargeShopSupply = false,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2479,7 +2616,7 @@ class AppDatabase extends _$AppDatabase {
     if (stock < 0) {
       throw ArgumentError.value(stock, 'stock', 'must not be negative');
     }
-    if (purchaseType == PartPurchaseType.bulk && bulkQuantity < 1) {
+    if (purchaseType.isLot && bulkQuantity < 1) {
       throw ArgumentError.value(
         bulkQuantity,
         'bulkQuantity',
@@ -2489,7 +2626,7 @@ class AppDatabase extends _$AppDatabase {
     if (bulkTotalCents < 0) {
       throw ArgumentError('Part costs must not be negative.');
     }
-    final isBulk = purchaseType == PartPurchaseType.bulk;
+    final isBulk = purchaseType.isLot;
     final unitCostCents =
         isBulk ? (bulkTotalCents / bulkQuantity).round() : rawCostCents;
     if (unitCostCents < 0 || retailPriceCents < 0) {
@@ -2521,6 +2658,7 @@ class AppDatabase extends _$AppDatabase {
           purchaseType: Value(purchaseType),
           bulkQuantity: Value(isBulk ? bulkQuantity : 1),
           bulkTotalCents: Value(isBulk ? bulkTotalCents : 0),
+          chargeShopSupply: Value(chargeShopSupply),
           reorderLevel: Value(minimumStock),
         ),
       );
@@ -2648,6 +2786,41 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Stream<Map<int, List<LabourIncludedPart>>> watchLabourIncludedParts() =>
+      (select(settings)..where((s) => s.key.equals(_labourPartsSettingKey)))
+          .watchSingleOrNull()
+          .map((row) => _decodeLabourParts(row?.value));
+
+  Future<void> setLabourIncludedParts(
+    int labourId,
+    List<LabourIncludedPart> included,
+  ) async {
+    await transaction(() async {
+      final all = Map<int, List<LabourIncludedPart>>.of(
+        _decodeLabourParts(await _setting(_labourPartsSettingKey, '')),
+      );
+      final cleaned = [
+        for (final item in included)
+          if (item.quantity > 0) item,
+      ];
+      if (cleaned.isEmpty) {
+        all.remove(labourId);
+      } else {
+        all[labourId] = cleaned;
+      }
+      await _putSetting(
+        _labourPartsSettingKey,
+        jsonEncode({
+          for (final entry in all.entries)
+            '${entry.key}': [
+              for (final item in entry.value)
+                {'p': item.partId, 'q': item.quantity},
+            ],
+        }),
+      );
+    });
+  }
+
   Future<void> addRequiredPart({
     required int ticketId,
     required int partId,
@@ -2666,7 +2839,8 @@ class AppDatabase extends _$AppDatabase {
               (item) =>
                   item.ticketId.equals(ticketId) &
                   item.partId.equals(partId) &
-                  item.kind.equals(TicketItemKind.part.index),
+                  item.kind.equals(TicketItemKind.part.index) &
+                  item.description.like('% (included)').not(),
             ))
           .getSingleOrNull();
       if (existing == null) {
@@ -2677,7 +2851,7 @@ class AppDatabase extends _$AppDatabase {
             partId: Value(partId),
             description: part.name,
             quantity: Value(quantity),
-            unitPriceCents: Value(part.priceCents),
+            unitPriceCents: Value(_billedUnitCents(part)),
             unitCostCents: Value(part.costCents),
           ),
         );
@@ -2688,11 +2862,177 @@ class AppDatabase extends _$AppDatabase {
           TicketItemsCompanion(
             quantity: Value(existing.quantity + quantity),
             description: Value(part.name),
-            unitPriceCents: Value(part.priceCents),
+            unitPriceCents: Value(_billedUnitCents(part)),
             unitCostCents: Value(part.costCents),
           ),
         );
       }
+      if (isLabourCategory(part.category)) {
+        final included = _decodeLabourParts(
+          await _setting(_labourPartsSettingKey, ''),
+        )[partId];
+        for (final item in included ?? const <LabourIncludedPart>[]) {
+          await _addIncludedPartLine(
+            ticketId: ticketId,
+            partId: item.partId,
+            quantity: item.quantity * quantity,
+          );
+        }
+      }
+    });
+  }
+
+  /// Lists a part that comes with a labour item: it uses stock and counts as a
+  /// job cost, but bills nothing.
+  Future<void> _addIncludedPartLine({
+    required int ticketId,
+    required int partId,
+    required int quantity,
+  }) async {
+    final part = await (select(parts)
+          ..where((row) => row.id.equals(partId) & row.isActive.equals(true)))
+        .getSingleOrNull();
+    if (part == null) return;
+    final description = '${part.name} (included)';
+    final existing = await (select(ticketItems)
+          ..where(
+            (item) =>
+                item.ticketId.equals(ticketId) &
+                item.partId.equals(partId) &
+                item.kind.equals(TicketItemKind.part.index) &
+                item.description.equals(description),
+          ))
+        .getSingleOrNull();
+    if (existing == null) {
+      await into(ticketItems).insert(
+        TicketItemsCompanion.insert(
+          ticketId: ticketId,
+          kind: TicketItemKind.part,
+          partId: Value(partId),
+          description: description,
+          quantity: Value(quantity),
+          unitPriceCents: const Value(0),
+          unitCostCents: Value(part.costCents),
+        ),
+      );
+    } else {
+      await (update(ticketItems)..where((item) => item.id.equals(existing.id)))
+          .write(
+        TicketItemsCompanion(quantity: Value(existing.quantity + quantity)),
+      );
+    }
+  }
+
+  /// Marks a shop-supply invoice line as charged (retail price per use) or
+  /// free again.
+  Future<void> setSupplyLineCharged(int ticketItemId, bool charged) async {
+    final item = await (select(ticketItems)
+          ..where((row) => row.id.equals(ticketItemId)))
+        .getSingleOrNull();
+    if (item?.partId == null) return;
+    final part = await (select(parts)
+          ..where((row) => row.id.equals(item!.partId!)))
+        .getSingleOrNull();
+    if (part == null) return;
+    await (update(ticketItems)..where((row) => row.id.equals(ticketItemId)))
+        .write(
+      TicketItemsCompanion(
+        unitPriceCents: Value(charged ? part.priceCents : 0),
+      ),
+    );
+  }
+
+  /// Rings up a direct sale: a closed, paid ticket with no device.
+  Future<int> createQuickSale({
+    String? customerName,
+    required List<({int partId, int quantity})> parts,
+    required List<({String description, int quantity, int unitPriceCents})>
+        customLines,
+    required PaymentMethod method,
+  }) async {
+    if (parts.isEmpty && customLines.isEmpty) {
+      throw ArgumentError('Add at least one item to the sale.');
+    }
+    return transaction(() async {
+      final name = (customerName ?? '').trim();
+      final created = await createTicket(
+        customerName: name.isEmpty ? 'Quick Sale' : name,
+        customerPhone: '-',
+        customerEmail: '-',
+        deviceName: 'Quick Sale',
+        complaint: 'Direct sale',
+      );
+      final ticketId = created.id;
+      for (final line in parts) {
+        await addRequiredPart(
+          ticketId: ticketId,
+          partId: line.partId,
+          quantity: line.quantity,
+        );
+        final item = await (select(ticketItems)
+              ..where(
+                (row) =>
+                    row.ticketId.equals(ticketId) &
+                    row.partId.equals(line.partId),
+              ))
+            .getSingle();
+        final part = await (select(this.parts)
+              ..where((row) => row.id.equals(line.partId)))
+            .getSingle();
+        if (part.purchaseType == PartPurchaseType.tube) {
+          // A tube sells whole, marked up on the full tube cost. The invoice
+          // quantity counts tubes, so the other uses of each tube come out of
+          // stock here (closing the ticket takes the first one).
+          final markup = await markupPercent('parts_markup_percent', 35);
+          final tubePrice = (part.bulkTotalCents * (100 + markup) + 50) ~/ 100;
+          await (update(ticketItems)..where((row) => row.id.equals(item.id)))
+              .write(
+            TicketItemsCompanion(
+              description: Value('${part.name} (full tube)'),
+              unitPriceCents: Value(tubePrice),
+            ),
+          );
+          final extraUses = line.quantity * (part.bulkQuantity - 1);
+          final taken = extraUses > part.stock ? part.stock : extraUses;
+          await (update(this.parts)..where((row) => row.id.equals(part.id)))
+              .write(PartsCompanion(stock: Value(part.stock - taken)));
+        } else {
+          // Direct sales bill shop supplies at their retail price.
+          await setSupplyLineCharged(item.id, true);
+        }
+      }
+      for (final line in customLines) {
+        await addInvoiceLaborLine(
+          ticketId: ticketId,
+          description: line.description,
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+        );
+      }
+      await (update(tickets)..where((row) => row.id.equals(ticketId))).write(
+        TicketsCompanion(
+          status: const Value(TicketStatus.ready),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      final items = await (select(ticketItems)
+            ..where((item) => item.ticketId.equals(ticketId)))
+          .get();
+      final subtotal = items.fold<int>(
+        0,
+        (sum, item) => sum + item.quantity * item.unitPriceCents,
+      );
+      final taxes = await taxConfig();
+      final due = subtotal + taxes.taxCentsFor(subtotal);
+      if (due > 0) {
+        await recordTicketPayment(
+          ticketId: ticketId,
+          amountCents: due,
+          method: method,
+        );
+      }
+      await closeTicketAfterPayment(ticketId);
+      return ticketId;
     });
   }
 
@@ -2764,6 +3104,61 @@ class AppDatabase extends _$AppDatabase {
         ..where((payment) => payment.ticketId.equals(ticketId))
         ..orderBy([(payment) => OrderingTerm.asc(payment.at)]))
       .watch();
+
+  /// Records the drop-off deposit; it counts toward the final invoice.
+  Future<void> recordTicketDeposit({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) async {
+    if (amountCents < 1) {
+      throw ArgumentError.value(amountCents, 'amountCents', 'must be positive');
+    }
+    await into(payments).insert(
+      PaymentsCompanion.insert(
+        ticketId: ticketId,
+        amountCents: amountCents,
+        method: method,
+        kind: PaymentKind.deposit,
+      ),
+    );
+  }
+
+  /// Gives money back on a ticket; it can never exceed what was paid net of
+  /// earlier refunds.
+  Future<void> recordTicketRefund({
+    required int ticketId,
+    required int amountCents,
+    required PaymentMethod method,
+  }) async {
+    if (amountCents < 1) {
+      throw ArgumentError.value(amountCents, 'amountCents', 'must be positive');
+    }
+    await transaction(() async {
+      final rows = await (select(payments)
+            ..where((payment) => payment.ticketId.equals(ticketId)))
+          .get();
+      final paid = rows.fold<int>(
+        0,
+        (sum, payment) =>
+            sum +
+            (payment.kind == PaymentKind.refund
+                ? -payment.amountCents
+                : payment.amountCents),
+      );
+      if (amountCents > paid) {
+        throw StateError('Refund exceeds the amount paid on this ticket.');
+      }
+      await into(payments).insert(
+        PaymentsCompanion.insert(
+          ticketId: ticketId,
+          amountCents: amountCents,
+          method: method,
+          kind: PaymentKind.refund,
+        ),
+      );
+    });
+  }
 
   Future<void> recordTicketPayment({
     required int ticketId,

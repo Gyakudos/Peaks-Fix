@@ -145,19 +145,6 @@ class _SettingsPageState extends State<SettingsPage> {
               );
             },
           ),
-          const Divider(height: 36),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.punch_clock_outlined),
-            title: const Text('Staff login / time clock'),
-            subtitle: const Text('Sign in to start a shift or clock out.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (context) => const StaffClockPage(),
-              ),
-            ),
-          ),
         ],
       ),
     );

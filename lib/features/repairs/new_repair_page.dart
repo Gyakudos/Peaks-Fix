@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/database.dart';
 import '../../data/photo_templates.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
@@ -25,7 +26,9 @@ class _NewRepairPageState extends State<NewRepairPage> {
   final TextEditingController _deviceOther = TextEditingController();
   final TextEditingController _deviceVariant = TextEditingController();
   final TextEditingController _complaint = TextEditingController();
-
+  final TextEditingController _deposit = TextEditingController(text: '45.00');
+  PaymentMethod _depositMethod = PaymentMethod.card;
+  static const int _minimumDepositCents = 4500;
   late Future<(List<DeviceOption>, List<String>)> _catalogFuture;
   bool _catalogRequested = false;
 
@@ -81,6 +84,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
     _deviceOther.dispose();
     _deviceVariant.dispose();
     _complaint.dispose();
+    _deposit.dispose();
     super.dispose();
   }
 
@@ -332,7 +336,19 @@ class _NewRepairPageState extends State<NewRepairPage> {
     if (_complaint.text.trim().isEmpty) {
       return 'Describe the reported fault.';
     }
+    final deposit = _depositCents();
+    if (deposit == null || deposit < _minimumDepositCents) {
+      return 'A deposit of at least \$45.00 is required to drop off a device.';
+    }
     return null;
+  }
+
+  int? _depositCents() {
+    final amount = double.tryParse(
+      _deposit.text.trim().replaceAll(',', '').replaceAll('\$', ''),
+    );
+    if (amount == null || !amount.isFinite) return null;
+    return (amount * 100).round();
   }
 
   Future<void> _save({bool importPhotos = false}) async {
@@ -370,6 +386,11 @@ class _NewRepairPageState extends State<NewRepairPage> {
           pickedUpAt: _pickedUpAt,
         ),
         complaint: _complaint.text,
+      );
+      await repository.recordTicketDeposit(
+        ticketId: created.id,
+        amountCents: _depositCents()!,
+        method: _depositMethod,
       );
       if (!mounted) return;
       if (importPhotos) {
@@ -746,6 +767,61 @@ class _NewRepairPageState extends State<NewRepairPage> {
                               'What the customer says is wrong, in their words.',
                           border: OutlineInputBorder(),
                         ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _Section(
+                    title: 'Deposit',
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: const Key('intake-deposit'),
+                              controller: _deposit,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'Deposit',
+                                prefixText: '\$',
+                                helperText:
+                                    'Minimum \$45.00 to drop off a device. '
+                                    'Applied to the final invoice.',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<PaymentMethod>(
+                              key: const Key('intake-deposit-method'),
+                              initialValue: _depositMethod,
+                              decoration: const InputDecoration(
+                                labelText: 'Paid by',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: PaymentMethod.cash,
+                                  child: Text('Cash'),
+                                ),
+                                DropdownMenuItem(
+                                  value: PaymentMethod.card,
+                                  child: Text('Card'),
+                                ),
+                                DropdownMenuItem(
+                                  value: PaymentMethod.other,
+                                  child: Text('Other'),
+                                ),
+                              ],
+                              onChanged: (value) => setState(
+                                () => _depositMethod = value ?? _depositMethod,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

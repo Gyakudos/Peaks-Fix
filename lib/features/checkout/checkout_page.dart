@@ -260,7 +260,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                           ? const Center(child: Text('No bill lines yet.'))
                           : ListView(
                               children: [
-                                for (final line in invoice.lines)
+                                for (final line in invoice.lines
+                                    .where((line) => !line.isShopSupply))
                                   ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     title: Text(line.description),
@@ -268,6 +269,25 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
                                       '${line.isMerch ? 'Merchandise' : _kindLabel(line.kind)} · '
                                       '${line.quantity} × ${_money(line.unitPriceCents)}',
                                     ),
+                                    trailing: Text(_money(line.lineTotalCents)),
+                                  ),
+                                if (invoice.lines
+                                    .any((line) => line.isShopSupply))
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 12),
+                                    child: Text(
+                                      'Shop Supplies',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                for (final line in invoice.lines
+                                    .where((line) => line.isShopSupply))
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(line.description),
+                                    subtitle: Text(
+                                        '${line.quantity} × ${_money(line.unitPriceCents)}'),
                                     trailing: Text(_money(line.lineTotalCents)),
                                   ),
                               ],

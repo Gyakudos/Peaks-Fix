@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
@@ -104,6 +105,170 @@ Future<void> showReopenTicketDialog(
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Could not reopen $ticketNumber: $error')),
+    );
+  }
+}
+
+/// Refunds money on a closed ticket, up to what the customer paid.
+Future<void> showRefundTicketDialog(
+  BuildContext context, {
+  required int ticketId,
+  required String ticketNumber,
+}) async {
+  final repository = ShopScope.of(context);
+  final entries = await repository.watchTicketPayments(ticketId).first;
+  final paid = entries.fold<int>(
+    0,
+    (sum, entry) =>
+        sum +
+        (entry.kind == PaymentKind.refund
+            ? -entry.amountCents
+            : entry.amountCents),
+  );
+  if (!context.mounted) return;
+  if (paid <= 0) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$ticketNumber has nothing left to refund.')),
+    );
+    return;
+  }
+  final result = await showDialog<({int amountCents, PaymentMethod method})>(
+    context: context,
+    builder: (_) =>
+        _RefundTicketDialog(ticketNumber: ticketNumber, paidCents: paid),
+  );
+  if (result == null || !context.mounted) return;
+
+  try {
+    await repository.recordTicketRefund(
+      ticketId: ticketId,
+      amountCents: result.amountCents,
+      method: result.method,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Refunded \$${(result.amountCents / 100).toStringAsFixed(2)} '
+          'on $ticketNumber',
+        ),
+      ),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not refund $ticketNumber: $error')),
+    );
+  }
+}
+
+class _RefundTicketDialog extends StatefulWidget {
+  const _RefundTicketDialog({
+    required this.ticketNumber,
+    required this.paidCents,
+  });
+
+  final String ticketNumber;
+  final int paidCents;
+
+  @override
+  State<_RefundTicketDialog> createState() => _RefundTicketDialogState();
+}
+
+class _RefundTicketDialogState extends State<_RefundTicketDialog> {
+  late final _amountController = TextEditingController(
+    text: (widget.paidCents / 100).toStringAsFixed(2),
+  );
+  PaymentMethod _method = PaymentMethod.card;
+  String? _error;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Refund ${widget.ticketNumber}'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Paid so far: \$${(widget.paidCents / 100).toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('refund-amount'),
+              controller: _amountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Refund amount',
+                prefixText: '\$',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<PaymentMethod>(
+              key: const Key('refund-method'),
+              initialValue: _method,
+              decoration: const InputDecoration(
+                labelText: 'Refunded via',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final method in PaymentMethod.values)
+                  DropdownMenuItem(
+                    value: method,
+                    child: Text(
+                      method.name[0].toUpperCase() + method.name.substring(1),
+                    ),
+                  ),
+              ],
+              onChanged: (next) {
+                if (next != null) setState(() => _method = next);
+              },
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          key: const Key('confirm-refund'),
+          onPressed: () {
+            final amount = double.tryParse(_amountController.text.trim());
+            final cents = amount == null ? 0 : (amount * 100).round();
+            if (cents < 1 || cents > widget.paidCents) {
+              setState(
+                () => _error = 'Enter an amount up to the amount paid.',
+              );
+              return;
+            }
+            Navigator.of(context).pop((amountCents: cents, method: _method));
+          },
+          icon: const Icon(Icons.currency_exchange),
+          label: const Text('Refund'),
+        ),
+      ],
     );
   }
 }

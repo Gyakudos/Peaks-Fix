@@ -48,7 +48,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _skuController = TextEditingController();
-  final _vendorIdController = TextEditingController();
+  // _vendorIdController no longer used
   final _vendorSkuController = TextEditingController();
   final _categoryController = TextEditingController();
   final _locationController = TextEditingController();
@@ -75,7 +75,6 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _nameController.text = part.name;
     _descriptionController.text = part.description ?? '';
     _skuController.text = part.sku ?? '';
-    _vendorIdController.text = part.vendorId ?? '';
     _vendorSkuController.text = part.vendorSku ?? '';
     _categoryController.text = part.category ?? '';
     _locationController.text = part.location ?? '';
@@ -113,7 +112,6 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _nameController.dispose();
     _descriptionController.dispose();
     _skuController.dispose();
-    _vendorIdController.dispose();
     _vendorSkuController.dispose();
     _categoryController.dispose();
     _locationController.dispose();
@@ -232,7 +230,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           name: _nameController.text,
           description: _descriptionController.text,
           sku: sku,
-          vendorId: _vendorIdController.text,
+          vendorId: null,
           vendorSku: _vendorSkuController.text,
           category: _categoryController.text,
           location: _locationController.text,
@@ -250,7 +248,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           name: _nameController.text,
           description: _descriptionController.text,
           sku: sku,
-          vendorId: _vendorIdController.text,
+          vendorId: null,
           vendorSku: _vendorSkuController.text,
           category: _categoryController.text,
           location: _locationController.text,
@@ -310,15 +308,6 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                   hintText: '001-001',
                   helperText:
                       'Shop format 000-000. Leave blank to auto-assign.',
-                ),
-              ),
-              TextField(
-                key: const Key('inventory-part-vendor-id'),
-                controller: _vendorIdController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Vendor ID (optional)',
-                  hintText: 'Where this part is purchased',
                 ),
               ),
               TextField(
@@ -408,7 +397,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Inventory',
-                  helperText: 'On-hand quantity; deducted when tickets close.',
+                  helperText: 'On-hand quantity.',
                 ),
               ),
               TextField(
@@ -416,7 +405,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                 controller: _minimumStockController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Stock (minimum)',
+                  labelText: 'Minimum stock',
                   helperText: 'Minimum stock level for reordering.',
                 ),
               ),

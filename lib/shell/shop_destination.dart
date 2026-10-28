@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../features/calendar/calendar_page.dart';
-import '../features/checkout/checkout_page.dart';
 import '../features/customers/customers_page.dart';
 import '../features/financial/financial_page.dart';
-import '../features/merch/merch_page.dart';
-import '../features/parts/parts_page.dart';
+import '../features/inventory/inventory_page.dart';
+import '../features/invoicing/invoicing_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/tickets/tickets_page.dart';
 
@@ -41,17 +40,10 @@ class ShopDestination {
       page: TicketsPage(),
     ),
     ShopDestination(
-      label: 'Closed Tickets',
-      icon: Icons.inventory_2_outlined,
-      selectedIcon: Icons.inventory_2,
-      page: TicketsPage(closedOnly: true),
-      badge: ShopBadge.closed,
-    ),
-    ShopDestination(
-      label: 'Checkout',
+      label: 'Invoicing',
       icon: Icons.point_of_sale_outlined,
       selectedIcon: Icons.point_of_sale,
-      page: CheckoutPage(),
+      page: InvoicingPage(),
       badge: ShopBadge.checkout,
     ),
     ShopDestination(
@@ -67,16 +59,10 @@ class ShopDestination {
       page: CustomersPage(),
     ),
     ShopDestination(
-      label: 'Merch',
-      icon: Icons.storefront_outlined,
-      selectedIcon: Icons.storefront,
-      page: MerchPage(),
-    ),
-    ShopDestination(
-      label: 'Parts',
-      icon: Icons.memory_outlined,
-      selectedIcon: Icons.memory,
-      page: PartsPage(),
+      label: 'Inventory',
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2,
+      page: InventoryPage(),
     ),
     ShopDestination(
       label: 'Financial',
@@ -84,6 +70,12 @@ class ShopDestination {
       selectedIcon: Icons.insights,
       page: FinancialPage(),
       badge: ShopBadge.profit,
+    ),
+    ShopDestination(
+      label: 'Staff Login',
+      icon: Icons.punch_clock_outlined,
+      selectedIcon: Icons.punch_clock,
+      page: StaffClockPage(),
     ),
     ShopDestination(
       label: 'Settings',

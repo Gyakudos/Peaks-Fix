@@ -174,11 +174,19 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
         ));
   }
 
+  Future<void> _setCharged(InvoiceLine line, bool charged) => _run(
+      () => widget.repository.setSupplyLineCharged(line.ticketItemId, charged));
+
   Future<void> _removeLine(InvoiceLine line) async {
-    await _run(() => widget.repository.removeInvoiceLaborLine(
-          ticketId: widget.ticketId,
-          ticketItemId: line.ticketItemId,
-        ));
+    await _run(() => line.kind == TicketItemKind.part
+        ? widget.repository.removeRequiredPart(
+            ticketId: widget.ticketId,
+            ticketItemId: line.ticketItemId,
+          )
+        : widget.repository.removeInvoiceLaborLine(
+            ticketId: widget.ticketId,
+            ticketItemId: line.ticketItemId,
+          ));
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -272,7 +280,8 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                           )
                         : ListView(
                             children: [
-                              for (final line in invoice.lines)
+                              for (final line in invoice.lines
+                                  .where((line) => !line.isShopSupply))
                                 ListTile(
                                   key: Key(
                                     'invoice-line-${line.ticketItemId}',
@@ -288,7 +297,8 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(_money(line.lineTotalCents)),
-                                      if (line.kind == TicketItemKind.custom)
+                                      if (line.kind == TicketItemKind.custom ||
+                                          line.kind == TicketItemKind.part)
                                         IconButton(
                                           tooltip: 'Remove ${line.description}',
                                           onPressed: _busy
@@ -298,6 +308,58 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                                             Icons.delete_outline,
                                           ),
                                         ),
+                                    ],
+                                  ),
+                                ),
+                              if (invoice.lines
+                                  .any((line) => line.isShopSupply))
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'Shop Supplies',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              for (final line in invoice.lines
+                                  .where((line) => line.isShopSupply))
+                                ListTile(
+                                  key: Key('invoice-line-${line.ticketItemId}'),
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(line.description),
+                                  subtitle: Text(
+                                    '${line.quantity} × ${_money(line.unitPriceCents)}',
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Tooltip(
+                                        message:
+                                            'R — charge retail price for this supply',
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text('R'),
+                                            Checkbox(
+                                              key: Key(
+                                                  'invoice-charge-${line.ticketItemId}'),
+                                              value: line.unitPriceCents > 0,
+                                              onChanged: _busy
+                                                  ? null
+                                                  : (value) => _setCharged(
+                                                      line, value ?? false),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(_money(line.lineTotalCents)),
+                                      IconButton(
+                                        tooltip: 'Remove ${line.description}',
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _removeLine(line),
+                                        icon: const Icon(Icons.delete_outline),
+                                      ),
                                     ],
                                   ),
                                 ),
