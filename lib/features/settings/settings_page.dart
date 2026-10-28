@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
+import '../../data/payments/payment_processor.dart';
 import '../../data/taxes.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
@@ -113,6 +114,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _TaxSettings(database: _database),
           const Divider(height: 36),
           _MarkupSettings(database: _database),
+          const Divider(height: 36),
+          _PaymentProcessorSettings(database: _database),
           const Divider(height: 36),
           SectionHeading(
             title: 'Staff',
@@ -1079,6 +1082,151 @@ class _TaxSettingsState extends State<_TaxSettings> {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _PaymentProcessorSettings extends StatefulWidget {
+  const _PaymentProcessorSettings({required this.database});
+
+  final AppDatabase database;
+
+  @override
+  State<_PaymentProcessorSettings> createState() =>
+      _PaymentProcessorSettingsState();
+}
+
+class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
+  late final ProcessorConfigStore _store = ProcessorConfigStore(
+    widget.database,
+  );
+  final Map<String, TextEditingController> _controllers = {};
+  ProcessorKind _kind = ProcessorKind.manual;
+  bool _hidden = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _store.load().then((config) {
+      if (!mounted) return;
+      setState(() {
+        _kind = config.kind;
+        _fill(config.values);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _controller(String key) =>
+      _controllers.putIfAbsent(key, TextEditingController.new);
+
+  void _fill(Map<String, String> values) {
+    for (final field in _kind.fields) {
+      _controller(field.key).text = values[field.key] ?? '';
+    }
+  }
+
+  Future<void> _changeKind(ProcessorKind kind) async {
+    final saved = await _store.load();
+    if (!mounted) return;
+    setState(() {
+      _kind = kind;
+      _fill(saved.kind == kind ? saved.values : const {});
+    });
+  }
+
+  Future<void> _save() async {
+    await _store.save(
+      ProcessorConfig(
+        kind: _kind,
+        values: {
+          for (final field in _kind.fields)
+            field.key: _controller(field.key).text,
+        },
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Payment processor saved.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeading(title: 'Payment Processor'),
+        DropdownMenu<ProcessorKind>(
+          key: const Key('payment-processor-kind'),
+          label: const Text('Processor'),
+          initialSelection: _kind,
+          width: 320,
+          dropdownMenuEntries: [
+            for (final kind in ProcessorKind.values)
+              DropdownMenuEntry(value: kind, label: kind.label),
+          ],
+          onSelected: (kind) {
+            if (kind != null) _changeKind(kind);
+          },
+        ),
+        if (_kind == ProcessorKind.manual)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'Payments are taken outside the app and recorded at checkout.',
+            ),
+          )
+        else ...[
+          for (final field in _kind.fields)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: TextField(
+                key: Key('payment-processor-${field.key}'),
+                controller: _controller(field.key),
+                obscureText: field.secret && _hidden,
+                enableSuggestions: false,
+                autocorrect: false,
+                decoration: InputDecoration(
+                  labelText: field.label,
+                  helperText: field.secret
+                      ? 'Stored encrypted on this computer.'
+                      : null,
+                  suffixIcon: field.secret
+                      ? IconButton(
+                          tooltip: _hidden ? 'Show' : 'Hide',
+                          onPressed: () => setState(() => _hidden = !_hidden),
+                          icon: Icon(
+                            _hidden ? Icons.visibility : Icons.visibility_off,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          const Text(
+            'Card payments through this processor are not available in this '
+            'version yet.',
+          ),
+        ],
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            key: const Key('save-payment-processor'),
+            onPressed: _save,
+            child: const Text('Save'),
+          ),
+        ),
       ],
     );
   }

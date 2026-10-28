@@ -8,6 +8,7 @@ import 'package:vola_fix/app.dart';
 import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/financials.dart';
 import 'package:vola_fix/data/part_skus.dart';
+import 'package:vola_fix/data/payments/payment_processor.dart';
 import 'package:vola_fix/data/photo_templates.dart';
 import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
@@ -584,8 +585,12 @@ class FakeTicketsRepository implements TicketsRepository {
     required List<({String description, int quantity, int unitPriceCents})>
         customLines,
     required PaymentMethod method,
+    Future<bool> Function(int dueCents)? authorizePayment,
   }) async =>
       0;
+
+  @override
+  Future<PaymentProcessor> paymentProcessor() async => const ManualProcessor();
 
   @override
   Future<void> recordTicketRefund({

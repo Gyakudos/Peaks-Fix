@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
+import '../payments/card_payment.dart';
 import '../../data/shop_scope.dart';
 
 /// Colour used for a status everywhere it appears, so the board and the ticket
@@ -140,6 +141,17 @@ Future<void> showRefundTicketDialog(
   if (result == null || !context.mounted) return;
 
   try {
+    final processor = await repository.paymentProcessor();
+    if (!context.mounted) return;
+    final approved = await authorizeCardPayment(
+      context,
+      processor: processor,
+      method: result.method,
+      amountCents: result.amountCents,
+      reference: ticketNumber,
+      refund: true,
+    );
+    if (!approved || !context.mounted) return;
     await repository.recordTicketRefund(
       ticketId: ticketId,
       amountCents: result.amountCents,

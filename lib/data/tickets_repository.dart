@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 
 import 'database.dart';
 import 'financials.dart';
+import 'payments/payment_processor.dart';
 import 'photo_store.dart';
 import 'photo_templates.dart';
 import 'taxes.dart';
@@ -729,7 +730,10 @@ abstract class TicketsRepository {
     required List<({String description, int quantity, int unitPriceCents})>
         customLines,
     required PaymentMethod method,
+    Future<bool> Function(int dueCents)? authorizePayment,
   });
+
+  Future<PaymentProcessor> paymentProcessor();
 
   Future<int> getPartsMarkupPercent();
 
@@ -1340,12 +1344,21 @@ class DriftTicketsRepository implements TicketsRepository {
     required List<({String description, int quantity, int unitPriceCents})>
         customLines,
     required PaymentMethod method,
+    Future<bool> Function(int dueCents)? authorizePayment,
   }) =>
       _db.createQuickSale(
         customerName: customerName,
         parts: parts,
         customLines: customLines,
         method: method,
+        authorizePayment: authorizePayment,
+      );
+
+  @override
+  Future<PaymentProcessor> paymentProcessor() async =>
+      PaymentProcessors.adapterFor(
+        await ProcessorConfigStore(_db).load(),
+        log: ProcessorTransactionLog(_db),
       );
 
   @override

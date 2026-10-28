@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../payments/card_payment.dart';
 import '../../data/photo_templates.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
@@ -365,6 +366,22 @@ class _NewRepairPageState extends State<NewRepairPage> {
 
     try {
       final repository = ShopScope.of(context);
+      final processor = await repository.paymentProcessor();
+      if (!mounted) return;
+      final depositReference =
+          'Deposit${DateTime.now().millisecondsSinceEpoch}';
+      final approved = await authorizeCardPayment(
+        context,
+        processor: processor,
+        method: _depositMethod,
+        amountCents: _depositCents()!,
+        reference: depositReference,
+      );
+      if (!approved) {
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
+      if (!mounted) return;
       final created = await repository.createTicket(
         customerId: _customerId,
         customerName: _customer.text,
@@ -392,6 +409,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
         amountCents: _depositCents()!,
         method: _depositMethod,
       );
+      await processor.attachReference(depositReference, created.number);
       if (!mounted) return;
       if (importPhotos) {
         final checklist =

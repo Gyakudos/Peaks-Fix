@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../payments/card_payment.dart';
 import '../../data/tickets_repository.dart';
 
 /// Rings up a direct sale (no device): pick items, take payment, and the sale
@@ -132,7 +133,16 @@ class _QuickSaleDialogState extends State<QuickSaleDialog> {
       _error = null;
     });
     try {
+      final processor = await widget.repository.paymentProcessor();
+      if (!mounted) return;
       await widget.repository.createQuickSale(
+        authorizePayment: (due) => authorizeCardPayment(
+          context,
+          processor: processor,
+          method: _method,
+          amountCents: due,
+          reference: 'QuickSale${DateTime.now().millisecondsSinceEpoch}',
+        ),
         customerName: _customerController.text,
         parts: [
           for (final line in _lines)
@@ -151,6 +161,8 @@ class _QuickSaleDialogState extends State<QuickSaleDialog> {
         method: _method,
       );
       if (mounted) Navigator.of(context).pop();
+    } on PaymentCancelledException {
+      if (mounted) setState(() => _saving = false);
     } catch (error) {
       if (mounted) {
         setState(() {

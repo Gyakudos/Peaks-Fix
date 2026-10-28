@@ -119,6 +119,38 @@ void main() {
     );
   });
 
+  test('quick sale rolls back when the card payment is not approved', () async {
+    final partId = await database.createInventoryPart(
+      name: 'Cable',
+      startingStock: 3,
+      retailPriceCents: 1000,
+    );
+    await expectLater(
+      database.createQuickSale(
+        parts: [(partId: partId, quantity: 1)],
+        customLines: const [],
+        method: PaymentMethod.card,
+        authorizePayment: (due) async => false,
+      ),
+      throwsA(isA<PaymentCancelledException>()),
+    );
+    final part = (await repository.watchInventoryParts().first)
+        .firstWhere((p) => p.id == partId);
+    expect(part.stock, 3);
+
+    var charged = 0;
+    await database.createQuickSale(
+      parts: [(partId: partId, quantity: 1)],
+      customLines: const [],
+      method: PaymentMethod.card,
+      authorizePayment: (due) async {
+        charged = due;
+        return true;
+      },
+    );
+    expect(charged, greaterThan(0));
+  });
+
   test('quick sale closes a paid ticket and takes stock out', () async {
     final partId = await database.createInventoryPart(
       name: 'Cable',

@@ -132,6 +132,14 @@ enum PaymentKind { deposit, balance, refund }
 
 enum PaymentMethod { cash, card, other }
 
+/// Thrown to roll back a sale when the card payment was declined or cancelled.
+class PaymentCancelledException implements Exception {
+  const PaymentCancelledException();
+
+  @override
+  String toString() => 'Payment cancelled';
+}
+
 enum ContactMethod { phone, text, email, inPerson }
 
 enum ContactOutcome { contacted, approved, declined, noAnswer }
@@ -952,6 +960,12 @@ class AppDatabase extends _$AppDatabase {
       SettingsCompanion.insert(key: key, value: value),
     );
   }
+
+  Future<String> readSetting(String key, String fallback) =>
+      _setting(key, fallback);
+
+  Future<void> writeSetting(String key, String value) =>
+      _putSetting(key, value);
 
   Future<int> markupPercent(String key, int fallback) async {
     final value = int.tryParse(await _setting(key, '$fallback')) ?? fallback;
@@ -2949,6 +2963,7 @@ class AppDatabase extends _$AppDatabase {
     required List<({String description, int quantity, int unitPriceCents})>
         customLines,
     required PaymentMethod method,
+    Future<bool> Function(int dueCents)? authorizePayment,
   }) async {
     if (parts.isEmpty && customLines.isEmpty) {
       throw ArgumentError('Add at least one item to the sale.');
@@ -3024,6 +3039,9 @@ class AppDatabase extends _$AppDatabase {
       );
       final taxes = await taxConfig();
       final due = subtotal + taxes.taxCentsFor(subtotal);
+      if (due > 0 && authorizePayment != null && !await authorizePayment(due)) {
+        throw const PaymentCancelledException();
+      }
       if (due > 0) {
         await recordTicketPayment(
           ticketId: ticketId,

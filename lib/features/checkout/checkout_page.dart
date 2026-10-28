@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../payments/card_payment.dart';
 import '../tickets/invoice_editor.dart';
 
 class CheckoutPage extends StatelessWidget {
@@ -185,6 +186,16 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
       builder: (_) => _PaymentDialog(amountDueCents: amountDue),
     );
     if (payment == null || !mounted) return;
+    final processor = await widget.repository.paymentProcessor();
+    if (!mounted) return;
+    final approved = await authorizeCardPayment(
+      context,
+      processor: processor,
+      method: payment.method,
+      amountCents: payment.amountCents,
+      reference: widget.ticket.number,
+    );
+    if (!approved || !mounted) return;
     await _run(() => widget.repository.recordTicketPayment(
           ticketId: widget.ticket.id,
           amountCents: payment.amountCents,
