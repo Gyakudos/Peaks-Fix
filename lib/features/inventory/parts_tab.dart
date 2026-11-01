@@ -7,8 +7,45 @@ import '../../shell/app_access.dart';
 import 'add_inventory_part_dialog.dart';
 import 'labour_tab.dart';
 
-class PartsTab extends StatelessWidget {
+/// True when every word in [query] appears in the part's ID, brand, name,
+/// description, category, vendor, vendor SKU or location.
+bool partMatchesSearch(InventoryPart part, String query) {
+  final terms = query
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((t) => t.isNotEmpty)
+      .toList();
+  if (terms.isEmpty) return true;
+  final haystack = [
+    part.sku,
+    part.id.toString(),
+    part.brand,
+    part.name,
+    part.description,
+    part.category,
+    part.vendorId,
+    part.vendorSku,
+    part.location,
+  ].whereType<String>().join(' ').toLowerCase();
+  return terms.every(haystack.contains);
+}
+
+class PartsTab extends StatefulWidget {
   const PartsTab({super.key});
+
+  @override
+  State<PartsTab> createState() => _PartsTabState();
+}
+
+class _PartsTabState extends State<PartsTab> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _removePart(
     BuildContext context,
@@ -73,10 +110,12 @@ class PartsTab extends StatelessWidget {
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
-            final parts = snapshot.data!
+            final allParts = snapshot.data!
                 .where((p) =>
                     !LabourTab.isLabour(p) && !isShopSupplyCategory(p.category))
                 .toList();
+            final parts =
+                allParts.where((p) => partMatchesSearch(p, _query)).toList();
             return ListView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
               children: [
@@ -119,7 +158,30 @@ class PartsTab extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                if (parts.isEmpty)
+                TextField(
+                  key: const Key('inventory-search'),
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search by ID, brand, name or any term',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            key: const Key('inventory-search-clear'),
+                            tooltip: 'Clear search',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (allParts.isEmpty)
                   const Card(
                     child: Padding(
                       padding: EdgeInsets.all(20),
@@ -129,11 +191,32 @@ class PartsTab extends StatelessWidget {
                       ),
                     ),
                   )
+                else if (parts.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text('No parts match your search.'),
+                    ),
+                  )
                 else
                   for (final part in parts)
                     ListTile(
                       leading: const Icon(Icons.memory_outlined),
-                      title: Text(part.name),
+                      title: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (part.brand != null)
+                            Text(
+                              part.brand!,
+                              key: Key('part-brand-${part.id}'),
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          Text(part.name),
+                        ],
+                      ),
                       subtitle: Text([
                         if (part.description != null &&
                             part.description!.trim().isNotEmpty)

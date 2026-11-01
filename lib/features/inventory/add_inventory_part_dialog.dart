@@ -64,6 +64,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   final _skuController = TextEditingController();
   final _vendorIdController = TextEditingController();
   final _vendorSkuController = TextEditingController();
+  final _brandController = TextEditingController();
   final _categoryController = TextEditingController();
   final _locationController = TextEditingController();
   final _stockController = TextEditingController(text: '0');
@@ -98,6 +99,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _skuController.text = part.sku ?? '';
     _vendorIdController.text = part.vendorId ?? '';
     _vendorSkuController.text = part.vendorSku ?? '';
+    _brandController.text = part.brand ?? '';
     _categoryController.text = part.category ?? '';
     _locationController.text = part.location ?? '';
     _stockController.text = '${part.inventoryValue}';
@@ -279,6 +281,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _skuController.dispose();
     _vendorIdController.dispose();
     _vendorSkuController.dispose();
+    _brandController.dispose();
     _categoryController.dispose();
     _locationController.dispose();
     _stockController.dispose();
@@ -427,6 +430,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           sku: sku,
           vendorId: _vendorIdController.text,
           vendorSku: _vendorSkuController.text,
+          brand: _brandController.text,
           category: _categoryValue,
           location: isLabour ? '' : _locationController.text,
           startingStock: startingStock,
@@ -445,6 +449,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           sku: sku,
           vendorId: _vendorIdController.text,
           vendorSku: _vendorSkuController.text,
+          brand: _brandController.text,
           category: _categoryValue,
           location: isLabour ? '' : _locationController.text,
           stock: startingStock,
@@ -514,6 +519,16 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                       'Shop format 000-000. Leave blank to auto-assign.',
                 ),
               ),
+              if (!widget.labour)
+                TextField(
+                  key: const Key('inventory-part-brand'),
+                  controller: _brandController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Brand (optional)',
+                    hintText: 'e.g. Anker',
+                  ),
+                ),
               if (!widget.labour)
                 TextField(
                   key: const Key('inventory-part-vendor-id'),

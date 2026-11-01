@@ -592,6 +592,9 @@ class Parts extends Table {
 
   /// The vendor's catalogue SKU for the exact item ordered.
   TextColumn get vendorSku => text().nullable()();
+
+  /// The part's brand or manufacturer.
+  TextColumn get brand => text().nullable()();
   TextColumn get category => text().nullable()();
   TextColumn get location => text().nullable()();
   IntColumn get stock => integer().withDefault(const Constant(0))();
@@ -747,7 +750,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Compared between host and clients so a mismatched build can't migrate or
   /// misread the shared database.
-  static const int currentSchemaVersion = 26;
+  static const int currentSchemaVersion = 27;
 
   /// The app's database: local, shared as a host, or a host's, chosen at
   /// startup in `main`.
@@ -1012,6 +1015,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 26) {
             await m.addColumn(tickets, tickets.partnerPartsPercent);
             await m.addColumn(tickets, tickets.partnerLabourPercent);
+          }
+          if (from < 27) {
+            await m.addColumn(parts, parts.brand);
           }
         },
       );
@@ -2690,6 +2696,7 @@ class AppDatabase extends _$AppDatabase {
     int bulkTotalCents = 0,
     int minimumStock = 0,
     bool chargeShopSupply = false,
+    String? brand,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2727,6 +2734,7 @@ class AppDatabase extends _$AppDatabase {
           sku: Value(cleanSku ?? await nextPartSku()),
           vendorId: Value(_clean(vendorId)),
           vendorSku: Value(_clean(vendorSku)),
+          brand: Value(_clean(brand)),
           category: Value(_clean(category)),
           location: Value(_clean(location)),
           stock: Value(startingStock),
@@ -2769,6 +2777,7 @@ class AppDatabase extends _$AppDatabase {
     int bulkTotalCents = 0,
     int minimumStock = 0,
     bool chargeShopSupply = false,
+    String? brand,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2811,6 +2820,7 @@ class AppDatabase extends _$AppDatabase {
           ),
           vendorId: Value(_clean(vendorId)),
           vendorSku: Value(_clean(vendorSku)),
+          brand: Value(_clean(brand)),
           category: Value(_clean(category)),
           location: Value(_clean(location)),
           stock: Value(stock),

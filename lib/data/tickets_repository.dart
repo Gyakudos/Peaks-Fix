@@ -286,6 +286,7 @@ class InventoryPart {
     this.sku,
     this.vendorId,
     this.vendorSku,
+    this.brand,
     this.category,
     this.location,
     this.purchaseType = PartPurchaseType.single,
@@ -295,6 +296,9 @@ class InventoryPart {
     this.chargeShopSupply = false,
     int? reorderLevel,
   }) : minimumStock = minimumStock ?? reorderLevel ?? 0;
+
+  /// The manufacturer or brand, e.g. "Anker".
+  final String? brand;
 
   /// Shop supplies only: bills [retailPriceCents] per use on the invoice.
   final bool chargeShopSupply;
@@ -653,6 +657,7 @@ abstract class TicketsRepository {
     int bulkTotalCents = 0,
     int minimumStock = 0,
     bool chargeShopSupply = false,
+    String? brand,
   });
 
   /// Parts that come with each labour item, keyed by the labour part id.
@@ -680,6 +685,7 @@ abstract class TicketsRepository {
     int bulkTotalCents = 0,
     int minimumStock = 0,
     bool chargeShopSupply = false,
+    String? brand,
   });
 
   Future<void> removeInventoryPart(int partId);
@@ -1170,6 +1176,7 @@ class DriftTicketsRepository implements TicketsRepository {
         sku: part.sku,
         vendorId: part.vendorId,
         vendorSku: part.vendorSku,
+        brand: part.brand,
         category: part.category,
         location: part.location,
         purchaseType: part.purchaseType,
@@ -1502,8 +1509,10 @@ class DriftTicketsRepository implements TicketsRepository {
     int bulkTotalCents = 0,
     int minimumStock = 0,
     bool chargeShopSupply = false,
+    String? brand,
   }) =>
       _db.createInventoryPart(
+        brand: brand,
         name: name,
         description: description,
         sku: sku,
@@ -1539,8 +1548,10 @@ class DriftTicketsRepository implements TicketsRepository {
     int bulkTotalCents = 0,
     int minimumStock = 0,
     bool chargeShopSupply = false,
+    String? brand,
   }) =>
       _db.updateInventoryPart(
+        brand: brand,
         partId: partId,
         name: name,
         description: description,
