@@ -130,7 +130,20 @@ extension PartPurchaseTypeLabel on PartPurchaseType {
 
 enum PaymentKind { deposit, balance, refund }
 
-enum PaymentMethod { cash, card, other }
+// Stored by index: only append new values.
+enum PaymentMethod {
+  cash,
+  card,
+  other,
+  eTransfer;
+
+  String get label => switch (this) {
+        PaymentMethod.cash => 'Cash',
+        PaymentMethod.card => 'Card',
+        PaymentMethod.other => 'Other',
+        PaymentMethod.eTransfer => 'E-Transfer',
+      };
+}
 
 /// Thrown to roll back a sale when the card payment was declined or cancelled.
 class PaymentCancelledException implements Exception {

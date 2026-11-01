@@ -240,9 +240,7 @@ class _RefundTicketDialogState extends State<_RefundTicketDialog> {
                 for (final method in PaymentMethod.values)
                   DropdownMenuItem(
                     value: method,
-                    child: Text(
-                      method.name[0].toUpperCase() + method.name.substring(1),
-                    ),
+                    child: Text(method.label),
                   ),
               ],
               onChanged: (next) {

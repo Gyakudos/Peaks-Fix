@@ -8,6 +8,7 @@ import 'package:vola_fix/app.dart';
 import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/financials.dart';
 import 'package:vola_fix/data/part_skus.dart';
+import 'package:vola_fix/data/payments/etransfer_config.dart';
 import 'package:vola_fix/data/payments/payment_processor.dart';
 import 'package:vola_fix/data/photo_templates.dart';
 import 'package:vola_fix/data/shop_scope.dart';
@@ -591,6 +592,9 @@ class FakeTicketsRepository implements TicketsRepository {
 
   @override
   Future<PaymentProcessor> paymentProcessor() async => const ManualProcessor();
+
+  @override
+  Future<ETransferConfig> eTransferConfig() async => const ETransferConfig();
 
   @override
   Future<void> recordTicketRefund({

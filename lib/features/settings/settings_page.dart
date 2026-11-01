@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
+import '../../data/payments/etransfer_config.dart';
 import '../../data/payments/payment_processor.dart';
 import '../../data/taxes.dart';
 import '../tickets/ticket_detail_page.dart';
@@ -116,6 +117,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _MarkupSettings(database: _database),
           const Divider(height: 36),
           _PaymentProcessorSettings(database: _database),
+          const Divider(height: 36),
+          _ETransferSettings(database: _database),
           const Divider(height: 36),
           SectionHeading(
             title: 'Staff',
@@ -1226,6 +1229,102 @@ class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
             onPressed: _save,
             child: const Text('Save'),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ETransferSettings extends StatefulWidget {
+  const _ETransferSettings({required this.database});
+
+  final AppDatabase database;
+
+  @override
+  State<_ETransferSettings> createState() => _ETransferSettingsState();
+}
+
+class _ETransferSettingsState extends State<_ETransferSettings> {
+  late final ETransferConfigStore _store = ETransferConfigStore(
+    widget.database,
+  );
+  final _recipient = TextEditingController();
+  final _question = TextEditingController();
+  final _answer = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _store.load().then((config) {
+      if (!mounted) return;
+      _recipient.text = config.recipient;
+      _question.text = config.question;
+      _answer.text = config.answer;
+    });
+  }
+
+  @override
+  void dispose() {
+    _recipient.dispose();
+    _question.dispose();
+    _answer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    await _store.save(
+      ETransferConfig(
+        recipient: _recipient.text,
+        question: _question.text,
+        answer: _answer.text,
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('E-Transfer settings saved.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeading(title: 'E-Transfer'),
+        const Text(
+          'A QR code for the amount due is shown at checkout when the '
+          'payment method is E-Transfer.',
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const Key('etransfer-recipient'),
+          controller: _recipient,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Default source (e-Transfer email)',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const Key('etransfer-question'),
+          controller: _question,
+          decoration: const InputDecoration(
+            labelText: 'Default security question',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const Key('etransfer-answer'),
+          controller: _answer,
+          decoration: const InputDecoration(
+            labelText: 'Default security answer',
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          key: const Key('save-etransfer'),
+          onPressed: _save,
+          child: const Text('Save'),
         ),
       ],
     );

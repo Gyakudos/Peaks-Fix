@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 
 import 'database.dart';
 import 'financials.dart';
+import 'payments/etransfer_config.dart';
 import 'payments/payment_processor.dart';
 import 'photo_store.dart';
 import 'photo_templates.dart';
@@ -735,6 +736,8 @@ abstract class TicketsRepository {
 
   Future<PaymentProcessor> paymentProcessor();
 
+  Future<ETransferConfig> eTransferConfig();
+
   Future<int> getPartsMarkupPercent();
 
   Future<int> getMerchMarkupPercent();
@@ -1360,6 +1363,10 @@ class DriftTicketsRepository implements TicketsRepository {
         await ProcessorConfigStore(_db).load(),
         log: ProcessorTransactionLog(_db),
       );
+
+  @override
+  Future<ETransferConfig> eTransferConfig() =>
+      ETransferConfigStore(_db).load();
 
   @override
   Future<int> getPartsMarkupPercent() =>

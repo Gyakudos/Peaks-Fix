@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../data/database.dart';
+import '../../data/payments/etransfer_config.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../payments/card_payment.dart';
@@ -181,9 +183,14 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
   }
 
   Future<void> _recordPayment(int amountDue) async {
+    final eTransfer = await widget.repository.eTransferConfig();
+    if (!mounted) return;
     final payment = await showDialog<({int amountCents, PaymentMethod method})>(
       context: context,
-      builder: (_) => _PaymentDialog(amountDueCents: amountDue),
+      builder: (_) => _PaymentDialog(
+        amountDueCents: amountDue,
+        eTransfer: eTransfer,
+      ),
     );
     if (payment == null || !mounted) return;
     final processor = await widget.repository.paymentProcessor();
@@ -507,9 +514,13 @@ class _AddMerchDialogState extends State<_AddMerchDialog> {
 }
 
 class _PaymentDialog extends StatefulWidget {
-  const _PaymentDialog({required this.amountDueCents});
+  const _PaymentDialog({
+    required this.amountDueCents,
+    this.eTransfer = const ETransferConfig(),
+  });
 
   final int amountDueCents;
+  final ETransferConfig eTransfer;
 
   @override
   State<_PaymentDialog> createState() => _PaymentDialogState();
@@ -532,6 +543,53 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || !amount.isFinite || amount <= 0) return null;
     return (amount * 100).round();
+  }
+
+  Widget _eTransferQr() {
+    final config = widget.eTransfer;
+    final amount = _amountCents();
+    if (!config.isConfigured) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 12),
+        child: Text('Set the e-Transfer email in Settings to show a QR code.'),
+      );
+    }
+    if (amount == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(8),
+            child: QrImageView(
+              key: const Key('etransfer-qr'),
+              data: config.payload(amount),
+              size: 160,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Send ${_money(amount)} to'),
+                SelectableText(
+                  config.recipient,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (config.question.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Question: ${config.question}'),
+                ],
+                if (config.answer.isNotEmpty) Text('Answer: ${config.answer}'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -567,6 +625,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               if (method != null) setState(() => _method = method);
             },
           ),
+          if (_method == PaymentMethod.eTransfer) _eTransferQr(),
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(_error!,
@@ -639,11 +698,7 @@ String _kindLabel(TicketItemKind kind) => switch (kind) {
       TicketItemKind.custom => 'Labor/service',
     };
 
-String _paymentMethodLabel(PaymentMethod method) => switch (method) {
-      PaymentMethod.cash => 'Cash',
-      PaymentMethod.card => 'Card',
-      PaymentMethod.other => 'Other',
-    };
+String _paymentMethodLabel(PaymentMethod method) => method.label;
 
 String _money(int cents) {
   final sign = cents < 0 ? '-' : '';
