@@ -61,8 +61,8 @@ class ShopDestination {
     ),
     ShopDestination(
       label: 'Partners',
-      icon: Icons.handshake_outlined,
-      selectedIcon: Icons.handshake,
+      icon: Icons.business_center_outlined,
+      selectedIcon: Icons.business_center,
       page: PartnersPage(),
     ),
     ShopDestination(

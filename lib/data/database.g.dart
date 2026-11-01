@@ -3004,6 +3004,14 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
       'notes', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _partnerNameMeta =
+      const VerificationMeta('partnerName');
+  @override
+  late final GeneratedColumn<String> partnerName = GeneratedColumn<String>(
+      'partner_name', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
   static const VerificationMeta _gstCentsMeta =
       const VerificationMeta('gstCents');
   @override
@@ -3083,6 +3091,7 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
         invoiceDiscountKind,
         invoiceDiscountValue,
         notes,
+        partnerName,
         gstCents,
         pstCents,
         createdAt,
@@ -3246,6 +3255,12 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
       context.handle(
           _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
     }
+    if (data.containsKey('partner_name')) {
+      context.handle(
+          _partnerNameMeta,
+          partnerName.isAcceptableOrUnknown(
+              data['partner_name']!, _partnerNameMeta));
+    }
     if (data.containsKey('gst_cents')) {
       context.handle(_gstCentsMeta,
           gstCents.isAcceptableOrUnknown(data['gst_cents']!, _gstCentsMeta));
@@ -3353,6 +3368,8 @@ class $TicketsTable extends Tickets with TableInfo<$TicketsTable, Ticket> {
           DriftSqlType.int, data['${effectivePrefix}invoice_discount_value'])!,
       notes: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      partnerName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}partner_name'])!,
       gstCents: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}gst_cents'])!,
       pstCents: attachedDatabase.typeMapping
@@ -3451,6 +3468,10 @@ class Ticket extends DataClass implements Insertable<Ticket> {
   final int invoiceDiscountValue;
   final String? notes;
 
+  /// The partner (drop-off location) the ticket came through, kept as text so
+  /// it survives the partner being removed.
+  final String partnerName;
+
   /// Tax snapshot taken when the ticket is closed, so later rate changes never
   /// rewrite an old invoice. Revenue stays pre-tax on Financial.
   final int gstCents;
@@ -3489,6 +3510,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       required this.invoiceDiscountKind,
       required this.invoiceDiscountValue,
       this.notes,
+      required this.partnerName,
       required this.gstCents,
       required this.pstCents,
       required this.createdAt,
@@ -3570,6 +3592,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
+    map['partner_name'] = Variable<String>(partnerName);
     map['gst_cents'] = Variable<int>(gstCents);
     map['pst_cents'] = Variable<int>(pstCents);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -3650,6 +3673,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       invoiceDiscountValue: Value(invoiceDiscountValue),
       notes:
           notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      partnerName: Value(partnerName),
       gstCents: Value(gstCents),
       pstCents: Value(pstCents),
       createdAt: Value(createdAt),
@@ -3705,6 +3729,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
       invoiceDiscountValue:
           serializer.fromJson<int>(json['invoiceDiscountValue']),
       notes: serializer.fromJson<String?>(json['notes']),
+      partnerName: serializer.fromJson<String>(json['partnerName']),
       gstCents: serializer.fromJson<int>(json['gstCents']),
       pstCents: serializer.fromJson<int>(json['pstCents']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -3749,6 +3774,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           .toJson(invoiceDiscountKind)),
       'invoiceDiscountValue': serializer.toJson<int>(invoiceDiscountValue),
       'notes': serializer.toJson<String?>(notes),
+      'partnerName': serializer.toJson<String>(partnerName),
       'gstCents': serializer.toJson<int>(gstCents),
       'pstCents': serializer.toJson<int>(pstCents),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -3788,6 +3814,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           InvoiceDiscountKind? invoiceDiscountKind,
           int? invoiceDiscountValue,
           Value<String?> notes = const Value.absent(),
+          String? partnerName,
           int? gstCents,
           int? pstCents,
           DateTime? createdAt,
@@ -3841,6 +3868,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         invoiceDiscountKind: invoiceDiscountKind ?? this.invoiceDiscountKind,
         invoiceDiscountValue: invoiceDiscountValue ?? this.invoiceDiscountValue,
         notes: notes.present ? notes.value : this.notes,
+        partnerName: partnerName ?? this.partnerName,
         gstCents: gstCents ?? this.gstCents,
         pstCents: pstCents ?? this.pstCents,
         createdAt: createdAt ?? this.createdAt,
@@ -3911,6 +3939,8 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ? data.invoiceDiscountValue.value
           : this.invoiceDiscountValue,
       notes: data.notes.present ? data.notes.value : this.notes,
+      partnerName:
+          data.partnerName.present ? data.partnerName.value : this.partnerName,
       gstCents: data.gstCents.present ? data.gstCents.value : this.gstCents,
       pstCents: data.pstCents.present ? data.pstCents.value : this.pstCents,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -3954,6 +3984,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           ..write('invoiceDiscountKind: $invoiceDiscountKind, ')
           ..write('invoiceDiscountValue: $invoiceDiscountValue, ')
           ..write('notes: $notes, ')
+          ..write('partnerName: $partnerName, ')
           ..write('gstCents: $gstCents, ')
           ..write('pstCents: $pstCents, ')
           ..write('createdAt: $createdAt, ')
@@ -3995,6 +4026,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
         invoiceDiscountKind,
         invoiceDiscountValue,
         notes,
+        partnerName,
         gstCents,
         pstCents,
         createdAt,
@@ -4035,6 +4067,7 @@ class Ticket extends DataClass implements Insertable<Ticket> {
           other.invoiceDiscountKind == this.invoiceDiscountKind &&
           other.invoiceDiscountValue == this.invoiceDiscountValue &&
           other.notes == this.notes &&
+          other.partnerName == this.partnerName &&
           other.gstCents == this.gstCents &&
           other.pstCents == this.pstCents &&
           other.createdAt == this.createdAt &&
@@ -4073,6 +4106,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
   final Value<InvoiceDiscountKind> invoiceDiscountKind;
   final Value<int> invoiceDiscountValue;
   final Value<String?> notes;
+  final Value<String> partnerName;
   final Value<int> gstCents;
   final Value<int> pstCents;
   final Value<DateTime> createdAt;
@@ -4109,6 +4143,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.invoiceDiscountKind = const Value.absent(),
     this.invoiceDiscountValue = const Value.absent(),
     this.notes = const Value.absent(),
+    this.partnerName = const Value.absent(),
     this.gstCents = const Value.absent(),
     this.pstCents = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -4146,6 +4181,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     this.invoiceDiscountKind = const Value.absent(),
     this.invoiceDiscountValue = const Value.absent(),
     this.notes = const Value.absent(),
+    this.partnerName = const Value.absent(),
     this.gstCents = const Value.absent(),
     this.pstCents = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -4186,6 +4222,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     Expression<int>? invoiceDiscountKind,
     Expression<int>? invoiceDiscountValue,
     Expression<String>? notes,
+    Expression<String>? partnerName,
     Expression<int>? gstCents,
     Expression<int>? pstCents,
     Expression<DateTime>? createdAt,
@@ -4229,6 +4266,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       if (invoiceDiscountValue != null)
         'invoice_discount_value': invoiceDiscountValue,
       if (notes != null) 'notes': notes,
+      if (partnerName != null) 'partner_name': partnerName,
       if (gstCents != null) 'gst_cents': gstCents,
       if (pstCents != null) 'pst_cents': pstCents,
       if (createdAt != null) 'created_at': createdAt,
@@ -4268,6 +4306,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       Value<InvoiceDiscountKind>? invoiceDiscountKind,
       Value<int>? invoiceDiscountValue,
       Value<String?>? notes,
+      Value<String>? partnerName,
       Value<int>? gstCents,
       Value<int>? pstCents,
       Value<DateTime>? createdAt,
@@ -4304,6 +4343,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
       invoiceDiscountKind: invoiceDiscountKind ?? this.invoiceDiscountKind,
       invoiceDiscountValue: invoiceDiscountValue ?? this.invoiceDiscountValue,
       notes: notes ?? this.notes,
+      partnerName: partnerName ?? this.partnerName,
       gstCents: gstCents ?? this.gstCents,
       pstCents: pstCents ?? this.pstCents,
       createdAt: createdAt ?? this.createdAt,
@@ -4408,6 +4448,9 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (partnerName.present) {
+      map['partner_name'] = Variable<String>(partnerName.value);
+    }
     if (gstCents.present) {
       map['gst_cents'] = Variable<int>(gstCents.value);
     }
@@ -4463,6 +4506,7 @@ class TicketsCompanion extends UpdateCompanion<Ticket> {
           ..write('invoiceDiscountKind: $invoiceDiscountKind, ')
           ..write('invoiceDiscountValue: $invoiceDiscountValue, ')
           ..write('notes: $notes, ')
+          ..write('partnerName: $partnerName, ')
           ..write('gstCents: $gstCents, ')
           ..write('pstCents: $pstCents, ')
           ..write('createdAt: $createdAt, ')
@@ -15435,6 +15479,7 @@ typedef $$TicketsTableCreateCompanionBuilder = TicketsCompanion Function({
   Value<InvoiceDiscountKind> invoiceDiscountKind,
   Value<int> invoiceDiscountValue,
   Value<String?> notes,
+  Value<String> partnerName,
   Value<int> gstCents,
   Value<int> pstCents,
   Value<DateTime> createdAt,
@@ -15472,6 +15517,7 @@ typedef $$TicketsTableUpdateCompanionBuilder = TicketsCompanion Function({
   Value<InvoiceDiscountKind> invoiceDiscountKind,
   Value<int> invoiceDiscountValue,
   Value<String?> notes,
+  Value<String> partnerName,
   Value<int> gstCents,
   Value<int> pstCents,
   Value<DateTime> createdAt,
@@ -15725,6 +15771,9 @@ class $$TicketsTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
       column: $table.notes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get partnerName => $composableBuilder(
+      column: $table.partnerName, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get gstCents => $composableBuilder(
       column: $table.gstCents, builder: (column) => ColumnFilters(column));
@@ -16051,6 +16100,9 @@ class $$TicketsTableOrderingComposer
   ColumnOrderings<String> get notes => $composableBuilder(
       column: $table.notes, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get partnerName => $composableBuilder(
+      column: $table.partnerName, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get gstCents => $composableBuilder(
       column: $table.gstCents, builder: (column) => ColumnOrderings(column));
 
@@ -16217,6 +16269,9 @@ class $$TicketsTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get partnerName => $composableBuilder(
+      column: $table.partnerName, builder: (column) => column);
 
   GeneratedColumn<int> get gstCents =>
       $composableBuilder(column: $table.gstCents, builder: (column) => column);
@@ -16509,6 +16564,7 @@ class $$TicketsTableTableManager extends RootTableManager<
                 const Value.absent(),
             Value<int> invoiceDiscountValue = const Value.absent(),
             Value<String?> notes = const Value.absent(),
+            Value<String> partnerName = const Value.absent(),
             Value<int> gstCents = const Value.absent(),
             Value<int> pstCents = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -16546,6 +16602,7 @@ class $$TicketsTableTableManager extends RootTableManager<
             invoiceDiscountKind: invoiceDiscountKind,
             invoiceDiscountValue: invoiceDiscountValue,
             notes: notes,
+            partnerName: partnerName,
             gstCents: gstCents,
             pstCents: pstCents,
             createdAt: createdAt,
@@ -16584,6 +16641,7 @@ class $$TicketsTableTableManager extends RootTableManager<
                 const Value.absent(),
             Value<int> invoiceDiscountValue = const Value.absent(),
             Value<String?> notes = const Value.absent(),
+            Value<String> partnerName = const Value.absent(),
             Value<int> gstCents = const Value.absent(),
             Value<int> pstCents = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -16621,6 +16679,7 @@ class $$TicketsTableTableManager extends RootTableManager<
             invoiceDiscountKind: invoiceDiscountKind,
             invoiceDiscountValue: invoiceDiscountValue,
             notes: notes,
+            partnerName: partnerName,
             gstCents: gstCents,
             pstCents: pstCents,
             createdAt: createdAt,

@@ -970,6 +970,7 @@ class FakeTicketsRepository implements TicketsRepository {
     bool serialMissing = false,
     String? photoTemplateKey,
     TicketDates? dates,
+    String partnerName = '',
     required String complaint,
   }) async {
     creations.add(

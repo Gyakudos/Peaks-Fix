@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../../data/partners.dart';
 import '../payments/card_payment.dart';
 import '../../data/photo_templates.dart';
 import '../../data/shop_scope.dart';
@@ -58,6 +59,29 @@ class _NewRepairPageState extends State<NewRepairPage> {
   bool _saving = false;
   String? _error;
   int? _customerId;
+  List<Partner> _partners = const [];
+  Partner? _partner;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPartners();
+  }
+
+  Future<void> _loadPartners() async {
+    final partners = await loadPartners(AppDatabase.instance);
+    if (!mounted || partners.isEmpty) return;
+    final quoted = (widget.customerName ?? '').trim().toLowerCase();
+    setState(() {
+      _partners = partners;
+      for (final partner in partners) {
+        if (quoted.isNotEmpty && partner.name.toLowerCase() == quoted) {
+          _partner = partner;
+        }
+      }
+    });
+  }
+
   String? _selectedCustomerName;
   int? _customerDeviceId;
   List<CustomerDeviceEntry> _customerDevices = const [];
@@ -423,10 +447,18 @@ class _NewRepairPageState extends State<NewRepairPage> {
           customerContactedAt: _customerContactedAt,
           pickedUpAt: _pickedUpAt,
         ),
+        partnerName: _partner?.name ?? '',
         complaint: _complaint.text,
       );
       if (widget.quoteTicketId case final quoteId?) {
         await repository.adoptQuote(quoteId: quoteId, ticketId: created.id);
+      }
+      if (_partner case final partner? when partner.discountPercent > 0) {
+        await repository.setInvoiceDiscount(
+          ticketId: created.id,
+          kind: InvoiceDiscountKind.percentage,
+          value: partner.discountPercent,
+        );
       }
       await repository.recordTicketDeposit(
         ticketId: created.id,
@@ -520,6 +552,37 @@ class _NewRepairPageState extends State<NewRepairPage> {
                   _Section(
                     title: 'Customer',
                     children: [
+                      if (_partners.isNotEmpty) ...[
+                        DropdownButtonFormField<Partner?>(
+                          key: const Key('intake-partner'),
+                          initialValue: _partner,
+                          decoration: const InputDecoration(
+                            labelText: 'Partner (drop-off location)',
+                            helperText:
+                                'Applies the partner discount to the invoice.',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<Partner?>(
+                              value: null,
+                              child: Text('Walk-in (no partner)'),
+                            ),
+                            for (final partner in _partners)
+                              DropdownMenuItem<Partner?>(
+                                value: partner,
+                                child: Text(
+                                  partner.discountPercent > 0
+                                      ? '${partner.name} '
+                                          '(${partner.discountPercent}% off)'
+                                      : partner.name,
+                                ),
+                              ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _partner = value),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       Autocomplete<CustomerRecord>(
                         textEditingController: _customer,
                         focusNode: _customerFocus,

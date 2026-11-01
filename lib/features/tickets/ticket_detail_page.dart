@@ -111,6 +111,20 @@ class _TicketBody extends StatelessWidget {
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
+                              if (summary.partnerName.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Chip(
+                                    key: const Key('ticket-partner'),
+                                    avatar: const Icon(
+                                      Icons.business_center,
+                                      size: 16,
+                                    ),
+                                    label: Text(
+                                      'Partner: ${summary.partnerName}',
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -151,6 +165,10 @@ class _TicketBody extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (summary.partnerName.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _PartnerPricing(ticketId: summary.id),
+                    ],
                     if (summary.shopTag != null) ...[
                       const SizedBox(height: 14),
                       Text(
@@ -437,6 +455,48 @@ class _ReportSectionState extends State<_ReportSection> {
               : const SizedBox(width: double.infinity, height: 0),
         ),
       ],
+    );
+  }
+}
+
+/// Full price beside the partner price, before tax.
+class _PartnerPricing extends StatelessWidget {
+  const _PartnerPricing({required this.ticketId});
+
+  final int ticketId;
+
+  String _money(int cents) => '\$${(cents / 100).toStringAsFixed(2)}';
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<InvoiceDraft?>(
+      stream: ShopScope.of(context).watchInvoice(ticketId),
+      builder: (context, snapshot) {
+        final draft = snapshot.data;
+        if (draft == null || draft.subtotalCents == 0) {
+          return const SizedBox.shrink();
+        }
+        return Wrap(
+          key: const Key('ticket-partner-pricing'),
+          spacing: 24,
+          runSpacing: 12,
+          children: [
+            _Meta(label: 'Full price', value: _money(draft.subtotalCents)),
+            if (draft.discountCents > 0)
+              _Meta(
+                label: draft.discountKind == InvoiceDiscountKind.percentage
+                    ? 'Partner discount (${draft.discountValue}%)'
+                    : 'Partner discount',
+                value: '-${_money(draft.discountCents)}',
+              ),
+            _Meta(
+              label: 'Partner price',
+              value: _money(draft.taxableCents),
+              emphasise: true,
+            ),
+          ],
+        );
+      },
     );
   }
 }

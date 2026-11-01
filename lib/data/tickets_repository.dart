@@ -33,6 +33,7 @@ class TicketBoardEntry {
     this.serialMissing = false,
     this.deviceVariant,
     this.deviceSide,
+    this.partnerName = '',
   });
 
   final int id;
@@ -63,6 +64,9 @@ class TicketBoardEntry {
   /// `left` or `right` when the device is booked one half at a time, e.g. a
   /// single Joy-Con.
   final String? deviceSide;
+
+  /// The partner this ticket came through; empty for walk-ins.
+  final String partnerName;
 
   /// Serial when recorded — factory or shop-applied — otherwise a note saying
   /// no serial was captured.
@@ -894,6 +898,7 @@ abstract class TicketsRepository {
     bool serialMissing = false,
     String? photoTemplateKey,
     TicketDates? dates,
+    String partnerName = '',
     required String complaint,
   });
 
@@ -1985,6 +1990,7 @@ class DriftTicketsRepository implements TicketsRepository {
     bool serialMissing = false,
     String? photoTemplateKey,
     TicketDates? dates,
+    String partnerName = '',
     required String complaint,
   }) {
     return _db.createTicket(
@@ -2005,6 +2011,7 @@ class DriftTicketsRepository implements TicketsRepository {
       partsArriveAt: dates?.partsArriveAt,
       customerContactedAt: dates?.customerContactedAt,
       pickedUpAt: dates?.pickedUpAt,
+      partnerName: partnerName,
       complaint: complaint,
     );
   }
@@ -2068,6 +2075,7 @@ class DriftTicketsRepository implements TicketsRepository {
       serialMissing: ticket.serialMissing,
       deviceVariant: ticket.deviceVariant,
       deviceSide: ticket.deviceSide,
+      partnerName: ticket.partnerName,
     );
   }
 

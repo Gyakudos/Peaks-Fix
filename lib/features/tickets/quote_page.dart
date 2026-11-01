@@ -303,6 +303,24 @@ class QuoteBody extends StatelessWidget {
                             ),
                         if (draft != null && lines.isNotEmpty) ...[
                           const Divider(),
+                          if (draft.discountCents > 0) ...[
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                'Full price ${_money(draft.subtotalCents)}',
+                                key: const Key('quote-full-price'),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                'Discount -${_money(draft.discountCents)} → '
+                                'Partner price ${_money(draft.taxableCents)}',
+                                key: const Key('quote-partner-price'),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                          ],
                           Align(
                             alignment: Alignment.centerRight,
                             child: Text(

@@ -358,6 +358,10 @@ class Tickets extends Table {
       integer().withDefault(const Constant(0))();
   TextColumn get notes => text().nullable()();
 
+  /// The partner (drop-off location) the ticket came through, kept as text so
+  /// it survives the partner being removed.
+  TextColumn get partnerName => text().withDefault(const Constant(''))();
+
   /// Tax snapshot taken when the ticket is closed, so later rate changes never
   /// rewrite an old invoice. Revenue stays pre-tax on Financial.
   IntColumn get gstCents => integer().withDefault(const Constant(0))();
@@ -714,7 +718,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Compared between host and clients so a mismatched build can't migrate or
   /// misread the shared database.
-  static const int currentSchemaVersion = 24;
+  static const int currentSchemaVersion = 25;
 
   /// The app's database: local, shared as a host, or a host's, chosen at
   /// startup in `main`.
@@ -972,6 +976,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 24) {
             // Brand headings can be switched off per shop.
             await m.addColumn(deviceBrands, deviceBrands.isActive);
+          }
+          if (from < 25) {
+            await m.addColumn(tickets, tickets.partnerName);
           }
         },
       );
@@ -1728,10 +1735,12 @@ class AppDatabase extends _$AppDatabase {
     DateTime? partsArriveAt,
     DateTime? customerContactedAt,
     DateTime? pickedUpAt,
+    String partnerName = '',
     required String complaint,
   }) {
     return transaction(() async {
       final name = customerName.trim();
+      final partner = partnerName.trim();
       final phone = customerPhone.trim();
       final email = customerEmail.trim();
       final side = (deviceSide ?? '').trim().toLowerCase();
@@ -1898,6 +1907,7 @@ class AppDatabase extends _$AppDatabase {
           serial: Value(effectiveSerial.isEmpty ? null : effectiveSerial),
           serialMissing: Value(serialMissing),
           complaint: complaint.trim(),
+          partnerName: Value(partner),
           photoTemplateKey: Value(templateKey),
           dropOffAt: Value(dateOnly(dropOffAt)),
           technicianStartAt: Value(
