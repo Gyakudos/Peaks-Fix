@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
+import '../../data/partners.dart';
 import '../../data/tickets_repository.dart';
 
 Future<void> showInvoiceDialog(
@@ -49,6 +50,50 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
   bool _discountInitialized = false;
   bool _busy = false;
   String? _error;
+  List<Partner> _partners = const [];
+  String? _partnerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPartners();
+  }
+
+  Future<void> _loadPartners() async {
+    try {
+      final partners = await loadPartners(AppDatabase.instance);
+      if (mounted) setState(() => _partners = partners);
+    } catch (_) {}
+  }
+
+  String get _typeValue => _partnerId != null
+      ? 'p:$_partnerId'
+      : switch (_discountKind) {
+          InvoiceDiscountKind.none => 'none',
+          InvoiceDiscountKind.percentage => 'percentage',
+          InvoiceDiscountKind.fixed => 'fixed',
+        };
+
+  void _pickType(String? value) {
+    final v = value ?? 'none';
+    setState(() {
+      _error = null;
+      _partnerId = null;
+      if (v.startsWith('p:')) {
+        final partner = _partners.firstWhere((p) => 'p:${p.id}' == v);
+        _partnerId = partner.id;
+        _discountKind = InvoiceDiscountKind.percentage;
+        _discountController.text = partner.discountPercent.toString();
+      } else {
+        _discountKind = switch (v) {
+          'percentage' => InvoiceDiscountKind.percentage,
+          'fixed' => InvoiceDiscountKind.fixed,
+          _ => InvoiceDiscountKind.none,
+        };
+      }
+    });
+    if (_partnerId != null) _applyDiscount();
+  }
 
   @override
   void dispose() {
@@ -381,35 +426,38 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                       const Expanded(child: Text('Discount')),
                       SizedBox(
                         width: 150,
-                        child: DropdownButtonFormField<InvoiceDiscountKind>(
-                          key: const Key('invoice-discount-kind'),
-                          initialValue: _discountKind,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey('invoice-discount-kind-$_typeValue'),
+                          initialValue: _typeValue,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             isDense: true,
                             labelText: 'Type',
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: InvoiceDiscountKind.none,
+                          items: [
+                            const DropdownMenuItem(
+                              value: 'none',
                               child: Text('None'),
                             ),
-                            DropdownMenuItem(
-                              value: InvoiceDiscountKind.percentage,
+                            const DropdownMenuItem(
+                              value: 'percentage',
                               child: Text('Percent'),
                             ),
-                            DropdownMenuItem(
-                              value: InvoiceDiscountKind.fixed,
+                            const DropdownMenuItem(
+                              value: 'fixed',
                               child: Text('Fixed'),
                             ),
+                            for (final partner in _partners)
+                              DropdownMenuItem(
+                                value: 'p:${partner.id}',
+                                child: Text(
+                                  'Partner: ${partner.name} '
+                                  '(${partner.discountPercent}%)',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                           ],
-                          onChanged: _busy
-                              ? null
-                              : (value) => setState(() {
-                                    _discountKind =
-                                        value ?? InvoiceDiscountKind.none;
-                                    _error = null;
-                                  }),
+                          onChanged: _busy ? null : _pickType,
                         ),
                       ),
                       const SizedBox(width: 8),
