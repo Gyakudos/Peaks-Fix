@@ -440,26 +440,44 @@ class InvoiceDraft {
     required this.discountValue,
     required this.lines,
     this.taxes = const TaxConfig(),
+    this.partnerPartsPercent = 0,
+    this.partnerLabourPercent = 0,
   });
 
   final InvoiceDiscountKind discountKind;
   final int discountValue;
   final List<InvoiceLine> lines;
   final TaxConfig taxes;
+  final int partnerPartsPercent;
+  final int partnerLabourPercent;
 
   int get subtotalCents =>
       lines.fold(0, (total, line) => total + line.lineTotalCents);
 
-  int get discountCents {
-    switch (discountKind) {
-      case InvoiceDiscountKind.none:
-        return 0;
-      case InvoiceDiscountKind.percentage:
-        return (subtotalCents * discountValue + 50) ~/ 100;
-      case InvoiceDiscountKind.fixed:
-        return discountValue > subtotalCents ? subtotalCents : discountValue;
-    }
-  }
+  int get partsCents => lines
+      .where((l) => l.kind == TicketItemKind.part && !l.isShopSupply)
+      .fold(0, (total, line) => total + line.lineTotalCents);
+
+  int get labourCents => lines
+      .where(
+        (l) => l.kind != TicketItemKind.part && !l.isMerch && !l.isShopSupply,
+      )
+      .fold(0, (total, line) => total + line.lineTotalCents);
+
+  /// Discount from the partner's parts and labour percentages alone.
+  int get partnerDiscountCents =>
+      (partsCents * partnerPartsPercent + 50) ~/ 100 +
+      (labourCents * partnerLabourPercent + 50) ~/ 100;
+
+  int get discountCents => invoiceDiscountCentsFor(
+        subtotalCents: subtotalCents,
+        partsCents: partsCents,
+        labourCents: labourCents,
+        kind: discountKind,
+        value: discountValue,
+        partnerPartsPercent: partnerPartsPercent,
+        partnerLabourPercent: partnerLabourPercent,
+      );
 
   /// Amount sales tax is calculated on: the bill after discounts.
   int get taxableCents => subtotalCents - discountCents;
@@ -785,6 +803,8 @@ abstract class TicketsRepository {
     required int ticketId,
     required InvoiceDiscountKind kind,
     required int value,
+    int partnerPartsPercent,
+    int partnerLabourPercent,
   });
 
   Stream<TicketDetailEntry?> watchTicket(int ticketId);
@@ -1249,6 +1269,8 @@ class DriftTicketsRepository implements TicketsRepository {
         InvoiceDraft(
           discountKind: ticket.invoiceDiscountKind,
           discountValue: ticket.invoiceDiscountValue,
+          partnerPartsPercent: ticket.partnerPartsPercent,
+          partnerLabourPercent: ticket.partnerLabourPercent,
           taxes: currentTaxes,
           lines: [
             for (final row in currentRows)
@@ -1449,11 +1471,15 @@ class DriftTicketsRepository implements TicketsRepository {
     required int ticketId,
     required InvoiceDiscountKind kind,
     required int value,
+    int partnerPartsPercent = 0,
+    int partnerLabourPercent = 0,
   }) =>
       _db.setInvoiceDiscount(
         ticketId: ticketId,
         kind: kind,
         value: value,
+        partnerPartsPercent: partnerPartsPercent,
+        partnerLabourPercent: partnerLabourPercent,
       );
 
   @override

@@ -337,10 +337,17 @@ extension FinancialQueries on AppDatabase {
       final result = [
         for (final accumulator in byTicket.values)
           () {
-            final discount = _discountCents(
+            final discount = invoiceDiscountCentsFor(
               subtotalCents: accumulator.subtotalCents,
+              partsCents: accumulator.partsSubtotalCents,
+              labourCents: accumulator.subtotalCents -
+                  accumulator.partsSubtotalCents -
+                  accumulator.merchSubtotalCents -
+                  accumulator.supplyRevenueCents,
               kind: accumulator.ticket.invoiceDiscountKind,
               value: accumulator.ticket.invoiceDiscountValue,
+              partnerPartsPercent: accumulator.ticket.partnerPartsPercent,
+              partnerLabourPercent: accumulator.ticket.partnerLabourPercent,
             );
             final split = splitDiscountedRevenue(
               partsSubtotalCents: accumulator.partsSubtotalCents,
@@ -660,15 +667,3 @@ List<Map<String, dynamic>> _decodeList(String? json) {
     return const [];
   }
 }
-
-int _discountCents({
-  required int subtotalCents,
-  required InvoiceDiscountKind kind,
-  required int value,
-}) =>
-    switch (kind) {
-      InvoiceDiscountKind.none => 0,
-      InvoiceDiscountKind.percentage => (subtotalCents * value + 50) ~/ 100,
-      InvoiceDiscountKind.fixed =>
-        value > subtotalCents ? subtotalCents : value,
-    };

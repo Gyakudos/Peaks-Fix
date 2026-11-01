@@ -453,11 +453,13 @@ class _NewRepairPageState extends State<NewRepairPage> {
       if (widget.quoteTicketId case final quoteId?) {
         await repository.adoptQuote(quoteId: quoteId, ticketId: created.id);
       }
-      if (_partner case final partner? when partner.discountPercent > 0) {
+      if (_partner case final partner? when partner.hasDiscount) {
         await repository.setInvoiceDiscount(
           ticketId: created.id,
-          kind: InvoiceDiscountKind.percentage,
-          value: partner.discountPercent,
+          kind: InvoiceDiscountKind.none,
+          value: 0,
+          partnerPartsPercent: partner.partsDiscountPercent,
+          partnerLabourPercent: partner.labourDiscountPercent,
         );
       }
       await repository.recordTicketDeposit(
@@ -571,9 +573,9 @@ class _NewRepairPageState extends State<NewRepairPage> {
                               DropdownMenuItem<Partner?>(
                                 value: partner,
                                 child: Text(
-                                  partner.discountPercent > 0
+                                  partner.hasDiscount
                                       ? '${partner.name} '
-                                          '(${partner.discountPercent}% off)'
+                                          '(${partner.discountLabel})'
                                       : partner.name,
                                 ),
                               ),

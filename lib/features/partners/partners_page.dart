@@ -1,4 +1,9 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../data/database.dart';
 import '../../data/partners.dart';
@@ -77,7 +82,14 @@ class _PartnersPageState extends State<PartnersPage> {
     final partners = _partners;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Partners'),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.business_center),
+            SizedBox(width: 8),
+            Text('Partners'),
+          ],
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -109,9 +121,12 @@ class _PartnersPageState extends State<PartnersPage> {
                           Card(
                             child: ListTile(
                               key: Key('partner-${partner.id}'),
+                              leading: _PartnerLogo(path: partner.logoPath),
                               title: Text(partner.name),
                               subtitle: Text(
                                 [
+                                  if (partner.hasDiscount)
+                                    partner.discountLabel,
                                   if (partner.contact.isNotEmpty)
                                     partner.contact,
                                   if (partner.phone.isNotEmpty) partner.phone,
@@ -119,13 +134,6 @@ class _PartnersPageState extends State<PartnersPage> {
                                     partner.address,
                                 ].join(' · '),
                               ),
-                              leading: partner.discountPercent > 0
-                                  ? Chip(
-                                      label: Text(
-                                        '${partner.discountPercent}% off',
-                                      ),
-                                    )
-                                  : null,
                               trailing: Wrap(
                                 spacing: 4,
                                 children: [
@@ -160,6 +168,32 @@ class _PartnersPageState extends State<PartnersPage> {
   }
 }
 
+class _PartnerLogo extends StatelessWidget {
+  const _PartnerLogo({required this.path, this.size = 48});
+
+  final String path;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final file = path.isEmpty ? null : File(path);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: file != null && file.existsSync()
+          ? Image.file(file, fit: BoxFit.contain)
+          : Icon(Icons.business_center_outlined, color: scheme.outline),
+    );
+  }
+}
+
 class _PartnerDialog extends StatefulWidget {
   const _PartnerDialog({this.existing});
 
@@ -176,9 +210,47 @@ class _PartnerDialogState extends State<_PartnerDialog> {
   late final _email = TextEditingController(text: widget.existing?.email);
   late final _address = TextEditingController(text: widget.existing?.address);
   late final _discount = TextEditingController(
-    text: '${widget.existing?.discountPercent ?? 0}',
+    text: '${widget.existing?.partsDiscountPercent ?? 0}',
   );
+  late final _labourDiscount = TextEditingController(
+    text: '${widget.existing?.labourDiscountPercent ?? 0}',
+  );
+  late bool _blanket = widget.existing == null ||
+      widget.existing!.partsDiscountPercent ==
+          widget.existing!.labourDiscountPercent;
+  late String _logoPath = widget.existing?.logoPath ?? '';
+  late final String _id =
+      widget.existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString();
   String? _error;
+
+  Future<void> _chooseLogo() async {
+    try {
+      final file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'Images',
+            extensions: ['jpg', 'jpeg', 'png', 'webp'],
+          ),
+        ],
+      );
+      if (file == null) return;
+      if (await file.length() > 5 * 1024 * 1024) {
+        throw const FormatException('Choose a logo smaller than 5 MB.');
+      }
+      final support = await getApplicationSupportDirectory();
+      final folder = Directory(p.join(support.path, 'partner_logos'));
+      await folder.create(recursive: true);
+      final target = p.join(
+        folder.path,
+        '${_id}_${DateTime.now().millisecondsSinceEpoch}'
+        '${p.extension(file.name)}',
+      );
+      await File(target).writeAsBytes(await file.readAsBytes());
+      if (mounted) setState(() => _logoPath = target);
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not add that logo: $error');
+    }
+  }
 
   @override
   void dispose() {
@@ -186,30 +258,39 @@ class _PartnerDialogState extends State<_PartnerDialog> {
       controller.dispose();
     }
     _discount.dispose();
+    _labourDiscount.dispose();
     super.dispose();
   }
 
   void _save() {
     final name = _name.text.trim();
     final discount = int.tryParse(_discount.text.trim());
+    final labourDiscount =
+        _blanket ? discount : int.tryParse(_labourDiscount.text.trim());
     if (name.isEmpty) {
       setState(() => _error = 'Enter the partner name.');
       return;
     }
-    if (discount == null || discount < 0 || discount > 100) {
-      setState(() => _error = 'Discount must be a whole number, 0 to 100.');
+    if (discount == null ||
+        discount < 0 ||
+        discount > 100 ||
+        labourDiscount == null ||
+        labourDiscount < 0 ||
+        labourDiscount > 100) {
+      setState(() => _error = 'Discounts must be whole numbers, 0 to 100.');
       return;
     }
     Navigator.of(context).pop(
       Partner(
-        id: widget.existing?.id ??
-            DateTime.now().microsecondsSinceEpoch.toString(),
+        id: _id,
         name: name,
+        logoPath: _logoPath,
         contact: _contact.text.trim(),
         phone: _phone.text.trim(),
         email: _email.text.trim(),
         address: _address.text.trim(),
-        discountPercent: discount,
+        partsDiscountPercent: discount,
+        labourDiscountPercent: labourDiscount,
       ),
     );
   }
@@ -237,12 +318,61 @@ class _PartnerDialogState extends State<_PartnerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                children: [
+                  _PartnerLogo(path: _logoPath, size: 72),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    key: const Key('partner-logo-choose'),
+                    onPressed: _chooseLogo,
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(_logoPath.isEmpty ? 'Add logo' : 'Change logo'),
+                  ),
+                  if (_logoPath.isNotEmpty)
+                    IconButton(
+                      key: const Key('partner-logo-remove'),
+                      tooltip: 'Remove logo',
+                      onPressed: () => setState(() => _logoPath = ''),
+                      icon: const Icon(Icons.close),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
               _field(const Key('partner-name'), _name, 'Name'),
               _field(const Key('partner-contact'), _contact, 'Contact person'),
               _field(const Key('partner-phone'), _phone, 'Phone'),
               _field(const Key('partner-email'), _email, 'Email'),
               _field(const Key('partner-address'), _address, 'Address'),
-              _field(const Key('partner-discount'), _discount, 'Discount (%)'),
+              DropdownButtonFormField<bool>(
+                key: const Key('partner-discount-mode'),
+                initialValue: _blanket,
+                decoration: const InputDecoration(
+                  labelText: 'Discount',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: true,
+                    child: Text('Both Blanket (same rate)'),
+                  ),
+                  DropdownMenuItem(value: false, child: Text('Set Each')),
+                ],
+                onChanged: (value) => setState(() => _blanket = value ?? true),
+              ),
+              const SizedBox(height: 12),
+              _field(
+                const Key('partner-discount'),
+                _discount,
+                _blanket
+                    ? 'Discount on Parts and Labour (%)'
+                    : 'Discount on Parts (%)',
+              ),
+              if (!_blanket)
+                _field(
+                  const Key('partner-labour-discount'),
+                  _labourDiscount,
+                  'Discount on Labour (%)',
+                ),
               if (_error != null)
                 Text(
                   _error!,

@@ -51,7 +51,8 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
   bool _busy = false;
   String? _error;
   List<Partner> _partners = const [];
-  String? _partnerId;
+  int _partnerParts = 0;
+  int _partnerLabour = 0;
 
   @override
   void initState() {
@@ -66,8 +67,20 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
     } catch (_) {}
   }
 
-  String get _typeValue => _partnerId != null
-      ? 'p:$_partnerId'
+  Partner? get _matchingPartner {
+    for (final partner in _partners) {
+      if (partner.partsDiscountPercent == _partnerParts &&
+          partner.labourDiscountPercent == _partnerLabour) {
+        return partner;
+      }
+    }
+    return null;
+  }
+
+  bool get _partnerActive => _partnerParts > 0 || _partnerLabour > 0;
+
+  String get _typeValue => _partnerActive
+      ? 'p:${_matchingPartner?.id ?? 'custom'}'
       : switch (_discountKind) {
           InvoiceDiscountKind.none => 'none',
           InvoiceDiscountKind.percentage => 'percentage',
@@ -76,23 +89,36 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
 
   void _pickType(String? value) {
     final v = value ?? 'none';
+    if (v == 'p:custom') return;
+    if (v.startsWith('p:')) {
+      final partner = _partners.firstWhere((p) => 'p:${p.id}' == v);
+      setState(() {
+        _discountKind = InvoiceDiscountKind.none;
+        _discountController.text = '';
+        _partnerParts = partner.partsDiscountPercent;
+        _partnerLabour = partner.labourDiscountPercent;
+      });
+      _run(
+        () => widget.repository.setInvoiceDiscount(
+          ticketId: widget.ticketId,
+          kind: InvoiceDiscountKind.none,
+          value: 0,
+          partnerPartsPercent: _partnerParts,
+          partnerLabourPercent: _partnerLabour,
+        ),
+      );
+      return;
+    }
     setState(() {
       _error = null;
-      _partnerId = null;
-      if (v.startsWith('p:')) {
-        final partner = _partners.firstWhere((p) => 'p:${p.id}' == v);
-        _partnerId = partner.id;
-        _discountKind = InvoiceDiscountKind.percentage;
-        _discountController.text = partner.discountPercent.toString();
-      } else {
-        _discountKind = switch (v) {
-          'percentage' => InvoiceDiscountKind.percentage,
-          'fixed' => InvoiceDiscountKind.fixed,
-          _ => InvoiceDiscountKind.none,
-        };
-      }
+      _partnerParts = 0;
+      _partnerLabour = 0;
+      _discountKind = switch (v) {
+        'percentage' => InvoiceDiscountKind.percentage,
+        'fixed' => InvoiceDiscountKind.fixed,
+        _ => InvoiceDiscountKind.none,
+      };
     });
-    if (_partnerId != null) _applyDiscount();
   }
 
   @override
@@ -216,6 +242,8 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
           ticketId: widget.ticketId,
           kind: _discountKind,
           value: value,
+          partnerPartsPercent: _partnerParts,
+          partnerLabourPercent: _partnerLabour,
         ));
   }
 
@@ -266,6 +294,8 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
               final invoice = snapshot.data;
               if (invoice != null && !_discountInitialized) {
                 _discountKind = invoice.discountKind;
+                _partnerParts = invoice.partnerPartsPercent;
+                _partnerLabour = invoice.partnerLabourPercent;
                 _discountController.text = switch (invoice.discountKind) {
                   InvoiceDiscountKind.none => '',
                   InvoiceDiscountKind.percentage =>
@@ -452,7 +482,16 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
                                 value: 'p:${partner.id}',
                                 child: Text(
                                   'Partner: ${partner.name} '
-                                  '(${partner.discountPercent}%)',
+                                  '(${partner.discountLabel})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            if (_partnerActive && _matchingPartner == null)
+                              DropdownMenuItem(
+                                value: 'p:custom',
+                                child: Text(
+                                  'Partner (Parts $_partnerParts% / '
+                                  'Labour $_partnerLabour%)',
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),

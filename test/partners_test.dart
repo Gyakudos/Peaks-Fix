@@ -10,15 +10,47 @@ void main() {
     addTearDown(db.close);
     expect(await loadPartners(db), isEmpty);
     await savePartners(db, const [
-      Partner(id: '2', name: 'Zed Cellular', discountPercent: 15),
+      Partner(
+        id: '2',
+        name: 'Zed Cellular',
+        partsDiscountPercent: 15,
+        labourDiscountPercent: 5,
+      ),
       Partner(id: '1', name: 'Alpha Pawn', phone: '555'),
     ]);
     final loaded = await loadPartners(db);
     expect([for (final p in loaded) p.name], ['Alpha Pawn', 'Zed Cellular']);
-    expect(loaded.last.discountPercent, 15);
+    expect(loaded.last.partsDiscountPercent, 15);
+    expect(loaded.last.labourDiscountPercent, 5);
+    final legacy = Partner.fromJson({'id': 'x', 'discountPercent': 400});
+    expect(legacy.partsDiscountPercent, 100);
+    expect(legacy.labourDiscountPercent, 100);
+  });
+
+  test('partner discount splits across parts and labour', () {
     expect(
-        Partner.fromJson({'id': 'x', 'discountPercent': 400}).discountPercent,
-        100);
+      invoiceDiscountCentsFor(
+        subtotalCents: 30000,
+        partsCents: 20000,
+        labourCents: 10000,
+        kind: InvoiceDiscountKind.none,
+        value: 0,
+        partnerPartsPercent: 10,
+        partnerLabourPercent: 50,
+      ),
+      7000,
+    );
+    expect(
+      invoiceDiscountCentsFor(
+        subtotalCents: 30000,
+        partsCents: 20000,
+        labourCents: 0,
+        kind: InvoiceDiscountKind.none,
+        value: 0,
+        partnerPartsPercent: 10,
+      ),
+      2000,
+    );
   });
 
   test('only admins open Partners', () {

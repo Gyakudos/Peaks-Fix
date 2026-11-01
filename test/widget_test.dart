@@ -692,6 +692,8 @@ class FakeTicketsRepository implements TicketsRepository {
     required int ticketId,
     required InvoiceDiscountKind kind,
     required int value,
+    int partnerPartsPercent = 0,
+    int partnerLabourPercent = 0,
   }) async {}
 
   @override

@@ -43,8 +43,8 @@ Future<void> startQuote(BuildContext context, {Partner? partner}) async {
                       DropdownMenuItem<Partner?>(
                         value: item,
                         child: Text(
-                          item.discountPercent > 0
-                              ? '${item.name} (${item.discountPercent}% off)'
+                          item.hasDiscount
+                              ? '${item.name} (${item.discountLabel})'
                               : item.name,
                         ),
                       ),
@@ -88,11 +88,13 @@ Future<void> startQuote(BuildContext context, {Partner? partner}) async {
   controller.dispose();
   if (name == null || !context.mounted) return;
   final created = await repository.createQuote(customerName: name);
-  if (chosen != null && chosen!.discountPercent > 0) {
+  if (chosen != null && chosen!.hasDiscount) {
     await repository.setInvoiceDiscount(
       ticketId: created.id,
-      kind: InvoiceDiscountKind.percentage,
-      value: chosen!.discountPercent,
+      kind: InvoiceDiscountKind.none,
+      value: 0,
+      partnerPartsPercent: chosen!.partsDiscountPercent,
+      partnerLabourPercent: chosen!.labourDiscountPercent,
     );
   }
   if (!context.mounted) return;

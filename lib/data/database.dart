@@ -80,6 +80,28 @@ bool isShopSupplyCategory(String? category) => const {
       'shop supplies',
     }.contains((category ?? '').trim().toLowerCase());
 
+/// Discount on an invoice: the manual discount (on the whole subtotal) plus
+/// the partner's percentages of the parts and of the labour, capped at the
+/// subtotal.
+int invoiceDiscountCentsFor({
+  required int subtotalCents,
+  required int partsCents,
+  required int labourCents,
+  required InvoiceDiscountKind kind,
+  required int value,
+  int partnerPartsPercent = 0,
+  int partnerLabourPercent = 0,
+}) {
+  final manual = switch (kind) {
+    InvoiceDiscountKind.none => 0,
+    InvoiceDiscountKind.percentage => (subtotalCents * value + 50) ~/ 100,
+    InvoiceDiscountKind.fixed => value,
+  };
+  final partner = (partsCents * partnerPartsPercent + 50) ~/ 100 +
+      (labourCents * partnerLabourPercent + 50) ~/ 100;
+  return (manual + partner).clamp(0, subtotalCents).toInt();
+}
+
 /// A part that comes with a labour item. It is listed on the invoice at no
 /// charge, because its cost is covered by the labour price.
 class LabourIncludedPart {
@@ -361,6 +383,13 @@ class Tickets extends Table {
   /// The partner (drop-off location) the ticket came through, kept as text so
   /// it survives the partner being removed.
   TextColumn get partnerName => text().withDefault(const Constant(''))();
+
+  /// Partner discount, as a percentage of the parts and of the labour on the
+  /// invoice. Applied on top of the manual discount.
+  IntColumn get partnerPartsPercent =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get partnerLabourPercent =>
+      integer().withDefault(const Constant(0))();
 
   /// Tax snapshot taken when the ticket is closed, so later rate changes never
   /// rewrite an old invoice. Revenue stays pre-tax on Financial.
@@ -718,7 +747,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Compared between host and clients so a mismatched build can't migrate or
   /// misread the shared database.
-  static const int currentSchemaVersion = 25;
+  static const int currentSchemaVersion = 26;
 
   /// The app's database: local, shared as a host, or a host's, chosen at
   /// startup in `main`.
@@ -979,6 +1008,10 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 25) {
             await m.addColumn(tickets, tickets.partnerName);
+          }
+          if (from < 26) {
+            await m.addColumn(tickets, tickets.partnerPartsPercent);
+            await m.addColumn(tickets, tickets.partnerLabourPercent);
           }
         },
       );
@@ -3121,6 +3154,8 @@ class AppDatabase extends _$AppDatabase {
           TicketsCompanion(
             invoiceDiscountKind: Value(quote.invoiceDiscountKind),
             invoiceDiscountValue: Value(quote.invoiceDiscountValue),
+            partnerPartsPercent: Value(quote.partnerPartsPercent),
+            partnerLabourPercent: Value(quote.partnerLabourPercent),
           ),
         );
         await deleteTicket(quoteId);
@@ -3370,14 +3405,7 @@ class AppDatabase extends _$AppDatabase {
         0,
         (sum, item) => sum + item.quantity * item.unitPriceCents,
       );
-      final discount = switch (ticket!.invoiceDiscountKind) {
-        InvoiceDiscountKind.none => 0,
-        InvoiceDiscountKind.percentage =>
-          (subtotal * ticket.invoiceDiscountValue + 50) ~/ 100,
-        InvoiceDiscountKind.fixed => ticket.invoiceDiscountValue > subtotal
-            ? subtotal
-            : ticket.invoiceDiscountValue,
-      };
+      final discount = await _ticketDiscountCents(ticket!, items);
       final total = subtotal - discount;
       final taxes = await taxConfig();
       final amountDue = total + taxes.taxCentsFor(total);
@@ -3422,14 +3450,7 @@ class AppDatabase extends _$AppDatabase {
         0,
         (sum, item) => sum + item.quantity * item.unitPriceCents,
       );
-      final discount = switch (ticket.invoiceDiscountKind) {
-        InvoiceDiscountKind.none => 0,
-        InvoiceDiscountKind.percentage =>
-          (subtotal * ticket.invoiceDiscountValue + 50) ~/ 100,
-        InvoiceDiscountKind.fixed => ticket.invoiceDiscountValue > subtotal
-            ? subtotal
-            : ticket.invoiceDiscountValue,
-      };
+      final discount = await _ticketDiscountCents(ticket, items);
       final taxable = subtotal - discount;
       final taxes = await taxConfig();
       final gst = taxes.gstCentsFor(taxable);
@@ -3527,10 +3548,59 @@ class AppDatabase extends _$AppDatabase {
         .go();
   }
 
+  /// Total discount on a ticket: the manual discount plus the partner's
+  /// parts and labour percentages, never more than the subtotal.
+  Future<int> _ticketDiscountCents(
+    Ticket ticket,
+    List<TicketItem> items,
+  ) async {
+    var subtotal = 0;
+    var parts = 0;
+    var labour = 0;
+    final partIds = {
+      for (final item in items)
+        if (item.kind == TicketItemKind.part && item.partId != null)
+          item.partId!,
+    };
+    final categories = <int, String?>{};
+    if (partIds.isNotEmpty) {
+      final rows =
+          await (select(this.parts)..where((p) => p.id.isIn(partIds))).get();
+      for (final row in rows) {
+        categories[row.id] = row.category;
+      }
+    }
+    for (final item in items) {
+      final line = item.quantity * item.unitPriceCents;
+      subtotal += line;
+      final isSupply = item.kind == TicketItemKind.part &&
+          isShopSupplyCategory(categories[item.partId]);
+      final isMerch =
+          item.kind == TicketItemKind.custom && item.unitCostCents != null;
+      if (isSupply || isMerch) continue;
+      if (item.kind == TicketItemKind.part) {
+        parts += line;
+      } else {
+        labour += line;
+      }
+    }
+    return invoiceDiscountCentsFor(
+      subtotalCents: subtotal,
+      partsCents: parts,
+      labourCents: labour,
+      kind: ticket.invoiceDiscountKind,
+      value: ticket.invoiceDiscountValue,
+      partnerPartsPercent: ticket.partnerPartsPercent,
+      partnerLabourPercent: ticket.partnerLabourPercent,
+    );
+  }
+
   Future<void> setInvoiceDiscount({
     required int ticketId,
     required InvoiceDiscountKind kind,
     required int value,
+    int partnerPartsPercent = 0,
+    int partnerLabourPercent = 0,
   }) async {
     if (kind == InvoiceDiscountKind.percentage && (value < 0 || value > 100)) {
       throw ArgumentError.value(value, 'value', 'must be between 0 and 100');
@@ -3543,6 +3613,8 @@ class AppDatabase extends _$AppDatabase {
       TicketsCompanion(
         invoiceDiscountKind: Value(kind),
         invoiceDiscountValue: Value(value),
+        partnerPartsPercent: Value(partnerPartsPercent.clamp(0, 100)),
+        partnerLabourPercent: Value(partnerLabourPercent.clamp(0, 100)),
       ),
     );
   }
