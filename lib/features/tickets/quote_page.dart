@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../data/database.dart';
+import '../../data/partners.dart';
 import '../../data/shop_scope.dart';
 import '../../data/ticket_due.dart';
 import '../../data/tickets_repository.dart';
@@ -9,44 +11,90 @@ import 'required_parts_dialog.dart';
 import 'ticket_widgets.dart';
 
 /// Asks for an optional customer name, opens a quote and shows it.
-Future<void> startQuote(BuildContext context) async {
+Future<void> startQuote(BuildContext context, {Partner? partner}) async {
   final repository = ShopScope.of(context);
-  final controller = TextEditingController();
+  final partners = partner != null
+      ? <Partner>[partner]
+      : await loadPartners(AppDatabase.instance);
+  if (!context.mounted) return;
+  final controller = TextEditingController(text: partner?.name);
+  Partner? chosen = partner;
   final name = await showDialog<String>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('New quote'),
-      content: SizedBox(
-        width: 380,
-        child: TextField(
-          key: const Key('quote-customer-field'),
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: 'Customer (optional)',
-            helperText: 'Quotes are removed after $quoteLifetimeDays days '
-                'unless intake is done.',
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (_, setDialogState) => AlertDialog(
+        title: const Text('New quote'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (partners.isNotEmpty) ...[
+                DropdownButtonFormField<Partner?>(
+                  key: const Key('quote-partner'),
+                  initialValue: chosen,
+                  decoration: const InputDecoration(labelText: 'Partner'),
+                  items: [
+                    const DropdownMenuItem<Partner?>(
+                      value: null,
+                      child: Text('No partner'),
+                    ),
+                    for (final item in partners)
+                      DropdownMenuItem<Partner?>(
+                        value: item,
+                        child: Text(
+                          item.discountPercent > 0
+                              ? '${item.name} (${item.discountPercent}% off)'
+                              : item.name,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) => setDialogState(() {
+                    chosen = value;
+                    if (value != null) controller.text = value.name;
+                  }),
+                ),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                key: const Key('quote-customer-field'),
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Customer (optional)',
+                  helperText: 'Quotes are removed after $quoteLifetimeDays '
+                      'days unless intake is done.',
+                ),
+                onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+              ),
+            ],
           ),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('quote-create'),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Open quote'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          key: const Key('quote-create'),
-          onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-          child: const Text('Open quote'),
-        ),
-      ],
     ),
   );
   controller.dispose();
   if (name == null || !context.mounted) return;
   final created = await repository.createQuote(customerName: name);
+  if (chosen != null && chosen!.discountPercent > 0) {
+    await repository.setInvoiceDiscount(
+      ticketId: created.id,
+      kind: InvoiceDiscountKind.percentage,
+      value: chosen!.discountPercent,
+    );
+  }
   if (!context.mounted) return;
   await Navigator.of(context).push(
     MaterialPageRoute<void>(
