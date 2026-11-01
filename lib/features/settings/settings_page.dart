@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import '../../data/database.dart';
 import '../../data/etransfer.dart';
 import '../../data/payments/payment_processor.dart';
+import '../../data/shop_network.dart';
+import '../../main_startup.dart' show activeHost, hostStartError;
 import '../../data/staff_credentials.dart';
 import '../../data/taxes.dart';
 import '../tickets/ticket_detail_page.dart';
@@ -133,6 +135,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _MarkupSettings(database: _database),
           const Divider(height: 36),
           _PaymentProcessorSettings(database: _database),
+          const Divider(height: 36),
+          const _CloudSettings(),
           const Divider(height: 36),
           SectionHeading(
             title: 'Staff',
@@ -1289,6 +1293,223 @@ class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
         ),
         const SizedBox(height: 24),
         _ETransferSettings(database: widget.database),
+      ],
+    );
+  }
+}
+
+class _CloudSettings extends StatefulWidget {
+  const _CloudSettings();
+
+  @override
+  State<_CloudSettings> createState() => _CloudSettingsState();
+}
+
+class _CloudSettingsState extends State<_CloudSettings> {
+  NetworkSettings _settings = const NetworkSettings();
+  final _address = TextEditingController();
+  final _key = TextEditingController();
+  final _port = TextEditingController();
+  List<String> _addresses = const [];
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _address.dispose();
+    _key.dispose();
+    _port.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final settings = await NetworkSettings.load();
+    final addresses = await localAddresses();
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _address.text = settings.hostAddress;
+      _key.text = settings.key;
+      _port.text = '${settings.port}';
+      _addresses = addresses;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _save() async {
+    final port = int.tryParse(_port.text.trim());
+    var key = _key.text.trim();
+    if (port == null || port < 1024 || port > 65535) {
+      _say('Enter a port from 1024 to 65535.');
+      return;
+    }
+    if (_settings.mode == NetworkMode.host && key.isEmpty) {
+      key = NetworkSettings.generateKey();
+    }
+    if (_settings.mode == NetworkMode.client &&
+        (_address.text.trim().isEmpty || key.isEmpty)) {
+      _say('Enter the host address and the shop key.');
+      return;
+    }
+    final next = _settings.copyWith(
+      port: port,
+      key: key,
+      hostAddress: _address.text.trim(),
+    );
+    await next.save();
+    if (!mounted) return;
+    setState(() {
+      _settings = next;
+      _key.text = key;
+    });
+    _say('Saved. Restart the app to apply.');
+  }
+
+  void _say(String text) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(text)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox.shrink();
+    final mode = _settings.mode;
+    final port = int.tryParse(_port.text.trim()) ?? _settings.port;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeading(title: 'Cloud Settings'),
+        DropdownMenu<NetworkMode>(
+          key: const Key('cloud-mode'),
+          label: const Text('This PC'),
+          initialSelection: mode,
+          width: 320,
+          dropdownMenuEntries: const [
+            DropdownMenuEntry(
+              value: NetworkMode.standalone,
+              label: 'Standalone (own data)',
+            ),
+            DropdownMenuEntry(
+              value: NetworkMode.host,
+              label: 'Host (share data with the shop)',
+            ),
+            DropdownMenuEntry(
+              value: NetworkMode.client,
+              label: 'Connect to a host',
+            ),
+          ],
+          onSelected: (value) {
+            if (value == null) return;
+            setState(() {
+              _settings = _settings.copyWith(mode: value);
+              if (value == NetworkMode.host && _key.text.trim().isEmpty) {
+                _key.text = NetworkSettings.generateKey();
+              }
+            });
+          },
+        ),
+        const SizedBox(height: 12),
+        if (mode == NetworkMode.standalone)
+          const Text('Work orders and everything else stay on this PC.')
+        else if (mode == NetworkMode.host) ...[
+          Text(
+            activeHost != null
+                ? 'Sharing now on port ${activeHost!.port} · '
+                    '${activeHost!.clientCount} PC(s) connected.'
+                : 'Not sharing yet. Save, then restart the app.',
+            key: const Key('cloud-host-status'),
+          ),
+          if (hostStartError != null)
+            Text(
+              hostStartError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: 8),
+          Text(
+            _addresses.isEmpty
+                ? 'No network address found. Connect this PC to the shop '
+                    'network.'
+                : 'Other PCs connect to: '
+                    '${_addresses.map((a) => '$a:$port').join('  or  ')}',
+            key: const Key('cloud-host-addresses'),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'This PC must stay on and running the app. Allow the app through '
+            'the firewall on private networks when Windows asks.',
+          ),
+        ] else
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: TextField(
+              key: const Key('cloud-host-address'),
+              controller: _address,
+              decoration: const InputDecoration(
+                labelText: 'Host address (for example 192.168.1.20)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+        if (mode != NetworkMode.standalone) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  key: const Key('cloud-key'),
+                  controller: _key,
+                  decoration: InputDecoration(
+                    labelText: 'Shop key',
+                    helperText: mode == NetworkMode.host
+                        ? 'Type this on every PC that connects.'
+                        : 'Copy it from the host PC.',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: mode == NetworkMode.host
+                        ? IconButton(
+                            tooltip: 'New key',
+                            onPressed: () => setState(
+                              () => _key.text = NetworkSettings.generateKey(),
+                            ),
+                            icon: const Icon(Icons.refresh),
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  key: const Key('cloud-port'),
+                  controller: _port,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Port',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        FilledButton(
+          key: const Key('cloud-save'),
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Changes apply the next time the app starts. Photos taken on a '
+          'connected PC stay on that PC for now.',
+        ),
       ],
     );
   }

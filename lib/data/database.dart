@@ -700,20 +700,25 @@ class Settings extends Table {
 class AppDatabase extends _$AppDatabase {
   /// The database lives with the app's own support files, never in Documents:
   /// a shop database must not sync to OneDrive or be casually moved.
-  AppDatabase()
-      : super(
-          driftDatabase(
-            name: 'vola_fix',
-            native: const DriftNativeOptions(
-              databaseDirectory: getApplicationSupportDirectory,
-            ),
-          ),
-        );
+  AppDatabase() : super(openLocalExecutor());
 
   AppDatabase.withExecutor(super.executor);
 
-  /// One database for the app. Local-first; no server, no accounts.
-  static final AppDatabase instance = AppDatabase();
+  /// The shop's database file on this PC.
+  static QueryExecutor openLocalExecutor() => driftDatabase(
+        name: 'vola_fix',
+        native: const DriftNativeOptions(
+          databaseDirectory: getApplicationSupportDirectory,
+        ),
+      );
+
+  /// Compared between host and clients so a mismatched build can't migrate or
+  /// misread the shared database.
+  static const int currentSchemaVersion = 24;
+
+  /// The app's database: local, shared as a host, or a host's, chosen at
+  /// startup in `main`.
+  static AppDatabase instance = AppDatabase();
 
   /// Secure source for shop tags: a random number tells the customer nothing
   /// about how many jobs the shop has done.
@@ -731,7 +736,7 @@ class AppDatabase extends _$AppDatabase {
   /// ticket was closed.
   /// v20 adds a minimum stock threshold separate from on-hand inventory.
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => currentSchemaVersion;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
