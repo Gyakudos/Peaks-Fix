@@ -134,8 +134,6 @@ class _SettingsPageState extends State<SettingsPage> {
           const Divider(height: 36),
           _PaymentProcessorSettings(database: _database),
           const Divider(height: 36),
-          _ETransferSettings(database: _database),
-          const Divider(height: 36),
           SectionHeading(
             title: 'Staff',
             action: FilledButton.icon(
@@ -1226,7 +1224,7 @@ class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(title: 'Payment Processor'),
+        const SectionHeading(title: 'Payment'),
         DropdownMenu<ProcessorKind>(
           key: const Key('payment-processor-kind'),
           label: const Text('Processor'),
@@ -1289,6 +1287,8 @@ class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
             child: const Text('Save'),
           ),
         ),
+        const SizedBox(height: 24),
+        _ETransferSettings(database: widget.database),
       ],
     );
   }
