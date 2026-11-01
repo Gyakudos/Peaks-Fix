@@ -1,8 +1,68 @@
 import 'package:flutter/material.dart';
 
+import '../../data/database.dart';
 import '../../data/shop_scope.dart';
+import '../../data/ticket_due.dart';
 import '../../data/tickets_repository.dart';
 import '../calendar/date_picker_field.dart';
+import 'due_date_chip.dart';
+
+/// Due date shown as a coloured picker, with a way back to the 14-day default.
+class _DueDateRow extends StatelessWidget {
+  const _DueDateRow({
+    required this.due,
+    required this.adjusted,
+    required this.open,
+    required this.onChanged,
+  });
+
+  final DateTime due;
+  final bool adjusted;
+  final bool open;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color =
+        open ? dueColor(dueUrgency(due), scheme) : scheme.onSurfaceVariant;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DefaultTextStyle.merge(
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          child: DatePickerField(
+            label: 'Due Date',
+            value: due,
+            required: true,
+            onChanged: onChanged,
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                [
+                  if (open) dueLabel(due),
+                  adjusted
+                      ? 'Adjusted by hand'
+                      : 'Drop off + $defaultRepairDays days',
+                ].join(' · '),
+                style: TextStyle(color: color),
+              ),
+            ),
+            if (adjusted)
+              TextButton(
+                key: const Key('due-date-reset'),
+                onPressed: () => onChanged(null),
+                child: const Text('Reset to $defaultRepairDays days'),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
 
 class TicketDatesPanel extends StatelessWidget {
   const TicketDatesPanel({
@@ -37,6 +97,7 @@ class TicketDatesPanel extends StatelessWidget {
             children: [
               for (final entry in <({String label, DateTime? date})>[
                 (label: 'Drop Off', date: dates.dropOffAt),
+                (label: 'Due Date', date: ticket.summary.dueDate),
                 (
                   label: 'Technician Start Date',
                   date: dates.technicianStartAt,
@@ -50,18 +111,31 @@ class TicketDatesPanel extends StatelessWidget {
               ])
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: DatePickerField(
-                    label: entry.label,
-                    value: entry.date,
-                    required: entry.label == 'Drop Off',
-                    onChanged: (value) => _save(
-                      context,
-                      repository,
-                      dates,
-                      entry.label,
-                      value,
-                    ),
-                  ),
+                  child: entry.label == 'Due Date'
+                      ? _DueDateRow(
+                          due: ticket.summary.dueDate,
+                          adjusted: dates.dueAt != null,
+                          open: ticket.summary.status.isActive,
+                          onChanged: (value) => _save(
+                            context,
+                            repository,
+                            dates,
+                            entry.label,
+                            value,
+                          ),
+                        )
+                      : DatePickerField(
+                          label: entry.label,
+                          value: entry.date,
+                          required: entry.label == 'Drop Off',
+                          onChanged: (value) => _save(
+                            context,
+                            repository,
+                            dates,
+                            entry.label,
+                            value,
+                          ),
+                        ),
                 ),
             ],
           ),
@@ -85,6 +159,7 @@ class TicketDatesPanel extends StatelessWidget {
       customerContactedAt:
           label == 'Customer Contacted' ? value : dates.customerContactedAt,
       pickedUpAt: label == 'Date of Pick Up' ? value : dates.pickedUpAt,
+      dueAt: label == 'Due Date' ? value : dates.dueAt,
     );
     try {
       await repository.updateTicketDates(ticketId, updated);

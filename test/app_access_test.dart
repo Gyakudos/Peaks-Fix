@@ -1,0 +1,114 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vola_fix/data/staff_credentials.dart';
+import 'package:vola_fix/shell/app_access.dart';
+
+StaffAccount account(String name, String job, String user, String password) {
+  final salt = StaffCredentials.newSalt();
+  return StaffAccount(
+    id: user,
+    name: name,
+    job: job,
+    username: user,
+    passwordSalt: salt,
+    passwordHash: StaffCredentials.hash(password, salt),
+  );
+}
+
+Widget host(AppSession session, StaffAccountLoader? loader) => MaterialApp(
+      home: LoginGate(
+        session: session,
+        loadAccounts: loader,
+        child: Builder(
+          builder: (context) {
+            final access = AppSessionScope.accessOf(context);
+            return Scaffold(
+              body: Column(
+                children: [
+                  Text('Inside as ${access.job}'),
+                  Text(access.canOpen('Settings') ? 'settings' : 'no settings'),
+                  Text(access.canChangeInventory ? 'can edit' : 'view only'),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+Widget scoped(AppSession session, StaffAccountLoader? loader) =>
+    AppSessionScope(session: session, child: host(session, loader));
+
+void main() {
+  test('admin opens everything, others only the front desk pages', () {
+    const admin = AppAccess.admin();
+    const desk = AppAccess('Front Desk');
+    for (final label in [
+      'Tickets',
+      'Invoicing',
+      'Calendar',
+      'Customers',
+      'Inventory',
+      'Financial',
+      'Staff Login',
+      'Settings',
+    ]) {
+      expect(admin.canOpen(label), isTrue, reason: label);
+    }
+    expect(
+      [
+        for (final l in ['Tickets', 'Calendar', 'Inventory', 'Staff Login']) l
+      ].every(desk.canOpen),
+      isTrue,
+    );
+    for (final label in ['Invoicing', 'Customers', 'Financial', 'Settings']) {
+      expect(desk.canOpen(label), isFalse, reason: label);
+    }
+    expect(admin.canChangeInventory, isTrue);
+    expect(desk.canChangeInventory, isFalse);
+  });
+
+  testWidgets('no admin login leaves the app open', (tester) async {
+    final session = AppSession();
+    await tester.pumpWidget(scoped(session, () async => []));
+    await tester.pumpAndSettle();
+    expect(find.text('Inside as Admin'), findsOneWidget);
+
+    final deskOnly = AppSession();
+    await tester.pumpWidget(
+      scoped(deskOnly,
+          () async => [account('Dee', 'Front Desk', 'dee', 'secret1')]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Inside as Admin'), findsOneWidget);
+  });
+
+  testWidgets('login screen checks the password and applies the role',
+      (tester) async {
+    final accounts = [
+      account('Ann', 'Admin', 'ann', 'adminpw1'),
+      account('Dee', 'Front Desk', 'Dee', 'secret1'),
+    ];
+    final session = AppSession();
+    await tester.pumpWidget(scoped(session, () async => accounts));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('login-submit')), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('login-username')), 'dee');
+    await tester.enterText(find.byKey(const Key('login-password')), 'wrong');
+    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.pump();
+    expect(find.text('Wrong username or password.'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('login-password')), 'secret1');
+    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.pumpAndSettle();
+    expect(find.text('Inside as Front Desk'), findsOneWidget);
+    expect(find.text('no settings'), findsOneWidget);
+    expect(find.text('view only'), findsOneWidget);
+
+    session.signOut();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('login-submit')), findsOneWidget);
+  });
+}

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../../shell/app_access.dart';
 import 'add_inventory_part_dialog.dart';
 
 class ShopSuppliesTab extends StatelessWidget {
@@ -159,22 +160,25 @@ class ShopSuppliesTab extends StatelessWidget {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            TextButton.icon(
-                              onPressed: () => showEditInventoryPartDialog(
-                                context,
-                                repository: repository,
-                                part: part,
-                                shopSupply: true,
+                            if (AppSessionScope.accessOf(context)
+                                .canChangeInventory) ...[
+                              TextButton.icon(
+                                onPressed: () => showEditInventoryPartDialog(
+                                  context,
+                                  repository: repository,
+                                  part: part,
+                                  shopSupply: true,
+                                ),
+                                icon: const Icon(Icons.edit_outlined),
+                                label: const Text('Edit'),
                               ),
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Edit'),
-                            ),
-                            TextButton.icon(
-                              onPressed: () =>
-                                  _removePart(context, repository, part),
-                              icon: const Icon(Icons.delete_outline),
-                              label: const Text('Remove'),
-                            ),
+                              TextButton.icon(
+                                onPressed: () =>
+                                    _removePart(context, repository, part),
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Remove'),
+                              ),
+                            ],
                           ],
                         ),
                       ),

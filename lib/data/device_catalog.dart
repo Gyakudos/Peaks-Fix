@@ -25,10 +25,12 @@ class CatalogBrand {
     required this.id,
     required this.name,
     required this.devices,
+    this.isActive = true,
   });
 
   final int id;
   final String name;
+  final bool isActive;
   final List<CatalogDevice> devices;
 }
 
@@ -130,7 +132,11 @@ class DeviceCatalog {
       if (brand == null) continue;
       final brandBuilder = builder.brands.putIfAbsent(
         brand.id,
-        () => _BrandBuilder(id: brand.id, name: brand.name),
+        () => _BrandBuilder(
+          id: brand.id,
+          name: brand.name,
+          isActive: brand.isActive,
+        ),
       );
       final device = row.readTableOrNull(_db.deviceModels);
       if (device == null) continue;
@@ -226,6 +232,11 @@ class DeviceCatalog {
     await _ensureBrandName(brand.categoryId, clean, exceptId: brandId);
     await (_db.update(_db.deviceBrands)..where((row) => row.id.equals(brandId)))
         .write(DeviceBrandsCompanion(name: drift.Value(clean)));
+  }
+
+  Future<void> setBrandActive(int brandId, bool isActive) async {
+    await (_db.update(_db.deviceBrands)..where((row) => row.id.equals(brandId)))
+        .write(DeviceBrandsCompanion(isActive: drift.Value(isActive)));
   }
 
   /// Removes a brand heading and every device under it.
@@ -416,15 +427,17 @@ class _CategoryBuilder {
 }
 
 class _BrandBuilder {
-  _BrandBuilder({required this.id, required this.name});
+  _BrandBuilder({required this.id, required this.name, required this.isActive});
 
   final int id;
   final String name;
+  final bool isActive;
   final List<CatalogDevice> devices = [];
 
   CatalogBrand build() => CatalogBrand(
         id: id,
         name: name,
+        isActive: isActive,
         devices: devices,
       );
 }

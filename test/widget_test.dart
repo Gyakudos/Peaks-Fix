@@ -27,18 +27,21 @@ class FakeTicketsRepository implements TicketsRepository {
     DeviceOption(
       modelId: 1,
       category: 'Consoles',
+      brand: 'Sony',
       modelName: 'PlayStation 5',
       label: 'Sony PlayStation 5',
     ),
     DeviceOption(
       modelId: 2,
       category: 'Handheld PCs',
+      brand: 'Valve',
       modelName: 'Steam Deck OLED',
       label: 'Valve Steam Deck OLED',
     ),
     DeviceOption(
       modelId: 3,
       category: 'Portable Consoles',
+      brand: 'Nintendo',
       modelName: '3DS',
       label: 'Nintendo 3DS',
     ),
@@ -57,6 +60,7 @@ class FakeTicketsRepository implements TicketsRepository {
     DeviceOption(
       modelId: 6,
       category: 'Vacuum',
+      brand: 'Dyson',
       modelName: 'V8',
       label: 'Dyson V8',
     ),
@@ -577,6 +581,19 @@ class FakeTicketsRepository implements TicketsRepository {
 
   @override
   Future<void> setSupplyLineCharged(int ticketItemId, bool charged) async {}
+
+  @override
+  Future<NewTicket> createQuote({String? customerName}) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> purgeExpiredQuotes() async {}
+
+  @override
+  Future<void> adoptQuote({
+    required int quoteId,
+    required int ticketId,
+  }) async {}
 
   @override
   Future<int> createQuickSale({
@@ -1139,6 +1156,15 @@ Future<void> _selectDevice(WidgetTester tester) async {
   await tester.pumpAndSettle();
 
   await tester.scrollUntilVisible(
+    find.byKey(const Key('intake-brand')),
+    250,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.byKey(const Key('intake-brand')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Sony').last);
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
     find.byKey(const Key('intake-model')),
     250,
     scrollable: find.byType(Scrollable).first,
@@ -1156,6 +1182,11 @@ Future<void> _selectPortableDevice(
   await tester.tap(find.byKey(const Key('intake-category')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Portable Consoles').last);
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byKey(const Key('intake-brand')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label.split(' ').first).last);
   await tester.pumpAndSettle();
 
   await tester.tap(find.byKey(const Key('intake-model')));
@@ -2792,6 +2823,10 @@ void main() {
     await tester.tap(find.byKey(const Key('intake-category')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Vacuum').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('intake-brand')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dyson').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('intake-model')));
     await tester.pumpAndSettle();

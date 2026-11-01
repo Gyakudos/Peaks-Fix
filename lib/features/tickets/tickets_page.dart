@@ -4,7 +4,9 @@ import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../repairs/new_repair_page.dart';
+import 'due_date_chip.dart';
 import 'quick_sale_dialog.dart';
+import 'quote_page.dart';
 import 'ticket_detail_page.dart';
 import 'ticket_widgets.dart';
 
@@ -131,6 +133,13 @@ class _Header extends StatelessWidget {
                   icon: const Icon(Icons.point_of_sale_outlined),
                   label: const Text('Quick Sale'),
                 ),
+              if (!closedOnly)
+                OutlinedButton.icon(
+                  key: const Key('quote-button'),
+                  onPressed: () => startQuote(context),
+                  icon: const Icon(Icons.request_quote_outlined),
+                  label: const Text('Quote'),
+                ),
             ],
           ),
         ),
@@ -172,7 +181,11 @@ class _Board extends StatelessWidget {
       );
     }
     final active = tickets.where((t) => t.status.isActive).toList();
-    final finished = tickets.where((t) => !t.status.isActive).toList();
+    final quotes =
+        tickets.where((t) => t.status == TicketStatus.quote).toList();
+    final finished = tickets
+        .where((t) => !t.status.isActive && t.status != TicketStatus.quote)
+        .toList();
 
     return Center(
       child: ConstrainedBox(
@@ -187,6 +200,14 @@ class _Board extends StatelessWidget {
               tickets: active,
               repository: repository,
             ),
+            if (quotes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _Group(
+                label: 'Quotes',
+                tickets: quotes,
+                repository: repository,
+              ),
+            ],
             if (finished.isNotEmpty) ...[
               const SizedBox(height: 12),
               _Group(
@@ -317,7 +338,9 @@ class _TicketCard extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => TicketDetailPage(ticketId: ticket.id),
+            builder: (_) => ticket.status == TicketStatus.quote
+                ? QuoteScreen(ticketId: ticket.id)
+                : TicketDetailPage(ticketId: ticket.id),
           ),
         ),
         child: Padding(
@@ -340,6 +363,8 @@ class _TicketCard extends StatelessWidget {
                           ),
                         ),
                         TicketStatusChip(status: ticket.status),
+                        if (ticket.status.isActive)
+                          DueDateChip(due: ticket.dueDate),
                       ],
                     ),
                   ),

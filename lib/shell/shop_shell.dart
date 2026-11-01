@@ -5,6 +5,7 @@ import '../data/financials.dart';
 import '../data/shop_scope.dart';
 import '../data/tickets_repository.dart';
 import '../window/window_chrome.dart';
+import 'app_access.dart';
 import 'shop_destination.dart';
 
 /// Root of the app: a navigation rail on wide windows, a bottom bar when the
@@ -37,6 +38,7 @@ class _ShopShellState extends State<ShopShell> {
     _repository = repository;
     _boardStream = repository.watchBoard();
     _summaryStream = repository.watchFinancialSummary();
+    repository.purgeExpiredQuotes().catchError((Object _) {});
   }
 
   @override
@@ -71,7 +73,14 @@ class _ShopShellState extends State<ShopShell> {
     required int closedCount,
     required int profitCents,
   }) {
-    const destinations = ShopDestination.all;
+    final session = AppSessionScope.maybeOf(context);
+    final access = session?.access ?? const AppAccess.admin();
+    final destinations = [
+      for (final destination in ShopDestination.all)
+        if (access.canOpen(destination.label)) destination,
+    ];
+    final selected = _selected.clamp(0, destinations.length - 1);
+    final signedInUser = session?.user;
 
     Widget iconFor(ShopDestination destination, {required bool selected}) {
       final icon = Icon(
@@ -108,20 +117,60 @@ class _ShopShellState extends State<ShopShell> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= _railBreakpoint;
 
+        Widget? signOutButton({required bool compact}) {
+          if (signedInUser == null) return null;
+          final label = '${signedInUser.name} · ${signedInUser.job}';
+          return compact
+              ? TextButton.icon(
+                  key: const Key('sign-out'),
+                  onPressed: session!.signOut,
+                  icon: const Icon(Icons.logout),
+                  label: Text('Log out $label'),
+                )
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Tooltip(
+                    message: label,
+                    child: IconButton(
+                      key: const Key('sign-out'),
+                      onPressed: session!.signOut,
+                      icon: const Icon(Icons.logout),
+                    ),
+                  ),
+                );
+        }
+
         return Scaffold(
-          // Android has no native window chrome to show the app name.
-          appBar: WindowChrome.isSupported
-              ? null
-              : AppBar(title: const Text('Peaks Fix')),
+          // Android has no native window chrome to show the app name; a
+          // narrow signed-in window needs somewhere for the log out button.
+          appBar: !WindowChrome.isSupported
+              ? AppBar(
+                  title: const Text('Peaks Fix'),
+                  actions: [
+                    if (signedInUser != null) signOutButton(compact: true)!,
+                  ],
+                )
+              : (!wide && signedInUser != null)
+                  ? AppBar(
+                      title: const Text('Peaks Fix'),
+                      actions: [signOutButton(compact: true)!],
+                    )
+                  : null,
           body: Row(
             children: [
               if (wide) ...[
                 NavigationRail(
-                  selectedIndex: _selected,
+                  selectedIndex: selected,
                   onDestinationSelected: (index) =>
                       setState(() => _selected = index),
                   labelType: NavigationRailLabelType.all,
                   minWidth: 84,
+                  trailing: Expanded(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: signOutButton(compact: false),
+                    ),
+                  ),
                   destinations: [
                     for (final destination in destinations)
                       NavigationRailDestination(
@@ -135,9 +184,9 @@ class _ShopShellState extends State<ShopShell> {
               ],
               Expanded(
                 child: Navigator(
-                  key: ValueKey(_selected),
+                  key: ValueKey(selected),
                   onGenerateRoute: (_) => MaterialPageRoute<void>(
-                    builder: (_) => destinations[_selected].page,
+                    builder: (_) => destinations[selected].page,
                   ),
                 ),
               ),
@@ -146,7 +195,7 @@ class _ShopShellState extends State<ShopShell> {
           bottomNavigationBar: wide
               ? null
               : NavigationBar(
-                  selectedIndex: _selected,
+                  selectedIndex: selected,
                   onDestinationSelected: (index) =>
                       setState(() => _selected = index),
                   destinations: [

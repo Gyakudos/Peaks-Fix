@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../../shell/app_access.dart';
 import 'add_merch_item_dialog.dart';
 
 class MerchTab extends StatelessWidget {
@@ -149,29 +150,32 @@ class MerchTab extends StatelessWidget {
                               label: Text('Stock ${item.stock}'),
                               visualDensity: VisualDensity.compact,
                             ),
-                            TextButton.icon(
-                              key: Key('edit-merch-item-${item.id}'),
-                              onPressed: () => showEditMerchItemDialog(
-                                context,
-                                repository: repository,
-                                item: item,
+                            if (AppSessionScope.accessOf(context)
+                                .canChangeInventory) ...[
+                              TextButton.icon(
+                                key: Key('edit-merch-item-${item.id}'),
+                                onPressed: () => showEditMerchItemDialog(
+                                  context,
+                                  repository: repository,
+                                  item: item,
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF0D47A1),
+                                  visualDensity: VisualDensity.compact,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                                icon: const Icon(Icons.edit),
+                                label: const Text('Edit'),
                               ),
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF0D47A1),
-                                visualDensity: VisualDensity.compact,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
+                              IconButton(
+                                key: Key('delete-merch-item-${item.id}'),
+                                tooltip: 'Remove ${item.name} from merchandise',
+                                onPressed: () =>
+                                    _removeItem(context, repository, item),
+                                icon: const Icon(Icons.delete_outline),
                               ),
-                              icon: const Icon(Icons.edit),
-                              label: const Text('Edit'),
-                            ),
-                            IconButton(
-                              key: Key('delete-merch-item-${item.id}'),
-                              tooltip: 'Remove ${item.name} from merchandise',
-                              onPressed: () =>
-                                  _removeItem(context, repository, item),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
+                            ],
                           ],
                         ),
                       ),

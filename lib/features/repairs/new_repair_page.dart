@@ -12,14 +12,21 @@ import '../tickets/ticket_detail_page.dart';
 /// Intake reuses customer and device records while keeping a snapshot on the
 /// repair ticket.
 class NewRepairPage extends StatefulWidget {
-  const NewRepairPage({super.key});
+  const NewRepairPage({super.key, this.quoteTicketId, this.customerName});
+
+  /// A quote being converted; its invoice moves onto the new ticket.
+  final int? quoteTicketId;
+
+  /// Customer name carried over from the quote.
+  final String? customerName;
 
   @override
   State<NewRepairPage> createState() => _NewRepairPageState();
 }
 
 class _NewRepairPageState extends State<NewRepairPage> {
-  final TextEditingController _customer = TextEditingController();
+  late final TextEditingController _customer =
+      TextEditingController(text: widget.customerName ?? '');
   final FocusNode _customerFocus = FocusNode();
   final TextEditingController _phone = TextEditingController();
   final TextEditingController _email = TextEditingController();
@@ -34,6 +41,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
   bool _catalogRequested = false;
 
   String? _category;
+  String? _brand;
   int? _modelId;
   String? _modelName;
   String? _side;
@@ -135,6 +143,18 @@ class _NewRepairPageState extends State<NewRepairPage> {
     setState(() {
       _customerDeviceId = null;
       _category = category;
+      _brand = null;
+      _modelId = null;
+      _modelName = null;
+      _side = null;
+      _otherDevice = false;
+    });
+  }
+
+  void _selectBrand(String? brand) {
+    setState(() {
+      _customerDeviceId = null;
+      _brand = brand;
       _modelId = null;
       _modelName = null;
       _side = null;
@@ -283,6 +303,7 @@ class _NewRepairPageState extends State<NewRepairPage> {
     setState(() {
       _customerDeviceId = device.id;
       _category = device.category ?? catalogModel?.category;
+      _brand = catalogModel?.brand;
       _modelId = device.modelId;
       _modelName = device.modelName ?? catalogModel?.modelName;
       _otherDevice = device.modelId == null;
@@ -404,6 +425,9 @@ class _NewRepairPageState extends State<NewRepairPage> {
         ),
         complaint: _complaint.text,
       );
+      if (widget.quoteTicketId case final quoteId?) {
+        await repository.adoptQuote(quoteId: quoteId, ticketId: created.id);
+      }
       await repository.recordTicketDeposit(
         ticketId: created.id,
         amountCents: _depositCents()!,
@@ -460,9 +484,30 @@ class _NewRepairPageState extends State<NewRepairPage> {
           }
           final catalog = snapshot.data?.$1 ?? const <DeviceOption>[];
           final categories = snapshot.data?.$2 ?? const <String>[];
+          const brandCategories = [
+            'Ebikes',
+            'Consoles',
+            'Retro consoles',
+            'Portable Consoles',
+            'Vacuum',
+            'Handheld PCs',
+          ];
+          final showBrand = brandCategories.contains(_category);
+          final brands = {
+            for (final option in catalog)
+              if (option.category == _category && option.brand.isNotEmpty)
+                option.brand,
+          }.toList()
+            ..sort((a, b) {
+              if (a == 'Unknown') return b == 'Unknown' ? 0 : 1;
+              if (b == 'Unknown') return -1;
+              return a.toLowerCase().compareTo(b.toLowerCase());
+            });
           final models = [
             for (final option in catalog)
-              if (option.category == _category) option,
+              if (option.category == _category &&
+                  (!showBrand || option.brand == _brand))
+                option,
           ];
 
           return Center(
@@ -638,6 +683,25 @@ class _NewRepairPageState extends State<NewRepairPage> {
                         ],
                         onChanged: _selectCategory,
                       ),
+                      if (showBrand) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          key: const Key('intake-brand'),
+                          initialValue: _brand,
+                          decoration: const InputDecoration(
+                            labelText: 'Brand',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final brand in brands)
+                              DropdownMenuItem(
+                                value: brand,
+                                child: Text(brand),
+                              ),
+                          ],
+                          onChanged: _selectBrand,
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
                         key: const Key('intake-model'),
@@ -657,9 +721,10 @@ class _NewRepairPageState extends State<NewRepairPage> {
                             child: Text('Other / not listed'),
                           ),
                         ],
-                        onChanged: _category == null
-                            ? null
-                            : (value) => _selectModel(value, models),
+                        onChanged:
+                            _category == null || (showBrand && _brand == null)
+                                ? null
+                                : (value) => _selectModel(value, models),
                       ),
                       if (_otherDevice) ...[
                         const SizedBox(height: 12),
@@ -832,6 +897,10 @@ class _NewRepairPageState extends State<NewRepairPage> {
                                 DropdownMenuItem(
                                   value: PaymentMethod.other,
                                   child: Text('Other'),
+                                ),
+                                DropdownMenuItem(
+                                  value: PaymentMethod.eTransfer,
+                                  child: Text('E-transfer'),
                                 ),
                               ],
                               onChanged: (value) => setState(

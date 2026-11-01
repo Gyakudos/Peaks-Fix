@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'data/database.dart';
 import 'data/shop_scope.dart';
 import 'data/tickets_repository.dart';
+import 'shell/app_access.dart';
 import 'shell/shop_shell.dart';
 import 'window/window_chrome.dart';
 import 'window/window_title_bar.dart';
 
-class VolaFixApp extends StatelessWidget {
-  const VolaFixApp({super.key, this.tickets});
+class VolaFixApp extends StatefulWidget {
+  const VolaFixApp({super.key, this.tickets, this.loadAccounts});
 
   /// Injected by tests; production uses the SQLite-backed repository.
   final TicketsRepository? tickets;
+
+  /// Staff logins to check at start-up. Null leaves the app open (tests).
+  final StaffAccountLoader? loadAccounts;
 
   /// Built once, not per rebuild: the board stream is cached inside.
   static final TicketsRepository _defaultRepository = DriftTicketsRepository(
@@ -19,8 +23,21 @@ class VolaFixApp extends StatelessWidget {
   );
 
   @override
+  State<VolaFixApp> createState() => _VolaFixAppState();
+}
+
+class _VolaFixAppState extends State<VolaFixApp> {
+  final AppSession _session = AppSession();
+
+  @override
+  void dispose() {
+    _session.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final repository = tickets ?? _defaultRepository;
+    final repository = widget.tickets ?? VolaFixApp._defaultRepository;
 
     return MaterialApp(
       title: 'Peaks Fix',
@@ -43,9 +60,16 @@ class VolaFixApp extends StatelessWidget {
                 ],
               )
             : child ?? const SizedBox.shrink();
-        return ShopScope(tickets: repository, child: content);
+        return ShopScope(
+          tickets: repository,
+          child: AppSessionScope(session: _session, child: content),
+        );
       },
-      home: const ShopShell(),
+      home: LoginGate(
+        session: _session,
+        loadAccounts: widget.loadAccounts,
+        child: const ShopShell(),
+      ),
     );
   }
 }

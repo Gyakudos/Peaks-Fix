@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../../shell/app_access.dart';
 import 'add_inventory_part_dialog.dart';
 import 'labour_tab.dart';
 
@@ -196,30 +197,33 @@ class PartsTab extends StatelessWidget {
                               ),
                             ),
                           ),
-                          TextButton.icon(
-                            key: Key('edit-inventory-part-${part.id}'),
-                            onPressed: () => showEditInventoryPartDialog(
-                              context,
-                              repository: repository,
-                              part: part,
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF0D47A1),
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
+                          if (AppSessionScope.accessOf(context)
+                              .canChangeInventory) ...[
+                            TextButton.icon(
+                              key: Key('edit-inventory-part-${part.id}'),
+                              onPressed: () => showEditInventoryPartDialog(
+                                context,
+                                repository: repository,
+                                part: part,
                               ),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF0D47A1),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                              icon: const Icon(Icons.build),
+                              label: const Text('Edit'),
                             ),
-                            icon: const Icon(Icons.build),
-                            label: const Text('Edit'),
-                          ),
-                          IconButton(
-                            key: Key('delete-inventory-part-${part.id}'),
-                            tooltip: 'Remove ${part.name} from inventory',
-                            onPressed: () =>
-                                _removePart(context, repository, part),
-                            icon: const Icon(Icons.delete_outline),
-                          ),
+                            IconButton(
+                              key: Key('delete-inventory-part-${part.id}'),
+                              tooltip: 'Remove ${part.name} from inventory',
+                              onPressed: () =>
+                                  _removePart(context, repository, part),
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ],
                         ],
                       ),
                     ),

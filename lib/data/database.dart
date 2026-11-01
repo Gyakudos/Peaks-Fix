@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'part_skus.dart';
 import 'photo_templates.dart';
 import 'taxes.dart';
+import 'ticket_due.dart';
 import 'warranty.dart';
 
 part 'database.g.dart';
@@ -24,6 +25,10 @@ enum TicketStatus {
   pickedUp,
   closed,
   cancelled,
+
+  /// A priced-up estimate with no intake. Appended last so stored status
+  /// indexes keep their meaning; it expires after [quoteLifetimeDays].
+  quote,
 }
 
 extension TicketStatusLabel on TicketStatus {
@@ -38,13 +43,15 @@ extension TicketStatusLabel on TicketStatus {
         TicketStatus.pickedUp => 'Picked up',
         TicketStatus.closed => 'Closed',
         TicketStatus.cancelled => 'Cancelled',
+        TicketStatus.quote => 'Quote',
       };
 
   /// Still in the shop, i.e. on the board above the finished jobs.
   bool get isActive =>
       this != TicketStatus.pickedUp &&
       this != TicketStatus.closed &&
-      this != TicketStatus.cancelled;
+      this != TicketStatus.cancelled &&
+      this != TicketStatus.quote;
 }
 
 /// The three reports per ticket; see `REPORTS.md`.
@@ -130,7 +137,17 @@ extension PartPurchaseTypeLabel on PartPurchaseType {
 
 enum PaymentKind { deposit, balance, refund }
 
-enum PaymentMethod { cash, card, other }
+/// Appended last: the index is what gets stored.
+enum PaymentMethod {
+  cash('Cash'),
+  card('Card'),
+  other('Other'),
+  eTransfer('E-transfer');
+
+  const PaymentMethod(this.label);
+
+  final String label;
+}
 
 /// Thrown to roll back a sale when the card payment was declined or cancelled.
 class PaymentCancelledException implements Exception {
@@ -193,6 +210,7 @@ class DeviceBrands extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get categoryId => integer().references(DeviceCategories, #id)();
   TextColumn get name => text().withLength(min: 1, max: 60)();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
   @override
   List<Set<Column>> get uniqueKeys => [
@@ -713,7 +731,7 @@ class AppDatabase extends _$AppDatabase {
   /// ticket was closed.
   /// v20 adds a minimum stock threshold separate from on-hand inventory.
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   /// v2 added `tickets.device_variant` (model number / revision note).
   /// v3 added per-device Report 1 checklists: templates, a template key on the
@@ -946,6 +964,10 @@ class AppDatabase extends _$AppDatabase {
               "category)) IN ('shop','supplies','shop supply','shop supplies'))",
             );
           }
+          if (from < 24) {
+            // Brand headings can be switched off per shop.
+            await m.addColumn(deviceBrands, deviceBrands.isActive);
+          }
         },
       );
 
@@ -1161,6 +1183,7 @@ class AppDatabase extends _$AppDatabase {
       final controllers = await category('Controllers', 4);
       final vacuums = await category('Vacuum', 5);
       await category('General Electronics', 6);
+      final ebikes = await category('Ebikes', 7);
 
       // Built-in categories moved down when new ones were inserted ahead of
       // them (Handheld PCs was 1, then 2; Controllers was 3). Only values below
@@ -1415,6 +1438,80 @@ class AppDatabase extends _$AppDatabase {
             'Stratos',
             'Detect Pro',
           ],
+        ),
+        (
+          ebikes,
+          'Biktrix',
+          [
+            'Juggernaut Classic',
+            'Juggernaut Classic Duo',
+            'Juggernaut Hub Duo',
+            'Juggernaut Ultra',
+            'Juggernaut Ultra Duo',
+            'Juggernaut Ultra FS',
+            'Juggernaut FS Pro',
+            'Juggernaut Lite',
+            'Monte Capro Lite',
+            'Monte Capro Ultra',
+            'Kutty',
+            'Kutty X',
+            'Kutty FS',
+            'RogueHawk FS',
+            'Stunner LT',
+            'Stunner X',
+            'Stunner Step-Over',
+            'Stunner Step-Thru',
+            'Swift',
+            'Swift Lite',
+            'Swift CVT',
+            'Skycap',
+            'Moto Challenger',
+            'Moto Volt',
+          ],
+        ),
+        (
+          ebikes,
+          'Rize',
+          [
+            'RX',
+            'RX Pro',
+            'RX Dual',
+            'Rover',
+            'X',
+            'City',
+            'City MD',
+            'Leisure',
+            'Blade',
+            'Bolt',
+            'Fixie',
+          ],
+        ),
+        (
+          ebikes,
+          'Envo',
+          [
+            'Flex',
+            'Flex Overland',
+            'Flex TR',
+            'Flex Urban',
+            'Flex SUV',
+            'Flex Trike',
+            'Drive D20',
+            'Drive D35',
+            'Drive D50',
+            'Drive ST50',
+            'Drive U50',
+            'Drive M50',
+            'Drive X50',
+            'Stash',
+            'Snowbike',
+          ],
+        ),
+        // Bikes the shop can't identify by brand.
+        (
+          ebikes,
+          'Unknown',
+          ['Generic Ebike'],
         ),
       ];
 
@@ -2486,6 +2583,7 @@ class AppDatabase extends _$AppDatabase {
     required DateTime? partsArriveAt,
     required DateTime? customerContactedAt,
     required DateTime? pickedUpAt,
+    DateTime? dueAt,
   }) async {
     DateTime? dateOnly(DateTime? date) =>
         date == null ? null : DateTime(date.year, date.month, date.day);
@@ -2498,6 +2596,7 @@ class AppDatabase extends _$AppDatabase {
         partsArriveAt: Value(dateOnly(partsArriveAt)),
         customerContactedAt: Value(dateOnly(customerContactedAt)),
         pickedUpAt: Value(dateOnly(pickedUpAt)),
+        dueAt: Value(dateOnly(dueAt)),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -2955,6 +3054,62 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
+
+  /// Opens a quote: a ticket with no device or intake, used to build up an
+  /// invoice. [purgeExpiredQuotes] removes it if intake never happens.
+  Future<NewTicket> createQuote({String? customerName}) {
+    return transaction(() async {
+      final name = (customerName ?? '').trim();
+      final created = await createTicket(
+        customerName: name.isEmpty ? quoteCustomerName : name,
+        customerPhone: '-',
+        customerEmail: '-',
+        deviceName: 'Quote',
+        complaint: 'Quote',
+      );
+      await (update(tickets)..where((row) => row.id.equals(created.id))).write(
+        const TicketsCompanion(status: Value(TicketStatus.quote)),
+      );
+      return created;
+    });
+  }
+
+  /// Deletes quotes older than [quoteLifetimeDays]; returns the ticket ids.
+  Future<List<int>> expiredQuoteIds({DateTime? now}) async {
+    final cutoff = (now ?? DateTime.now())
+        .subtract(const Duration(days: quoteLifetimeDays));
+    final rows = await (select(tickets)
+          ..where(
+            (row) =>
+                row.status.equals(TicketStatus.quote.index) &
+                row.createdAt.isSmallerThanValue(cutoff),
+          ))
+        .get();
+    return [for (final row in rows) row.id];
+  }
+
+  /// Moves a quote's invoice onto the repair ticket created at intake, then
+  /// removes the quote.
+  Future<void> adoptQuote({
+    required int quoteId,
+    required int ticketId,
+  }) =>
+      transaction(() async {
+        final quote = await (select(tickets)
+              ..where((row) => row.id.equals(quoteId)))
+            .getSingleOrNull();
+        if (quote == null || quote.status != TicketStatus.quote) return;
+        await (update(ticketItems)
+              ..where((item) => item.ticketId.equals(quoteId)))
+            .write(TicketItemsCompanion(ticketId: Value(ticketId)));
+        await (update(tickets)..where((row) => row.id.equals(ticketId))).write(
+          TicketsCompanion(
+            invoiceDiscountKind: Value(quote.invoiceDiscountKind),
+            invoiceDiscountValue: Value(quote.invoiceDiscountValue),
+          ),
+        );
+        await deleteTicket(quoteId);
+      });
 
   /// Rings up a direct sale: a closed, paid ticket with no device.
   Future<int> createQuickSale({

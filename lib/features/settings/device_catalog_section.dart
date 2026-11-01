@@ -383,6 +383,9 @@ class _DeviceCategoryPageState extends State<DeviceCategoryPage> {
                   onToggleDevice: (device, isActive) => _run(
                     () => _catalog.setDeviceActive(device.id, isActive),
                   ),
+                  onToggleBrand: (isActive) => _run(
+                    () => _catalog.setBrandActive(brand.id, isActive),
+                  ),
                 ),
               const SizedBox(height: 24),
               Align(
@@ -411,9 +414,11 @@ class _BrandCard extends StatelessWidget {
     required this.onRenameDevice,
     required this.onDeleteDevice,
     required this.onToggleDevice,
+    required this.onToggleBrand,
   });
 
   final CatalogBrand brand;
+  final ValueChanged<bool> onToggleBrand;
   final VoidCallback onAddDevice;
   final VoidCallback onRename;
   final VoidCallback onDelete;
@@ -436,10 +441,20 @@ class _BrandCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    brand.name,
+                    brand.isActive ? brand.name : '${brand.name} · Hidden',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: brand.isActive ? null : theme.disabledColor,
                     ),
+                  ),
+                ),
+                Tooltip(
+                  message:
+                      brand.isActive ? 'Shown in intake' : 'Hidden from intake',
+                  child: Switch(
+                    key: Key('catalog-brand-toggle-${brand.id}'),
+                    value: brand.isActive,
+                    onChanged: onToggleBrand,
                   ),
                 ),
                 TextButton.icon(

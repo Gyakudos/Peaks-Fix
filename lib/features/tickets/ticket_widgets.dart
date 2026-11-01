@@ -20,6 +20,7 @@ Color ticketStatusColor(BuildContext context, TicketStatus status) {
     TicketStatus.pickedUp => const Color(0xFF546E7A),
     TicketStatus.closed => const Color(0xFF6D4C41),
     TicketStatus.cancelled => scheme.error,
+    TicketStatus.quote => const Color(0xFF5E35B1),
   };
 }
 
@@ -240,9 +241,7 @@ class _RefundTicketDialogState extends State<_RefundTicketDialog> {
                 for (final method in PaymentMethod.values)
                   DropdownMenuItem(
                     value: method,
-                    child: Text(
-                      method.name[0].toUpperCase() + method.name.substring(1),
-                    ),
+                    child: Text(method.label),
                   ),
               ],
               onChanged: (next) {

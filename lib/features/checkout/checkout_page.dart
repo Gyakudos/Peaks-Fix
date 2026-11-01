@@ -5,6 +5,7 @@ import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../payments/card_payment.dart';
+import '../payments/etransfer_qr.dart';
 import '../tickets/invoice_editor.dart';
 
 class CheckoutPage extends StatelessWidget {
@@ -183,7 +184,10 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
   Future<void> _recordPayment(int amountDue) async {
     final payment = await showDialog<({int amountCents, PaymentMethod method})>(
       context: context,
-      builder: (_) => _PaymentDialog(amountDueCents: amountDue),
+      builder: (_) => _PaymentDialog(
+        amountDueCents: amountDue,
+        reference: widget.ticket.number,
+      ),
     );
     if (payment == null || !mounted) return;
     final processor = await widget.repository.paymentProcessor();
@@ -507,9 +511,10 @@ class _AddMerchDialogState extends State<_AddMerchDialog> {
 }
 
 class _PaymentDialog extends StatefulWidget {
-  const _PaymentDialog({required this.amountDueCents});
+  const _PaymentDialog({required this.amountDueCents, required this.reference});
 
   final int amountDueCents;
+  final String reference;
 
   @override
   State<_PaymentDialog> createState() => _PaymentDialogState();
@@ -567,6 +572,13 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               if (method != null) setState(() => _method = method);
             },
           ),
+          if (_method == PaymentMethod.eTransfer) ...[
+            const SizedBox(height: 12),
+            ETransferQrPanel(
+              amountCents: _amountCents() ?? 0,
+              reference: widget.reference,
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(_error!,
@@ -639,11 +651,7 @@ String _kindLabel(TicketItemKind kind) => switch (kind) {
       TicketItemKind.custom => 'Labor/service',
     };
 
-String _paymentMethodLabel(PaymentMethod method) => switch (method) {
-      PaymentMethod.cash => 'Cash',
-      PaymentMethod.card => 'Card',
-      PaymentMethod.other => 'Other',
-    };
+String _paymentMethodLabel(PaymentMethod method) => method.label;
 
 String _money(int cents) {
   final sign = cents < 0 ? '-' : '';

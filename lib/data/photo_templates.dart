@@ -158,7 +158,7 @@ String photoTemplateKeyFor(String category, String modelName) {
     'Handheld PCs' => 'pc',
     'Portable Consoles' => hingedModels.contains(modelName) ? 'hinged' : 'slab',
     'Vacuum' => 'vacuum',
-    'General Electronics' => 'general_electronics',
+    'General Electronics' || 'Ebikes' => 'general_electronics',
     _ => 'console',
   };
 }

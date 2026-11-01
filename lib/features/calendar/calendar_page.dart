@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../tickets/ticket_detail_page.dart';
@@ -221,27 +222,28 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   List<_CalendarEvent> _events(List<TicketBoardEntry> tickets) => [
-        for (final ticket in tickets) ...[
-          _CalendarEvent(
-            ticket: ticket,
-            date: ticket.dropOffAt ?? _dateOnly(ticket.createdAt),
-            label: 'Drop Off',
-          ),
-          if (ticket.technicianStartAt case final date?)
-            _CalendarEvent(
-                ticket: ticket, date: date, label: 'Technician Start'),
-          if (ticket.partsArriveAt case final date?)
-            _CalendarEvent(ticket: ticket, date: date, label: 'Parts Arrive'),
-          if (ticket.customerContactedAt case final date?)
+        for (final ticket in tickets)
+          if (ticket.status != TicketStatus.quote) ...[
             _CalendarEvent(
               ticket: ticket,
-              date: date,
-              label: 'Customer Contacted',
+              date: ticket.dropOffAt ?? _dateOnly(ticket.createdAt),
+              label: 'Drop Off',
             ),
-          if (ticket.pickedUpAt case final date?)
-            _CalendarEvent(
-                ticket: ticket, date: date, label: 'Date of Pick Up'),
-        ],
+            if (ticket.technicianStartAt case final date?)
+              _CalendarEvent(
+                  ticket: ticket, date: date, label: 'Technician Start'),
+            if (ticket.partsArriveAt case final date?)
+              _CalendarEvent(ticket: ticket, date: date, label: 'Parts Arrive'),
+            if (ticket.customerContactedAt case final date?)
+              _CalendarEvent(
+                ticket: ticket,
+                date: date,
+                label: 'Customer Contacted',
+              ),
+            if (ticket.pickedUpAt case final date?)
+              _CalendarEvent(
+                  ticket: ticket, date: date, label: 'Date of Pick Up'),
+          ],
       ];
 }
 

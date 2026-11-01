@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import 'database.dart';
+import 'ticket_due.dart';
 import 'financials.dart';
 import 'payments/payment_processor.dart';
 import 'photo_store.dart';
@@ -26,6 +27,7 @@ class TicketBoardEntry {
     this.partsArriveAt,
     this.customerContactedAt,
     this.pickedUpAt,
+    this.dueAt,
     this.shopTag,
     this.serial,
     this.serialMissing = false,
@@ -45,6 +47,12 @@ class TicketBoardEntry {
   final DateTime? partsArriveAt;
   final DateTime? customerContactedAt;
   final DateTime? pickedUpAt;
+
+  /// A due date the tech set by hand; null means the 14-day default applies.
+  final DateTime? dueAt;
+
+  /// The due date in effect: the tech's adjustment, else drop-off + 14 days.
+  DateTime get dueDate => dueAt ?? defaultDueDate(dropOffAt ?? createdAt);
   final String? shopTag;
   final String? serial;
   final bool serialMissing;
@@ -150,6 +158,7 @@ class TicketDetailEntry {
         partsArriveAt: summary.partsArriveAt,
         customerContactedAt: summary.customerContactedAt,
         pickedUpAt: summary.pickedUpAt,
+        dueAt: summary.dueAt,
       );
 }
 
@@ -160,6 +169,7 @@ class TicketDates {
     this.partsArriveAt,
     this.customerContactedAt,
     this.pickedUpAt,
+    this.dueAt,
   });
 
   final DateTime? dropOffAt;
@@ -167,6 +177,7 @@ class TicketDates {
   final DateTime? partsArriveAt;
   final DateTime? customerContactedAt;
   final DateTime? pickedUpAt;
+  final DateTime? dueAt;
 }
 
 class CustomerRecord {
@@ -222,10 +233,12 @@ class DeviceOption {
     required this.category,
     required this.modelName,
     required this.label,
+    this.brand = '',
   });
 
   final int modelId;
   final String category;
+  final String brand;
 
   /// The bare catalog name, e.g. `3DS`, used to pick the photo checklist.
   final String modelName;
@@ -724,6 +737,15 @@ abstract class TicketsRepository {
 
   Future<void> setSupplyLineCharged(int ticketItemId, bool charged);
 
+  /// Opens a quote ticket (no intake) for building up an invoice.
+  Future<NewTicket> createQuote({String? customerName});
+
+  /// Deletes quotes that never reached intake within [quoteLifetimeDays].
+  Future<void> purgeExpiredQuotes();
+
+  /// Moves a quote's invoice lines to [ticketId] and removes the quote.
+  Future<void> adoptQuote({required int quoteId, required int ticketId});
+
   Future<int> createQuickSale({
     String? customerName,
     required List<({int partId, int quantity})> parts,
@@ -1082,7 +1104,8 @@ class DriftTicketsRepository implements TicketsRepository {
         final ticket = row.readTableOrNull(_db.tickets);
         if (item == null || ticket == null) continue;
         if (ticket.status == TicketStatus.closed ||
-            ticket.status == TicketStatus.cancelled) {
+            ticket.status == TicketStatus.cancelled ||
+            ticket.status == TicketStatus.quote) {
           continue;
         }
         final partId = item.partId;
@@ -1336,6 +1359,21 @@ class DriftTicketsRepository implements TicketsRepository {
   @override
   Future<void> setSupplyLineCharged(int ticketItemId, bool charged) =>
       _db.setSupplyLineCharged(ticketItemId, charged);
+
+  @override
+  Future<NewTicket> createQuote({String? customerName}) =>
+      _db.createQuote(customerName: customerName);
+
+  @override
+  Future<void> purgeExpiredQuotes() async {
+    for (final id in await _db.expiredQuoteIds()) {
+      await deleteTicket(id);
+    }
+  }
+
+  @override
+  Future<void> adoptQuote({required int quoteId, required int ticketId}) =>
+      _db.adoptQuote(quoteId: quoteId, ticketId: ticketId);
 
   @override
   Future<int> createQuickSale({
@@ -1724,7 +1762,8 @@ class DriftTicketsRepository implements TicketsRepository {
         _db.deviceCategories.id.equalsExp(_db.deviceBrands.categoryId),
       ),
     ])
-          ..where(_db.deviceModels.isActive.equals(true))
+          ..where(_db.deviceModels.isActive.equals(true) &
+              _db.deviceBrands.isActive.equals(true))
           ..orderBy([
             OrderingTerm.asc(_db.deviceCategories.sortOrder),
             OrderingTerm.asc(_db.deviceBrands.name),
@@ -1739,6 +1778,7 @@ class DriftTicketsRepository implements TicketsRepository {
           modelId: row.readTable(_db.deviceModels).id,
           category: row.readTable(_db.deviceCategories).name,
           modelName: row.readTable(_db.deviceModels).name,
+          brand: row.readTable(_db.deviceBrands).name,
           label: deviceLabel(
             row.readTable(_db.deviceBrands).name,
             row.readTable(_db.deviceModels).name,
@@ -1982,6 +2022,7 @@ class DriftTicketsRepository implements TicketsRepository {
         partsArriveAt: dates.partsArriveAt,
         customerContactedAt: dates.customerContactedAt,
         pickedUpAt: dates.pickedUpAt,
+        dueAt: dates.dueAt,
       );
 
   Stream<List<TicketBoardEntry>> _watchBoard() {
@@ -2021,6 +2062,7 @@ class DriftTicketsRepository implements TicketsRepository {
       partsArriveAt: ticket.partsArriveAt,
       customerContactedAt: ticket.customerContactedAt,
       pickedUpAt: ticket.pickedUpAt,
+      dueAt: ticket.dueAt,
       shopTag: ticket.shopTag,
       serial: ticket.serial,
       serialMissing: ticket.serialMissing,

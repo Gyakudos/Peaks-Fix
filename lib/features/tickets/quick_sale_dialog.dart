@@ -342,6 +342,9 @@ class _QuickSaleDialogState extends State<QuickSaleDialog> {
                       value: PaymentMethod.card, child: Text('Card')),
                   DropdownMenuItem(
                       value: PaymentMethod.other, child: Text('Other')),
+                  DropdownMenuItem(
+                      value: PaymentMethod.eTransfer,
+                      child: Text('E-transfer')),
                 ],
                 onChanged: _saving
                     ? null

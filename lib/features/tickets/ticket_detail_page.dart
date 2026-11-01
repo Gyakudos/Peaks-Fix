@@ -514,8 +514,9 @@ class _StatusCard extends StatelessWidget {
               ),
               items: [
                 for (final option in TicketStatus.values)
-                  if (option != TicketStatus.closed ||
-                      status == TicketStatus.closed)
+                  if (option != TicketStatus.quote &&
+                      (option != TicketStatus.closed ||
+                          status == TicketStatus.closed))
                     DropdownMenuItem(
                       value: option,
                       enabled: option != TicketStatus.closed,

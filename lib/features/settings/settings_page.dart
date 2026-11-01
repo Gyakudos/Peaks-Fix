@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/database.dart';
+import '../../data/etransfer.dart';
 import '../../data/payments/payment_processor.dart';
+import '../../data/staff_credentials.dart';
 import '../../data/taxes.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
@@ -37,12 +39,18 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _addStaff() async {
+    final roster = await _readStaff(_database);
+    if (!mounted) return;
     final staff = await showDialog<_StaffMember>(
       context: context,
-      builder: (context) => const _AddStaffDialog(),
+      builder: (context) => _AddStaffDialog(
+        takenUsernames: {
+          for (final member in roster)
+            if (member.username.isNotEmpty) member.username.toLowerCase(),
+        },
+      ),
     );
     if (!mounted || staff == null) return;
-    final roster = await _readStaff(_database);
     roster.add(staff);
     await _writeJsonSetting(
       _database,
@@ -57,9 +65,18 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _editStaff(_StaffMember member) async {
+    final roster = await _readStaff(_database);
+    if (!mounted) return;
     final updated = await showDialog<_StaffMember>(
       context: context,
-      builder: (context) => _EditStaffDialog(member: member),
+      builder: (context) => _EditStaffDialog(
+        member: member,
+        takenUsernames: {
+          for (final other in roster)
+            if (other.id != member.id && other.username.isNotEmpty)
+              other.username.toLowerCase(),
+        },
+      ),
     );
     if (!mounted || updated == null) return;
     await _replaceStaff(updated);
@@ -116,6 +133,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _MarkupSettings(database: _database),
           const Divider(height: 36),
           _PaymentProcessorSettings(database: _database),
+          const Divider(height: 36),
+          _ETransferSettings(database: _database),
           const Divider(height: 36),
           SectionHeading(
             title: 'Staff',
@@ -300,7 +319,9 @@ class _StaffClockPageState extends State<StaffClockPage> {
 }
 
 class _AddStaffDialog extends StatefulWidget {
-  const _AddStaffDialog();
+  const _AddStaffDialog({this.takenUsernames = const {}});
+
+  final Set<String> takenUsernames;
 
   @override
   State<_AddStaffDialog> createState() => _AddStaffDialogState();
@@ -309,6 +330,8 @@ class _AddStaffDialog extends StatefulWidget {
 class _AddStaffDialogState extends State<_AddStaffDialog> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _rateController = TextEditingController();
+  late final _StaffDetailsForm _details =
+      _StaffDetailsForm(takenUsernames: widget.takenUsernames);
   String _job = _staffJobs.first;
   String? _error;
 
@@ -316,6 +339,7 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
   void dispose() {
     _nameController.dispose();
     _rateController.dispose();
+    _details.dispose();
     super.dispose();
   }
 
@@ -358,6 +382,7 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                 helperText: 'Optional. Used to estimate tracked pay.',
               ),
             ),
+            ..._details.fields(),
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -386,13 +411,20 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
               setState(() => _error = _invalidPayMessage);
               return;
             }
+            final detailsError = _details.validate();
+            if (detailsError != null) {
+              setState(() => _error = detailsError);
+              return;
+            }
             Navigator.pop(
               context,
-              _StaffMember(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                name: name,
-                job: _job,
-                hourlyRateCents: rate,
+              _details.apply(
+                _StaffMember(
+                  id: DateTime.now().microsecondsSinceEpoch.toString(),
+                  name: name,
+                  job: _job,
+                  hourlyRateCents: rate,
+                ),
               ),
             );
           },
@@ -443,6 +475,19 @@ class _StaffCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       Text(subtitle),
+                      if (member.phone.isNotEmpty || member.email.isNotEmpty)
+                        Text(
+                          [member.phone, member.email]
+                              .where((value) => value.isNotEmpty)
+                              .join(' · '),
+                        ),
+                      if (member.address.isNotEmpty) Text(member.address),
+                      if (member.username.isNotEmpty)
+                        Text(
+                          member.hasLogin
+                              ? 'Login: ${member.username}'
+                              : 'Login: ${member.username} (no password)',
+                        ),
                     ],
                   ),
                 ),
@@ -484,15 +529,23 @@ class _StaffCard extends StatelessWidget {
 }
 
 class _EditStaffDialog extends StatefulWidget {
-  const _EditStaffDialog({required this.member});
+  const _EditStaffDialog({
+    required this.member,
+    this.takenUsernames = const {},
+  });
 
   final _StaffMember member;
+  final Set<String> takenUsernames;
 
   @override
   State<_EditStaffDialog> createState() => _EditStaffDialogState();
 }
 
 class _EditStaffDialogState extends State<_EditStaffDialog> {
+  late final _StaffDetailsForm _details = _StaffDetailsForm(
+    member: widget.member,
+    takenUsernames: widget.takenUsernames,
+  );
   late final TextEditingController _nameController =
       TextEditingController(text: widget.member.name);
   late final TextEditingController _rateController = TextEditingController(
@@ -508,6 +561,7 @@ class _EditStaffDialogState extends State<_EditStaffDialog> {
   void dispose() {
     _nameController.dispose();
     _rateController.dispose();
+    _details.dispose();
     super.dispose();
   }
 
@@ -554,6 +608,7 @@ class _EditStaffDialogState extends State<_EditStaffDialog> {
                 helperText: 'Optional. Used to estimate tracked pay.',
               ),
             ),
+            ..._details.fields(),
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -592,13 +647,20 @@ class _EditStaffDialogState extends State<_EditStaffDialog> {
               setState(() => _error = _invalidPayMessage);
               return;
             }
+            final detailsError = _details.validate();
+            if (detailsError != null) {
+              setState(() => _error = detailsError);
+              return;
+            }
             Navigator.pop(
               context,
-              widget.member.copyWith(
-                name: name,
-                job: _job,
-                isActive: _isActive,
-                hourlyRateCents: rate,
+              _details.apply(
+                widget.member.copyWith(
+                  name: name,
+                  job: _job,
+                  isActive: _isActive,
+                  hourlyRateCents: rate,
+                ),
               ),
             );
           },
@@ -1232,6 +1294,97 @@ class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
   }
 }
 
+class _ETransferSettings extends StatefulWidget {
+  const _ETransferSettings({required this.database});
+
+  final AppDatabase database;
+
+  @override
+  State<_ETransferSettings> createState() => _ETransferSettingsState();
+}
+
+class _ETransferSettingsState extends State<_ETransferSettings> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    loadETransferConfig(widget.database).then((config) {
+      if (!mounted) return;
+      _email.text = config.email;
+      _password.text = config.password;
+    });
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    await saveETransferConfig(
+      widget.database,
+      ETransferConfig(email: _email.text, password: _password.text),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('E-transfer details saved.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('E-transfer', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        const Text(
+          'Shown as a QR code when a customer pays by e-transfer. Leave the '
+          'password empty if the account uses auto-deposit.',
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: 300,
+              child: TextField(
+                key: const Key('etransfer-email'),
+                controller: _email,
+                decoration: const InputDecoration(
+                  labelText: 'Deposit email',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: TextField(
+                key: const Key('etransfer-password'),
+                controller: _password,
+                decoration: const InputDecoration(
+                  labelText: 'Password (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            FilledButton(
+              key: const Key('etransfer-save'),
+              onPressed: _save,
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _MarkupSettings extends StatefulWidget {
   const _MarkupSettings({required this.database});
 
@@ -1423,6 +1576,12 @@ class _StaffMember {
     required this.job,
     this.isActive = true,
     this.hourlyRateCents = 0,
+    this.phone = '',
+    this.email = '',
+    this.address = '',
+    this.username = '',
+    this.passwordSalt = '',
+    this.passwordHash = '',
   });
 
   final String id;
@@ -1430,6 +1589,14 @@ class _StaffMember {
   final String job;
   final bool isActive;
   final int hourlyRateCents;
+  final String phone;
+  final String email;
+  final String address;
+  final String username;
+  final String passwordSalt;
+  final String passwordHash;
+
+  bool get hasLogin => username.isNotEmpty && passwordHash.isNotEmpty;
 
   String get rateLabel => hourlyRateCents <= 0
       ? 'Pay not set'
@@ -1440,6 +1607,12 @@ class _StaffMember {
     String? job,
     bool? isActive,
     int? hourlyRateCents,
+    String? phone,
+    String? email,
+    String? address,
+    String? username,
+    String? passwordSalt,
+    String? passwordHash,
   }) =>
       _StaffMember(
         id: id,
@@ -1447,6 +1620,12 @@ class _StaffMember {
         job: job ?? this.job,
         isActive: isActive ?? this.isActive,
         hourlyRateCents: hourlyRateCents ?? this.hourlyRateCents,
+        phone: phone ?? this.phone,
+        email: email ?? this.email,
+        address: address ?? this.address,
+        username: username ?? this.username,
+        passwordSalt: passwordSalt ?? this.passwordSalt,
+        passwordHash: passwordHash ?? this.passwordHash,
       );
 
   Map<String, Object?> toJson() => {
@@ -1455,6 +1634,12 @@ class _StaffMember {
         'job': job,
         'isActive': isActive,
         'hourlyRateCents': hourlyRateCents,
+        'phone': phone,
+        'email': email,
+        'address': address,
+        'username': username,
+        'passwordSalt': passwordSalt,
+        'passwordHash': passwordHash,
       };
 
   factory _StaffMember.fromJson(Map<String, dynamic> json) => _StaffMember(
@@ -1463,7 +1648,133 @@ class _StaffMember {
         job: json['job'] as String,
         isActive: json['isActive'] as bool? ?? true,
         hourlyRateCents: (json['hourlyRateCents'] as num?)?.toInt() ?? 0,
+        phone: json['phone'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        address: json['address'] as String? ?? '',
+        username: json['username'] as String? ?? '',
+        passwordSalt: json['passwordSalt'] as String? ?? '',
+        passwordHash: json['passwordHash'] as String? ?? '',
       );
+}
+
+/// Shared contact and login inputs for the add and edit staff dialogs.
+class _StaffDetailsForm {
+  _StaffDetailsForm({_StaffMember? member, required this.takenUsernames})
+      : phone = TextEditingController(text: member?.phone ?? ''),
+        email = TextEditingController(text: member?.email ?? ''),
+        address = TextEditingController(text: member?.address ?? ''),
+        username = TextEditingController(text: member?.username ?? ''),
+        hasPassword = member?.passwordHash.isNotEmpty ?? false;
+
+  final TextEditingController phone;
+  final TextEditingController email;
+  final TextEditingController address;
+  final TextEditingController username;
+  final TextEditingController password = TextEditingController();
+  final bool hasPassword;
+  final Set<String> takenUsernames;
+
+  void dispose() {
+    phone.dispose();
+    email.dispose();
+    address.dispose();
+    username.dispose();
+    password.dispose();
+  }
+
+  /// An error message, or null when the details are acceptable.
+  String? validate() {
+    final user = username.text.trim();
+    final pass = password.text;
+    if (user.isNotEmpty && takenUsernames.contains(user.toLowerCase())) {
+      return 'That username is already used by another staff member.';
+    }
+    if (user.contains(RegExp(r'\s'))) {
+      return 'A username cannot contain spaces.';
+    }
+    if (user.isEmpty && (pass.isNotEmpty || hasPassword)) {
+      return 'Enter a username for the login.';
+    }
+    if (user.isNotEmpty && pass.isEmpty && !hasPassword) {
+      return 'Set a password for the login.';
+    }
+    if (pass.isNotEmpty && pass.length < StaffCredentials.minPasswordLength) {
+      return 'Use a password of at least '
+          '${StaffCredentials.minPasswordLength} characters.';
+    }
+    return null;
+  }
+
+  _StaffMember apply(_StaffMember base) {
+    var salt = base.passwordSalt;
+    var hash = base.passwordHash;
+    final user = username.text.trim();
+    if (user.isEmpty) {
+      salt = '';
+      hash = '';
+    } else if (password.text.isNotEmpty) {
+      salt = StaffCredentials.newSalt();
+      hash = StaffCredentials.hash(password.text, salt);
+    }
+    return base.copyWith(
+      phone: phone.text.trim(),
+      email: email.text.trim(),
+      address: address.text.trim(),
+      username: user,
+      passwordSalt: salt,
+      passwordHash: hash,
+    );
+  }
+
+  List<Widget> fields() => [
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('staff-phone-field'),
+          controller: phone,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(labelText: 'Phone number'),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('staff-email-field'),
+          controller: email,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email'),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('staff-address-field'),
+          controller: address,
+          minLines: 1,
+          maxLines: 3,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Address'),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('staff-username-field'),
+          controller: username,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Username',
+            helperText: 'Optional. Needed for this person to log in.',
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('staff-password-field'),
+          controller: password,
+          obscureText: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: InputDecoration(
+            labelText: hasPassword ? 'New password' : 'Password',
+            helperText: hasPassword
+                ? 'Leave blank to keep the current password.'
+                : null,
+          ),
+        ),
+      ];
 }
 
 class _ClockSession {

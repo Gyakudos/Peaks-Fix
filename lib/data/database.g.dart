@@ -716,8 +716,18 @@ class $DeviceBrandsTable extends DeviceBrands
           GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 60),
       type: DriftSqlType.string,
       requiredDuringInsert: true);
+  static const VerificationMeta _isActiveMeta =
+      const VerificationMeta('isActive');
   @override
-  List<GeneratedColumn> get $columns => [id, categoryId, name];
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+      'is_active', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_active" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  @override
+  List<GeneratedColumn> get $columns => [id, categoryId, name, isActive];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -745,6 +755,10 @@ class $DeviceBrandsTable extends DeviceBrands
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
+    if (data.containsKey('is_active')) {
+      context.handle(_isActiveMeta,
+          isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
+    }
     return context;
   }
 
@@ -764,6 +778,8 @@ class $DeviceBrandsTable extends DeviceBrands
           .read(DriftSqlType.int, data['${effectivePrefix}category_id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      isActive: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
     );
   }
 
@@ -777,14 +793,19 @@ class DeviceBrand extends DataClass implements Insertable<DeviceBrand> {
   final int id;
   final int categoryId;
   final String name;
+  final bool isActive;
   const DeviceBrand(
-      {required this.id, required this.categoryId, required this.name});
+      {required this.id,
+      required this.categoryId,
+      required this.name,
+      required this.isActive});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['category_id'] = Variable<int>(categoryId);
     map['name'] = Variable<String>(name);
+    map['is_active'] = Variable<bool>(isActive);
     return map;
   }
 
@@ -793,6 +814,7 @@ class DeviceBrand extends DataClass implements Insertable<DeviceBrand> {
       id: Value(id),
       categoryId: Value(categoryId),
       name: Value(name),
+      isActive: Value(isActive),
     );
   }
 
@@ -803,6 +825,7 @@ class DeviceBrand extends DataClass implements Insertable<DeviceBrand> {
       id: serializer.fromJson<int>(json['id']),
       categoryId: serializer.fromJson<int>(json['categoryId']),
       name: serializer.fromJson<String>(json['name']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
     );
   }
   @override
@@ -812,13 +835,17 @@ class DeviceBrand extends DataClass implements Insertable<DeviceBrand> {
       'id': serializer.toJson<int>(id),
       'categoryId': serializer.toJson<int>(categoryId),
       'name': serializer.toJson<String>(name),
+      'isActive': serializer.toJson<bool>(isActive),
     };
   }
 
-  DeviceBrand copyWith({int? id, int? categoryId, String? name}) => DeviceBrand(
+  DeviceBrand copyWith(
+          {int? id, int? categoryId, String? name, bool? isActive}) =>
+      DeviceBrand(
         id: id ?? this.id,
         categoryId: categoryId ?? this.categoryId,
         name: name ?? this.name,
+        isActive: isActive ?? this.isActive,
       );
   DeviceBrand copyWithCompanion(DeviceBrandsCompanion data) {
     return DeviceBrand(
@@ -826,6 +853,7 @@ class DeviceBrand extends DataClass implements Insertable<DeviceBrand> {
       categoryId:
           data.categoryId.present ? data.categoryId.value : this.categoryId,
       name: data.name.present ? data.name.value : this.name,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
     );
   }
 
@@ -834,55 +862,66 @@ class DeviceBrand extends DataClass implements Insertable<DeviceBrand> {
     return (StringBuffer('DeviceBrand(')
           ..write('id: $id, ')
           ..write('categoryId: $categoryId, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('isActive: $isActive')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, categoryId, name);
+  int get hashCode => Object.hash(id, categoryId, name, isActive);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is DeviceBrand &&
           other.id == this.id &&
           other.categoryId == this.categoryId &&
-          other.name == this.name);
+          other.name == this.name &&
+          other.isActive == this.isActive);
 }
 
 class DeviceBrandsCompanion extends UpdateCompanion<DeviceBrand> {
   final Value<int> id;
   final Value<int> categoryId;
   final Value<String> name;
+  final Value<bool> isActive;
   const DeviceBrandsCompanion({
     this.id = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.name = const Value.absent(),
+    this.isActive = const Value.absent(),
   });
   DeviceBrandsCompanion.insert({
     this.id = const Value.absent(),
     required int categoryId,
     required String name,
+    this.isActive = const Value.absent(),
   })  : categoryId = Value(categoryId),
         name = Value(name);
   static Insertable<DeviceBrand> custom({
     Expression<int>? id,
     Expression<int>? categoryId,
     Expression<String>? name,
+    Expression<bool>? isActive,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (categoryId != null) 'category_id': categoryId,
       if (name != null) 'name': name,
+      if (isActive != null) 'is_active': isActive,
     });
   }
 
   DeviceBrandsCompanion copyWith(
-      {Value<int>? id, Value<int>? categoryId, Value<String>? name}) {
+      {Value<int>? id,
+      Value<int>? categoryId,
+      Value<String>? name,
+      Value<bool>? isActive}) {
     return DeviceBrandsCompanion(
       id: id ?? this.id,
       categoryId: categoryId ?? this.categoryId,
       name: name ?? this.name,
+      isActive: isActive ?? this.isActive,
     );
   }
 
@@ -898,6 +937,9 @@ class DeviceBrandsCompanion extends UpdateCompanion<DeviceBrand> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
     return map;
   }
 
@@ -906,7 +948,8 @@ class DeviceBrandsCompanion extends UpdateCompanion<DeviceBrand> {
     return (StringBuffer('DeviceBrandsCompanion(')
           ..write('id: $id, ')
           ..write('categoryId: $categoryId, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('isActive: $isActive')
           ..write(')'))
         .toString();
   }
@@ -13216,12 +13259,14 @@ typedef $$DeviceBrandsTableCreateCompanionBuilder = DeviceBrandsCompanion
   Value<int> id,
   required int categoryId,
   required String name,
+  Value<bool> isActive,
 });
 typedef $$DeviceBrandsTableUpdateCompanionBuilder = DeviceBrandsCompanion
     Function({
   Value<int> id,
   Value<int> categoryId,
   Value<String> name,
+  Value<bool> isActive,
 });
 
 final class $$DeviceBrandsTableReferences
@@ -13273,6 +13318,9 @@ class $$DeviceBrandsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+      column: $table.isActive, builder: (column) => ColumnFilters(column));
 
   $$DeviceCategoriesTableFilterComposer get categoryId {
     final $$DeviceCategoriesTableFilterComposer composer = $composerBuilder(
@@ -13331,6 +13379,9 @@ class $$DeviceBrandsTableOrderingComposer
   ColumnOrderings<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+      column: $table.isActive, builder: (column) => ColumnOrderings(column));
+
   $$DeviceCategoriesTableOrderingComposer get categoryId {
     final $$DeviceCategoriesTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -13366,6 +13417,9 @@ class $$DeviceBrandsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
 
   $$DeviceCategoriesTableAnnotationComposer get categoryId {
     final $$DeviceCategoriesTableAnnotationComposer composer = $composerBuilder(
@@ -13435,21 +13489,25 @@ class $$DeviceBrandsTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<int> categoryId = const Value.absent(),
             Value<String> name = const Value.absent(),
+            Value<bool> isActive = const Value.absent(),
           }) =>
               DeviceBrandsCompanion(
             id: id,
             categoryId: categoryId,
             name: name,
+            isActive: isActive,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required int categoryId,
             required String name,
+            Value<bool> isActive = const Value.absent(),
           }) =>
               DeviceBrandsCompanion.insert(
             id: id,
             categoryId: categoryId,
             name: name,
+            isActive: isActive,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
