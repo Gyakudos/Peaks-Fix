@@ -156,42 +156,58 @@ class _ShopShellState extends State<ShopShell> {
                       actions: [signOutButton(compact: true)!],
                     )
                   : null,
-          body: Row(
-            children: [
-              if (wide) ...[
-                NavigationRail(
-                  selectedIndex: selected,
-                  onDestinationSelected: (index) =>
-                      setState(() => _selected = index),
-                  labelType: NavigationRailLabelType.all,
-                  minWidth: 84,
-                  trailing: Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: signOutButton(compact: false),
+          body: Stack(children: [
+            Positioned.fill(
+                child: Row(
+              children: [
+                if (wide) ...[
+                  NavigationRail(
+                    selectedIndex: selected,
+                    onDestinationSelected: (index) =>
+                        setState(() => _selected = index),
+                    labelType: NavigationRailLabelType.all,
+                    minWidth: 84,
+                    trailing: Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: signOutButton(compact: false),
+                      ),
+                    ),
+                    destinations: [
+                      for (final destination in destinations)
+                        NavigationRailDestination(
+                          icon: iconFor(destination, selected: false),
+                          selectedIcon: iconFor(destination, selected: true),
+                          label: Text(destination.label),
+                        ),
+                    ],
+                  ),
+                  const VerticalDivider(width: 1, thickness: 1),
+                ],
+                Expanded(
+                  child: Navigator(
+                    key: ValueKey(selected),
+                    onGenerateRoute: (_) => MaterialPageRoute<void>(
+                      builder: (_) => destinations[selected].page,
                     ),
                   ),
-                  destinations: [
-                    for (final destination in destinations)
-                      NavigationRailDestination(
-                        icon: iconFor(destination, selected: false),
-                        selectedIcon: iconFor(destination, selected: true),
-                        label: Text(destination.label),
-                      ),
-                  ],
                 ),
-                const VerticalDivider(width: 1, thickness: 1),
               ],
-              Expanded(
-                child: Navigator(
-                  key: ValueKey(selected),
-                  onGenerateRoute: (_) => MaterialPageRoute<void>(
-                    builder: (_) => destinations[selected].page,
-                  ),
+            )),
+            Positioned(
+              right: 8,
+              bottom: 4,
+              child: IgnorePointer(
+                child: Text(
+                  'Build $appBuildVersion',
+                  key: const Key('build-version'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ]),
           bottomNavigationBar: wide
               ? null
               : NavigationBar(
@@ -212,6 +228,9 @@ class _ShopShellState extends State<ShopShell> {
     );
   }
 }
+
+/// Shown bottom-right of the main window; matches the GitHub release tag.
+const String appBuildVersion = '0.45.01.11.26';
 
 /// Short money label for a badge, e.g. `$140`, `-$84`, `$1.2k`.
 String _compactMoney(int cents) {
