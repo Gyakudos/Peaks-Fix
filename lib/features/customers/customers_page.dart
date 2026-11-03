@@ -4,6 +4,7 @@ import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../../data/warranty.dart';
+import '../partners/partners_page.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
 
@@ -30,6 +31,19 @@ class _CustomersPageState extends State<CustomersPage> {
       appBar: AppBar(
         title: const Text('Customers'),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: OutlinedButton.icon(
+              key: const Key('customers-partners'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PartnersPage(),
+                ),
+              ),
+              icon: const Icon(Icons.business_center_outlined),
+              label: const Text('Partners'),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: FilledButton.icon(

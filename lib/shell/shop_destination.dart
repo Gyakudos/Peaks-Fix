@@ -5,7 +5,6 @@ import '../features/customers/customers_page.dart';
 import '../features/financial/financial_page.dart';
 import '../features/inventory/inventory_page.dart';
 import '../features/invoicing/invoicing_page.dart';
-import '../features/partners/partners_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/tickets/tickets_page.dart';
 
@@ -58,12 +57,6 @@ class ShopDestination {
       icon: Icons.people_outline,
       selectedIcon: Icons.people,
       page: CustomersPage(),
-    ),
-    ShopDestination(
-      label: 'Partners',
-      icon: Icons.business_center_outlined,
-      selectedIcon: Icons.business_center,
-      page: PartnersPage(),
     ),
     ShopDestination(
       label: 'Inventory',

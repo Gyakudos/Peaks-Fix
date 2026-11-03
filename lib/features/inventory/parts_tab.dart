@@ -217,22 +217,51 @@ class _PartsTabState extends State<PartsTab> {
                           Text(part.name),
                         ],
                       ),
-                      subtitle: Text([
-                        if (part.description != null &&
-                            part.description!.trim().isNotEmpty)
-                          part.description!.trim(),
-                        if (part.category != null) part.category!,
-                        if (part.sku != null) 'SKU ${part.sku}',
-                        if (part.vendorId != null) 'Vendor ${part.vendorId}',
-                        if (part.vendorSku != null)
-                          'Vendor SKU ${part.vendorSku}',
-                        if (part.purchaseType == PartPurchaseType.bulk)
-                          'Bulk ${part.bulkQuantity} · '
-                              '${_money(part.bulkTotalCents)} total',
-                        if (part.location != null) 'Location ${part.location}',
-                        'Raw Parts Cost ${_money(part.rawCostCents)}',
-                        'Retail Parts Cost ${_money(part.retailPriceCents)}',
-                      ].join(' · ')),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text([
+                            if (part.description != null &&
+                                part.description!.trim().isNotEmpty)
+                              part.description!.trim(),
+                            if (part.category != null) part.category!,
+                            if (part.vendorSku != null)
+                              'Vendor SKU ${part.vendorSku}',
+                            if (part.purchaseType == PartPurchaseType.bulk)
+                              'Bulk ${part.bulkQuantity} · '
+                                  '${_money(part.bulkTotalCents)} total',
+                            if (part.location != null)
+                              'Location ${part.location}',
+                          ].join(' · ')),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              if (part.sku != null)
+                                _InfoBlock(
+                                  key: Key('part-sku-${part.id}'),
+                                  text: 'SKU ${part.sku}',
+                                ),
+                              if (part.vendorId != null)
+                                _InfoBlock(
+                                  key: Key('part-vendor-${part.id}'),
+                                  text: 'Vendor ${part.vendorId}',
+                                ),
+                              _InfoBlock(
+                                key: Key('part-raw-cost-${part.id}'),
+                                text:
+                                    'Raw Parts Cost ${_money(part.rawCostCents)}',
+                              ),
+                              _InfoBlock(
+                                key: Key('part-retail-cost-${part.id}'),
+                                text: 'Retail Parts Cost '
+                                    '${_money(part.retailPriceCents)}',
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                       trailing: Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
                         spacing: 4,
@@ -325,4 +354,25 @@ class _PartsTabState extends State<PartsTab> {
   }
 
   String _money(int cents) => '\$${(cents / 100).toStringAsFixed(2)}';
+}
+
+/// A small outlined box around one inventory detail.
+class _InfoBlock extends StatelessWidget {
+  const _InfoBlock({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(text, style: theme.textTheme.bodySmall),
+    );
+  }
 }

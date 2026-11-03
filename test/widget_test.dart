@@ -1959,7 +1959,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
-    expect(rail.selectedIndex, 5);
+    expect(rail.selectedIndex, 4);
   });
 
   testWidgets('narrow layout uses the bottom bar', (WidgetTester tester) async {
