@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../data/database.dart';
+import '../../data/schedule.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
+import '../../shell/app_access.dart';
 import '../tickets/ticket_detail_page.dart';
 
 class CalendarPage extends StatefulWidget {
@@ -15,6 +17,8 @@ class CalendarPage extends StatefulWidget {
 class _CalendarPageState extends State<CalendarPage> {
   DateTime _month = _today();
   DateTime _selectedDate = _today();
+  List<ScheduledJob> _jobs = const [];
+  bool _jobsLoaded = false;
 
   static DateTime _today() {
     final now = DateTime.now();
@@ -22,11 +26,87 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_jobsLoaded) return;
+    _jobsLoaded = true;
+    _reloadJobs();
+  }
+
+  Future<void> _reloadJobs() async {
+    final jobs = await ShopScope.of(context).loadScheduledJobs();
+    if (mounted) setState(() => _jobs = jobs);
+  }
+
+  Future<void> _removeJob(ScheduledJob job) async {
+    final repository = ShopScope.of(context);
+    await repository.saveScheduledJobs([
+      for (final other in _jobs)
+        if (other.id != job.id) other,
+    ]);
+    await _reloadJobs();
+  }
+
+  Future<void> _schedule(List<TicketBoardEntry> tickets) async {
+    final repository = ShopScope.of(context);
+    final techs = await repository.loadTechnicians();
+    if (!mounted) return;
+    final job = await showDialog<ScheduledJob>(
+      context: context,
+      builder: (_) => _ScheduleJobDialog(
+        tickets: [
+          for (final ticket in tickets)
+            if (_isOpen(ticket.status)) ticket,
+        ],
+        techs: techs,
+        initialDate: _selectedDate,
+      ),
+    );
+    if (job == null) return;
+    await repository.saveScheduledJobs([..._jobs, job]);
+    await _reloadJobs();
+    if (mounted) {
+      setState(() {
+        _selectedDate = job.date;
+        _month = DateTime(job.date.year, job.date.month, 1);
+      });
+    }
+  }
+
+  static bool _isOpen(TicketStatus status) => switch (status) {
+        TicketStatus.pickedUp ||
+        TicketStatus.closed ||
+        TicketStatus.cancelled ||
+        TicketStatus.quote =>
+          false,
+        _ => true,
+      };
+
+  @override
   Widget build(BuildContext context) {
     final repository = ShopScope.of(context);
     final localizations = MaterialLocalizations.of(context);
+    final canSchedule = AppSessionScope.accessOf(context).canSchedule;
     return Scaffold(
-      appBar: AppBar(title: const Text('Calendar')),
+      appBar: AppBar(
+        title: const Text('Calendar'),
+        actions: [
+          if (canSchedule)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: StreamBuilder<List<TicketBoardEntry>>(
+                stream: repository.watchBoard(),
+                builder: (context, snapshot) => FilledButton.icon(
+                  key: const Key('calendar-schedule-job'),
+                  onPressed:
+                      snapshot.hasData ? () => _schedule(snapshot.data!) : null,
+                  icon: const Icon(Icons.engineering_outlined),
+                  label: const Text('Schedule job'),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: StreamBuilder<List<TicketBoardEntry>>(
         stream: repository.watchBoard(),
         builder: (context, snapshot) {
@@ -46,6 +126,10 @@ class _CalendarPageState extends State<CalendarPage> {
                   ? dateOrder
                   : a.ticket.number.compareTo(b.ticket.number);
             });
+          final selectedJobs = _jobs
+              .where((job) => _sameDay(job.date, _selectedDate))
+              .toList()
+            ..sort((a, b) => a.techName.compareTo(b.techName));
           final daysInMonth =
               DateUtils.getDaysInMonth(_month.year, _month.month);
           final firstWeekday =
@@ -117,7 +201,8 @@ class _CalendarPageState extends State<CalendarPage> {
                     final date = DateTime(_month.year, _month.month, day);
                     final inMonth = date.month == _month.month;
                     final hasEvents =
-                        events.any((event) => _sameDay(event.date, date));
+                        events.any((event) => _sameDay(event.date, date)) ||
+                            _jobs.any((job) => _sameDay(job.date, date));
                     final selected = _sameDay(date, _selectedDate);
                     return Padding(
                       padding: const EdgeInsets.all(2),
@@ -178,33 +263,62 @@ class _CalendarPageState extends State<CalendarPage> {
                 ),
               ),
               Expanded(
-                child: selectedEvents.isEmpty
+                child: selectedEvents.isEmpty && selectedJobs.isEmpty
                     ? const Center(child: Text('No ticket dates on this day.'))
-                    : ListView.builder(
-                        itemCount: selectedEvents.length,
-                        itemBuilder: (context, index) {
-                          final event = selectedEvents[index];
-                          return ListTile(
-                            key: Key(
-                              'calendar-event-${event.ticket.id}-${event.label}',
-                            ),
-                            leading: const Icon(Icons.event_outlined),
-                            title: Text(
-                              '${event.label} · ${event.ticket.number}',
-                            ),
-                            subtitle: Text(
-                              '${event.ticket.customerName} · '
-                              '${event.ticket.deviceWithVariant}',
-                            ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    TicketDetailPage(ticketId: event.ticket.id),
+                    : ListView(
+                        children: [
+                          for (final job in selectedJobs)
+                            ListTile(
+                              key: Key('calendar-job-${job.id}'),
+                              leading: const Icon(Icons.engineering),
+                              title: Text(
+                                'Scheduled · ${job.ticketNumber} · '
+                                '${job.techName}',
+                              ),
+                              subtitle: Text(
+                                [
+                                  job.customerName,
+                                  if (job.note.isNotEmpty) job.note,
+                                ].join(' · '),
+                              ),
+                              trailing: canSchedule
+                                  ? IconButton(
+                                      key: Key('calendar-job-remove-${job.id}'),
+                                      tooltip: 'Remove from schedule',
+                                      onPressed: () => _removeJob(job),
+                                      icon: const Icon(Icons.delete_outline),
+                                    )
+                                  : null,
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      TicketDetailPage(ticketId: job.ticketId),
+                                ),
                               ),
                             ),
-                          );
-                        },
+                          for (final event in selectedEvents)
+                            ListTile(
+                              key: Key(
+                                'calendar-event-${event.ticket.id}-${event.label}',
+                              ),
+                              leading: const Icon(Icons.event_outlined),
+                              title: Text(
+                                '${event.label} · ${event.ticket.number}',
+                              ),
+                              subtitle: Text(
+                                '${event.ticket.customerName} · '
+                                '${event.ticket.deviceWithVariant}',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => TicketDetailPage(
+                                    ticketId: event.ticket.id,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
               ),
             ],
@@ -260,6 +374,153 @@ class _CalendarEvent {
 }
 
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+/// Books an open ticket to a technician on a day.
+class _ScheduleJobDialog extends StatefulWidget {
+  const _ScheduleJobDialog({
+    required this.tickets,
+    required this.techs,
+    required this.initialDate,
+  });
+
+  final List<TicketBoardEntry> tickets;
+  final List<Technician> techs;
+  final DateTime initialDate;
+
+  @override
+  State<_ScheduleJobDialog> createState() => _ScheduleJobDialogState();
+}
+
+class _ScheduleJobDialogState extends State<_ScheduleJobDialog> {
+  final _note = TextEditingController();
+  TicketBoardEntry? _ticket;
+  Technician? _tech;
+  late DateTime _date = widget.initialDate;
+  String? _error;
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _date = _dateOnly(picked));
+  }
+
+  void _save() {
+    final ticket = _ticket;
+    final tech = _tech;
+    if (ticket == null || tech == null) {
+      setState(() => _error = 'Choose a ticket and a technician.');
+      return;
+    }
+    Navigator.of(context).pop(
+      ScheduledJob(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        ticketId: ticket.id,
+        ticketNumber: ticket.number,
+        customerName: ticket.customerName,
+        techId: tech.id,
+        techName: tech.name,
+        date: _date,
+        note: _note.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final localizations = MaterialLocalizations.of(context);
+    return AlertDialog(
+      title: const Text('Schedule job'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<TicketBoardEntry>(
+                key: const Key('schedule-ticket'),
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Ticket'),
+                items: [
+                  for (final ticket in widget.tickets)
+                    DropdownMenuItem(
+                      value: ticket,
+                      child: Text(
+                        '${ticket.number} · ${ticket.customerName}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _ticket = value),
+              ),
+              const SizedBox(height: 12),
+              if (widget.techs.isEmpty)
+                const Text(
+                  'No technicians yet. Add staff with the job Tech 1, Tech 2 '
+                  'or Tech 3 in Settings.',
+                )
+              else
+                DropdownButtonFormField<Technician>(
+                  key: const Key('schedule-tech'),
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Technician'),
+                  items: [
+                    for (final tech in widget.techs)
+                      DropdownMenuItem(
+                        value: tech,
+                        child: Text('${tech.name} · ${tech.job}'),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _tech = value),
+                ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                key: const Key('schedule-date'),
+                onPressed: _pickDate,
+                icon: const Icon(Icons.event),
+                label: Text(localizations.formatMediumDate(_date)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('schedule-note'),
+                controller: _note,
+                decoration: const InputDecoration(labelText: 'Note (optional)'),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('schedule-save'),
+          onPressed: _save,
+          child: const Text('Schedule'),
+        ),
+      ],
+    );
+  }
+}
 
 bool _sameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;

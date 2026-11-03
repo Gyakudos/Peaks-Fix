@@ -9,6 +9,8 @@ import 'financials.dart';
 import 'payments/payment_processor.dart';
 import 'photo_store.dart';
 import 'photo_templates.dart';
+import 'schedule.dart' as schedule;
+import 'schedule.dart' show ScheduledJob, Technician;
 import 'taxes.dart';
 import 'warranty.dart';
 
@@ -273,7 +275,7 @@ class StaffMemberEntry {
       );
 }
 
-/// Technician levels for labour; Tech 1 is the highest and Admin counts as one.
+/// Technician levels for labour; Tech 1 is the highest tech level.
 const List<int> jobLevels = [1, 2, 3];
 
 String jobLevelLabel(int level) => 'Tech $level';
@@ -638,7 +640,15 @@ abstract class TicketsRepository {
 
   Stream<List<TicketBoardEntry>> watchBoard();
 
-  /// All-time closed-ticket revenue, cost and staff pay for the rail badge.
+  /// Jobs booked to technicians on the calendar.
+  Future<List<ScheduledJob>> loadScheduledJobs();
+
+  Future<void> saveScheduledJobs(List<ScheduledJob> jobs);
+
+  /// Active Tech 1-3 staff that jobs can be scheduled to.
+  Future<List<Technician>> loadTechnicians();
+
+  /// Live closed-ticket revenue, cost and staff pay for the rail badge.
   Stream<FinancialSummary> watchFinancialSummary();
 
   Future<void> deleteTicket(int ticketId);
@@ -1102,6 +1112,17 @@ class DriftTicketsRepository implements TicketsRepository {
 
   @override
   Stream<List<TicketBoardEntry>> watchBoard() => _board;
+
+  @override
+  Future<List<ScheduledJob>> loadScheduledJobs() =>
+      schedule.loadScheduledJobs(_db);
+
+  @override
+  Future<void> saveScheduledJobs(List<ScheduledJob> jobs) =>
+      schedule.saveScheduledJobs(_db, jobs);
+
+  @override
+  Future<List<Technician>> loadTechnicians() => schedule.loadTechnicians(_db);
 
   @override
   Stream<FinancialSummary> watchFinancialSummary() =>

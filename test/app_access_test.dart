@@ -92,6 +92,10 @@ void main() {
 
   test('job levels: Admin and Tech 1 do everything, Tech 3 only Tech 3', () {
     expect(const AppAccess.admin().canDoJobLevel(1), isTrue);
+    expect(const AppAccess.admin().techLevel, lessThan(1));
+    expect(const AppAccess.admin().canSchedule, isTrue);
+    expect(const AppAccess('Front Desk').canSchedule, isTrue);
+    expect(const AppAccess('Tech 1').canSchedule, isFalse);
     expect(const AppAccess('Tech 1').canDoJobLevel(1), isTrue);
     expect(const AppAccess('Tech 2').canDoJobLevel(1), isFalse);
     expect(const AppAccess('Tech 2').canDoJobLevel(2), isTrue);

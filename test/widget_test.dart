@@ -10,6 +10,7 @@ import 'package:vola_fix/data/financials.dart';
 import 'package:vola_fix/data/part_skus.dart';
 import 'package:vola_fix/data/payments/payment_processor.dart';
 import 'package:vola_fix/data/photo_templates.dart';
+import 'package:vola_fix/data/schedule.dart';
 import 'package:vola_fix/data/shop_scope.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
 import 'package:vola_fix/data/warranty.dart';
@@ -188,6 +189,26 @@ class FakeTicketsRepository implements TicketsRepository {
   @override
   Stream<List<TicketBoardEntry>> watchCustomerTickets(int customerId) =>
       Stream.value(List.unmodifiable(boardTickets));
+
+  final List<ScheduledJob> scheduledJobs = [];
+  final List<Technician> technicians = const [
+    Technician(id: 't1', name: 'Tess', job: 'Tech 1'),
+    Technician(id: 't3', name: 'Tim', job: 'Tech 3'),
+  ];
+
+  @override
+  Future<List<ScheduledJob>> loadScheduledJobs() async =>
+      List.of(scheduledJobs);
+
+  @override
+  Future<void> saveScheduledJobs(List<ScheduledJob> jobs) async {
+    scheduledJobs
+      ..clear()
+      ..addAll(jobs);
+  }
+
+  @override
+  Future<List<Technician>> loadTechnicians() async => technicians;
 
   @override
   Stream<List<TicketBoardEntry>> watchBoard() async* {

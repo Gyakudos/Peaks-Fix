@@ -529,8 +529,8 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                   initialValue: _jobLevel,
                   decoration: const InputDecoration(
                     labelText: 'Job Level',
-                    helperText: 'Tech 1 is the highest level; Admin counts '
-                        'as Tech 1.',
+                    helperText: 'Tech 1 is the highest tech level. Admin is '
+                        'above Tech 1 and can do any job.',
                   ),
                   items: [
                     for (final level in jobLevels)
