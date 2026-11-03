@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/app_update.dart';
 import '../../data/database.dart';
 import '../../data/etransfer.dart';
 import '../../data/payments/payment_processor.dart';
@@ -137,6 +138,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _PaymentProcessorSettings(database: _database),
           const Divider(height: 36),
           const _CloudSettings(),
+          const Divider(height: 36),
+          const _UpdateSettings(),
           const Divider(height: 36),
           SectionHeading(
             title: 'Staff',
@@ -1293,6 +1296,104 @@ class _PaymentProcessorSettingsState extends State<_PaymentProcessorSettings> {
         ),
         const SizedBox(height: 24),
         _ETransferSettings(database: widget.database),
+      ],
+    );
+  }
+}
+
+class _UpdateSettings extends StatefulWidget {
+  const _UpdateSettings();
+
+  @override
+  State<_UpdateSettings> createState() => _UpdateSettingsState();
+}
+
+class _UpdateSettingsState extends State<_UpdateSettings> {
+  bool _checking = false;
+  AppRelease? _release;
+  String? _error;
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _error = null;
+      _release = null;
+    });
+    try {
+      final release = await fetchLatestRelease();
+      if (mounted) setState(() => _release = release);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Could not check for updates: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final release = _release;
+    final newer =
+        release != null && isNewerVersion(appBuildVersion, release.version);
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeading(title: 'Updates'),
+        const Text('Installed version $appBuildVersion'),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            FilledButton.icon(
+              key: const Key('check-for-updates'),
+              onPressed: _checking ? null : _check,
+              icon: _checking
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.system_update_alt),
+              label: Text(_checking ? 'Checking…' : 'Check for updates'),
+            ),
+            if (newer)
+              OutlinedButton.icon(
+                key: const Key('download-update'),
+                onPressed: () => openInBrowser(release.url),
+                icon: const Icon(Icons.download),
+                label: const Text('Open download page'),
+              ),
+          ],
+        ),
+        if (release != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            newer
+                ? 'Update available: ${release.version}. Close the app, '
+                    'download the zip and copy it over the install folder.'
+                : 'You are up to date.',
+            key: const Key('update-result'),
+            style: TextStyle(
+              color: newer ? theme.colorScheme.primary : Colors.green.shade700,
+            ),
+          ),
+          if (newer && release.notes.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(release.notes.trim()),
+            ),
+        ],
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _error!,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
       ],
     );
   }
