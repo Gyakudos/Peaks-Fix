@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/data/database.dart';
 import 'package:vola_fix/data/till.dart';
@@ -28,6 +31,30 @@ void main() {
 
   test('open event with no history expects nothing', () {
     expect(expectedOpeningCents(const []), 0);
+  });
+
+  test('clocks out only running shifts', () async {
+    final db = AppDatabase.withExecutor(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.writeSetting(
+      'staff_clock_sessions',
+      jsonEncode([
+        {'id': 'a', 'staffId': 's1', 'clockInAt': '2026-11-03T09:00:00'},
+        {
+          'id': 'b',
+          'staffId': 's2',
+          'clockInAt': '2026-11-03T08:00:00',
+          'clockOutAt': '2026-11-03T12:00:00',
+        },
+      ]),
+    );
+    final at = DateTime(2026, 11, 3, 18);
+    expect(await clockOutAllStaff(db, at: at), 1);
+    final saved = jsonDecode(await db.readSetting('staff_clock_sessions', '[]'))
+        as List<dynamic>;
+    expect(saved[0]['clockOutAt'], at.toIso8601String());
+    expect(saved[1]['clockOutAt'], '2026-11-03T12:00:00');
+    expect(await clockOutAllStaff(db, at: at), 0);
   });
 
   test('takings net refunds by method', () {

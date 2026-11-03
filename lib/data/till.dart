@@ -187,6 +187,26 @@ Future<void> addTillEvent(AppDatabase database, TillEvent event) async {
 int expectedOpeningCents(List<TillEvent> log) =>
     log.isEmpty ? 0 : log.first.keptCents;
 
+/// Ends every shift that is still running, and returns how many were ended.
+Future<int> clockOutAllStaff(AppDatabase database, {DateTime? at}) async {
+  const key = 'staff_clock_sessions';
+  final decoded = jsonDecode(await database.readSetting(key, '[]'));
+  final stamp = (at ?? DateTime.now()).toIso8601String();
+  var ended = 0;
+  final sessions = [
+    for (final item in decoded as List<dynamic>)
+      if ((item as Map)['clockOutAt'] == null)
+        {...item.cast<String, Object?>(), 'clockOutAt': stamp}
+      else
+        item,
+  ];
+  for (final item in decoded) {
+    if ((item as Map)['clockOutAt'] == null) ended++;
+  }
+  if (ended > 0) await database.writeSetting(key, jsonEncode(sessions));
+  return ended;
+}
+
 /// Payments recorded since the last close, or since midnight with no close.
 Future<TillTakings> loadTakingsSinceClose(
   AppDatabase database,

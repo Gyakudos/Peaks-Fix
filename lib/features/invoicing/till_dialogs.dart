@@ -152,6 +152,7 @@ class _CloseDayDialogState extends State<_CloseDayDialog> {
           takings: _takings,
         ),
       );
+      await clockOutAllStaff(AppDatabase.instance);
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
@@ -258,7 +259,8 @@ class _CloseDayDialogState extends State<_CloseDayDialog> {
                       ),
                     const SizedBox(height: 8),
                     Text(
-                      'Closing the day signs out everyone on this computer.',
+                      'Closing the day clocks out all staff and signs out '
+                      'everyone on this computer.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
