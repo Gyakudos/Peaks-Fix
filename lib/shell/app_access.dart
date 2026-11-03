@@ -132,6 +132,17 @@ class AppAccess {
 
   /// Editing or removing existing inventory is an admin task.
   bool get canChangeInventory => isAdmin;
+
+  /// Technician level of this job: Admin and Tech 1 are 1 (highest). Every
+  /// other job, including Front Desk, counts as Tech 3.
+  int get techLevel => switch (job) {
+        adminJob || 'Tech 1' => 1,
+        'Tech 2' => 2,
+        _ => 3,
+      };
+
+  /// Whether this job may do labour that needs [level] (null = any).
+  bool canDoJobLevel(int? level) => level == null || techLevel <= level;
 }
 
 /// Who is signed in. With no [user] the app is open (nobody has a login yet).

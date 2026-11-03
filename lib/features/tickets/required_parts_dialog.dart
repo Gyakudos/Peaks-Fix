@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/database.dart';
 import '../../data/tickets_repository.dart';
+import '../../shell/app_access.dart';
 import '../parts/add_inventory_part_dialog.dart';
 
 /// Label shown in the Parts Invoice picker.
@@ -13,6 +15,8 @@ String partPickerLabel(InventoryPart part) {
   return [
     if (sku != null && sku.isNotEmpty) sku,
     part.name,
+    if (isLabourCategory(part.category) && part.jobLevel != null)
+      jobLevelLabel(part.jobLevel!),
     'stock ${part.stock}',
   ].join(' · ');
 }
@@ -59,6 +63,7 @@ class RequiredPartsDialog extends StatefulWidget {
 class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
   final _quantityController = TextEditingController(text: '1');
   int? _selectedPartId;
+  List<InventoryPart> _inventory = const [];
   String? _error;
   bool _busy = false;
 
@@ -74,6 +79,14 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
     if (partId == null || quantity == null || quantity < 1) {
       setState(
           () => _error = 'Select a part and enter a quantity of 1 or more.');
+      return;
+    }
+    final part = _inventory.where((p) => p.id == partId).firstOrNull;
+    if (part != null &&
+        isLabourCategory(part.category) &&
+        !AppSessionScope.accessOf(context).canDoJobLevel(part.jobLevel)) {
+      setState(() => _error = '${part.name} needs '
+          '${jobLevelLabel(part.jobLevel!)} or higher.');
       return;
     }
     setState(() {
@@ -127,6 +140,7 @@ class _RequiredPartsDialogState extends State<RequiredPartsDialog> {
                 );
               }
               final inventory = inventorySnapshot.data ?? const [];
+              _inventory = inventory;
               if (_selectedPartId != null &&
                   !inventory.any((part) => part.id == _selectedPartId)) {
                 _selectedPartId = null;
