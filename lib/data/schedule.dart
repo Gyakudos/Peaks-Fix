@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'database.dart';
 
-/// A technician a job can be scheduled to (an active Tech 1-3 on the roster).
+/// A technician a job can be scheduled to (an active Admin as Tech 0, or Tech 1-3, on the roster).
 class Technician {
   const Technician({required this.id, required this.name, required this.job});
 
@@ -81,7 +81,7 @@ Future<void> saveScheduledJobs(AppDatabase database, List<ScheduledJob> jobs) =>
       jsonEncode([for (final job in jobs) job.toJson()]),
     );
 
-/// Active staff whose job is Tech 1, Tech 2 or Tech 3, best level first.
+/// Active Admin (shown as Tech 0) and Tech 1-3 staff, best level first.
 Future<List<Technician>> loadTechnicians(AppDatabase database) async {
   try {
     final decoded =
@@ -89,11 +89,12 @@ Future<List<Technician>> loadTechnicians(AppDatabase database) async {
     final techs = <Technician>[
       for (final item in decoded as List<dynamic>)
         if ((item as Map)['isActive'] as bool? ?? true)
-          if (RegExp(r'^Tech [123]$').hasMatch(item['job'] as String? ?? ''))
+          if (RegExp(r'^(Tech [123]|Admin)$')
+              .hasMatch(item['job'] as String? ?? ''))
             Technician(
               id: item['id'] as String,
               name: item['name'] as String,
-              job: item['job'] as String,
+              job: item['job'] == 'Admin' ? 'Tech 0' : item['job'] as String,
             ),
     ];
     techs.sort((a, b) {
