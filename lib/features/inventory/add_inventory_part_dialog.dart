@@ -83,6 +83,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
   List<InventoryPart> _inventory = const [];
   final List<LabourIncludedPart> _included = [];
   int? _includePartId;
+  int _jobLevel = 3;
 
   @override
   void initState() {
@@ -100,6 +101,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
     _vendorIdController.text = part.vendorId ?? '';
     _vendorSkuController.text = part.vendorSku ?? '';
     _brandController.text = part.brand ?? '';
+    _jobLevel = part.jobLevel ?? 3;
     _categoryController.text = part.category ?? '';
     _locationController.text = part.location ?? '';
     _stockController.text = '${part.inventoryValue}';
@@ -431,6 +433,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           vendorId: _vendorIdController.text,
           vendorSku: _vendorSkuController.text,
           brand: _brandController.text,
+          jobLevel: isLabour ? _jobLevel : null,
           category: _categoryValue,
           location: isLabour ? '' : _locationController.text,
           startingStock: startingStock,
@@ -450,6 +453,7 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
           vendorId: _vendorIdController.text,
           vendorSku: _vendorSkuController.text,
           brand: _brandController.text,
+          jobLevel: isLabour ? _jobLevel : null,
           category: _categoryValue,
           location: isLabour ? '' : _locationController.text,
           stock: startingStock,
@@ -519,6 +523,25 @@ class _AddInventoryPartDialogState extends State<AddInventoryPartDialog> {
                       'Shop format 000-000. Leave blank to auto-assign.',
                 ),
               ),
+              if (widget.labour)
+                DropdownButtonFormField<int>(
+                  key: const Key('inventory-labour-level'),
+                  initialValue: _jobLevel,
+                  decoration: const InputDecoration(
+                    labelText: 'Job Level',
+                    helperText: 'Tech 1 is the highest level; Admin counts '
+                        'as Tech 1.',
+                  ),
+                  items: [
+                    for (final level in jobLevels)
+                      DropdownMenuItem(
+                        value: level,
+                        child: Text(jobLevelLabel(level)),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _jobLevel = value ?? _jobLevel),
+                ),
               if (!widget.labour)
                 TextField(
                   key: const Key('inventory-part-brand'),

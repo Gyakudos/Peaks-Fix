@@ -595,6 +595,9 @@ class Parts extends Table {
 
   /// The part's brand or manufacturer.
   TextColumn get brand => text().nullable()();
+
+  /// Labour only: the technician level (1 = Tech 1 … 3 = Tech 3) needed.
+  IntColumn get jobLevel => integer().nullable()();
   TextColumn get category => text().nullable()();
   TextColumn get location => text().nullable()();
   IntColumn get stock => integer().withDefault(const Constant(0))();
@@ -750,7 +753,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Compared between host and clients so a mismatched build can't migrate or
   /// misread the shared database.
-  static const int currentSchemaVersion = 27;
+  static const int currentSchemaVersion = 28;
 
   /// The app's database: local, shared as a host, or a host's, chosen at
   /// startup in `main`.
@@ -1018,6 +1021,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 27) {
             await m.addColumn(parts, parts.brand);
+          }
+          if (from < 28) {
+            await m.addColumn(parts, parts.jobLevel);
           }
         },
       );
@@ -2697,6 +2703,7 @@ class AppDatabase extends _$AppDatabase {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2735,6 +2742,7 @@ class AppDatabase extends _$AppDatabase {
           vendorId: Value(_clean(vendorId)),
           vendorSku: Value(_clean(vendorSku)),
           brand: Value(_clean(brand)),
+          jobLevel: Value(jobLevel),
           category: Value(_clean(category)),
           location: Value(_clean(location)),
           stock: Value(startingStock),
@@ -2778,6 +2786,7 @@ class AppDatabase extends _$AppDatabase {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   }) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
@@ -2821,6 +2830,7 @@ class AppDatabase extends _$AppDatabase {
           vendorId: Value(_clean(vendorId)),
           vendorSku: Value(_clean(vendorSku)),
           brand: Value(_clean(brand)),
+          jobLevel: Value(jobLevel),
           category: Value(_clean(category)),
           location: Value(_clean(location)),
           stock: Value(stock),

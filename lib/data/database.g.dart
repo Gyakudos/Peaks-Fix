@@ -4943,6 +4943,12 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
   late final GeneratedColumn<String> brand = GeneratedColumn<String>(
       'brand', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _jobLevelMeta =
+      const VerificationMeta('jobLevel');
+  @override
+  late final GeneratedColumn<int> jobLevel = GeneratedColumn<int>(
+      'job_level', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _categoryMeta =
       const VerificationMeta('category');
   @override
@@ -5044,6 +5050,7 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
         vendorId,
         vendorSku,
         brand,
+        jobLevel,
         category,
         location,
         stock,
@@ -5097,6 +5104,10 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
     if (data.containsKey('brand')) {
       context.handle(
           _brandMeta, brand.isAcceptableOrUnknown(data['brand']!, _brandMeta));
+    }
+    if (data.containsKey('job_level')) {
+      context.handle(_jobLevelMeta,
+          jobLevel.isAcceptableOrUnknown(data['job_level']!, _jobLevelMeta));
     }
     if (data.containsKey('category')) {
       context.handle(_categoryMeta,
@@ -5175,6 +5186,8 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, Part> {
           .read(DriftSqlType.string, data['${effectivePrefix}vendor_sku']),
       brand: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}brand']),
+      jobLevel: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}job_level']),
       category: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}category']),
       location: attachedDatabase.typeMapping
@@ -5228,6 +5241,9 @@ class Part extends DataClass implements Insertable<Part> {
 
   /// The part's brand or manufacturer.
   final String? brand;
+
+  /// Labour only: the technician level (1 = Tech 1 … 3 = Tech 3) needed.
+  final int? jobLevel;
   final String? category;
   final String? location;
   final int stock;
@@ -5256,6 +5272,7 @@ class Part extends DataClass implements Insertable<Part> {
       this.vendorId,
       this.vendorSku,
       this.brand,
+      this.jobLevel,
       this.category,
       this.location,
       required this.stock,
@@ -5287,6 +5304,9 @@ class Part extends DataClass implements Insertable<Part> {
     }
     if (!nullToAbsent || brand != null) {
       map['brand'] = Variable<String>(brand);
+    }
+    if (!nullToAbsent || jobLevel != null) {
+      map['job_level'] = Variable<int>(jobLevel);
     }
     if (!nullToAbsent || category != null) {
       map['category'] = Variable<String>(category);
@@ -5328,6 +5348,9 @@ class Part extends DataClass implements Insertable<Part> {
           : Value(vendorSku),
       brand:
           brand == null && nullToAbsent ? const Value.absent() : Value(brand),
+      jobLevel: jobLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobLevel),
       category: category == null && nullToAbsent
           ? const Value.absent()
           : Value(category),
@@ -5360,6 +5383,7 @@ class Part extends DataClass implements Insertable<Part> {
       vendorId: serializer.fromJson<String?>(json['vendorId']),
       vendorSku: serializer.fromJson<String?>(json['vendorSku']),
       brand: serializer.fromJson<String?>(json['brand']),
+      jobLevel: serializer.fromJson<int?>(json['jobLevel']),
       category: serializer.fromJson<String?>(json['category']),
       location: serializer.fromJson<String?>(json['location']),
       stock: serializer.fromJson<int>(json['stock']),
@@ -5386,6 +5410,7 @@ class Part extends DataClass implements Insertable<Part> {
       'vendorId': serializer.toJson<String?>(vendorId),
       'vendorSku': serializer.toJson<String?>(vendorSku),
       'brand': serializer.toJson<String?>(brand),
+      'jobLevel': serializer.toJson<int?>(jobLevel),
       'category': serializer.toJson<String?>(category),
       'location': serializer.toJson<String?>(location),
       'stock': serializer.toJson<int>(stock),
@@ -5410,6 +5435,7 @@ class Part extends DataClass implements Insertable<Part> {
           Value<String?> vendorId = const Value.absent(),
           Value<String?> vendorSku = const Value.absent(),
           Value<String?> brand = const Value.absent(),
+          Value<int?> jobLevel = const Value.absent(),
           Value<String?> category = const Value.absent(),
           Value<String?> location = const Value.absent(),
           int? stock,
@@ -5430,6 +5456,7 @@ class Part extends DataClass implements Insertable<Part> {
         vendorId: vendorId.present ? vendorId.value : this.vendorId,
         vendorSku: vendorSku.present ? vendorSku.value : this.vendorSku,
         brand: brand.present ? brand.value : this.brand,
+        jobLevel: jobLevel.present ? jobLevel.value : this.jobLevel,
         category: category.present ? category.value : this.category,
         location: location.present ? location.value : this.location,
         stock: stock ?? this.stock,
@@ -5453,6 +5480,7 @@ class Part extends DataClass implements Insertable<Part> {
       vendorId: data.vendorId.present ? data.vendorId.value : this.vendorId,
       vendorSku: data.vendorSku.present ? data.vendorSku.value : this.vendorSku,
       brand: data.brand.present ? data.brand.value : this.brand,
+      jobLevel: data.jobLevel.present ? data.jobLevel.value : this.jobLevel,
       category: data.category.present ? data.category.value : this.category,
       location: data.location.present ? data.location.value : this.location,
       stock: data.stock.present ? data.stock.value : this.stock,
@@ -5489,6 +5517,7 @@ class Part extends DataClass implements Insertable<Part> {
           ..write('vendorId: $vendorId, ')
           ..write('vendorSku: $vendorSku, ')
           ..write('brand: $brand, ')
+          ..write('jobLevel: $jobLevel, ')
           ..write('category: $category, ')
           ..write('location: $location, ')
           ..write('stock: $stock, ')
@@ -5514,6 +5543,7 @@ class Part extends DataClass implements Insertable<Part> {
       vendorId,
       vendorSku,
       brand,
+      jobLevel,
       category,
       location,
       stock,
@@ -5537,6 +5567,7 @@ class Part extends DataClass implements Insertable<Part> {
           other.vendorId == this.vendorId &&
           other.vendorSku == this.vendorSku &&
           other.brand == this.brand &&
+          other.jobLevel == this.jobLevel &&
           other.category == this.category &&
           other.location == this.location &&
           other.stock == this.stock &&
@@ -5559,6 +5590,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
   final Value<String?> vendorId;
   final Value<String?> vendorSku;
   final Value<String?> brand;
+  final Value<int?> jobLevel;
   final Value<String?> category;
   final Value<String?> location;
   final Value<int> stock;
@@ -5579,6 +5611,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     this.vendorId = const Value.absent(),
     this.vendorSku = const Value.absent(),
     this.brand = const Value.absent(),
+    this.jobLevel = const Value.absent(),
     this.category = const Value.absent(),
     this.location = const Value.absent(),
     this.stock = const Value.absent(),
@@ -5600,6 +5633,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     this.vendorId = const Value.absent(),
     this.vendorSku = const Value.absent(),
     this.brand = const Value.absent(),
+    this.jobLevel = const Value.absent(),
     this.category = const Value.absent(),
     this.location = const Value.absent(),
     this.stock = const Value.absent(),
@@ -5621,6 +5655,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
     Expression<String>? vendorId,
     Expression<String>? vendorSku,
     Expression<String>? brand,
+    Expression<int>? jobLevel,
     Expression<String>? category,
     Expression<String>? location,
     Expression<int>? stock,
@@ -5642,6 +5677,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
       if (vendorId != null) 'vendor_id': vendorId,
       if (vendorSku != null) 'vendor_sku': vendorSku,
       if (brand != null) 'brand': brand,
+      if (jobLevel != null) 'job_level': jobLevel,
       if (category != null) 'category': category,
       if (location != null) 'location': location,
       if (stock != null) 'stock': stock,
@@ -5665,6 +5701,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
       Value<String?>? vendorId,
       Value<String?>? vendorSku,
       Value<String?>? brand,
+      Value<int?>? jobLevel,
       Value<String?>? category,
       Value<String?>? location,
       Value<int>? stock,
@@ -5685,6 +5722,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
       vendorId: vendorId ?? this.vendorId,
       vendorSku: vendorSku ?? this.vendorSku,
       brand: brand ?? this.brand,
+      jobLevel: jobLevel ?? this.jobLevel,
       category: category ?? this.category,
       location: location ?? this.location,
       stock: stock ?? this.stock,
@@ -5723,6 +5761,9 @@ class PartsCompanion extends UpdateCompanion<Part> {
     }
     if (brand.present) {
       map['brand'] = Variable<String>(brand.value);
+    }
+    if (jobLevel.present) {
+      map['job_level'] = Variable<int>(jobLevel.value);
     }
     if (category.present) {
       map['category'] = Variable<String>(category.value);
@@ -5774,6 +5815,7 @@ class PartsCompanion extends UpdateCompanion<Part> {
           ..write('vendorId: $vendorId, ')
           ..write('vendorSku: $vendorSku, ')
           ..write('brand: $brand, ')
+          ..write('jobLevel: $jobLevel, ')
           ..write('category: $category, ')
           ..write('location: $location, ')
           ..write('stock: $stock, ')
@@ -17307,6 +17349,7 @@ typedef $$PartsTableCreateCompanionBuilder = PartsCompanion Function({
   Value<String?> vendorId,
   Value<String?> vendorSku,
   Value<String?> brand,
+  Value<int?> jobLevel,
   Value<String?> category,
   Value<String?> location,
   Value<int> stock,
@@ -17328,6 +17371,7 @@ typedef $$PartsTableUpdateCompanionBuilder = PartsCompanion Function({
   Value<String?> vendorId,
   Value<String?> vendorSku,
   Value<String?> brand,
+  Value<int?> jobLevel,
   Value<String?> category,
   Value<String?> location,
   Value<int> stock,
@@ -17403,6 +17447,9 @@ class $$PartsTableFilterComposer extends Composer<_$AppDatabase, $PartsTable> {
 
   ColumnFilters<String> get brand => $composableBuilder(
       column: $table.brand, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get jobLevel => $composableBuilder(
+      column: $table.jobLevel, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get category => $composableBuilder(
       column: $table.category, builder: (column) => ColumnFilters(column));
@@ -17517,6 +17564,9 @@ class $$PartsTableOrderingComposer
   ColumnOrderings<String> get brand => $composableBuilder(
       column: $table.brand, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get jobLevel => $composableBuilder(
+      column: $table.jobLevel, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get category => $composableBuilder(
       column: $table.category, builder: (column) => ColumnOrderings(column));
 
@@ -17588,6 +17638,9 @@ class $$PartsTableAnnotationComposer
 
   GeneratedColumn<String> get brand =>
       $composableBuilder(column: $table.brand, builder: (column) => column);
+
+  GeneratedColumn<int> get jobLevel =>
+      $composableBuilder(column: $table.jobLevel, builder: (column) => column);
 
   GeneratedColumn<String> get category =>
       $composableBuilder(column: $table.category, builder: (column) => column);
@@ -17699,6 +17752,7 @@ class $$PartsTableTableManager extends RootTableManager<
             Value<String?> vendorId = const Value.absent(),
             Value<String?> vendorSku = const Value.absent(),
             Value<String?> brand = const Value.absent(),
+            Value<int?> jobLevel = const Value.absent(),
             Value<String?> category = const Value.absent(),
             Value<String?> location = const Value.absent(),
             Value<int> stock = const Value.absent(),
@@ -17720,6 +17774,7 @@ class $$PartsTableTableManager extends RootTableManager<
             vendorId: vendorId,
             vendorSku: vendorSku,
             brand: brand,
+            jobLevel: jobLevel,
             category: category,
             location: location,
             stock: stock,
@@ -17741,6 +17796,7 @@ class $$PartsTableTableManager extends RootTableManager<
             Value<String?> vendorId = const Value.absent(),
             Value<String?> vendorSku = const Value.absent(),
             Value<String?> brand = const Value.absent(),
+            Value<int?> jobLevel = const Value.absent(),
             Value<String?> category = const Value.absent(),
             Value<String?> location = const Value.absent(),
             Value<int> stock = const Value.absent(),
@@ -17762,6 +17818,7 @@ class $$PartsTableTableManager extends RootTableManager<
             vendorId: vendorId,
             vendorSku: vendorSku,
             brand: brand,
+            jobLevel: jobLevel,
             category: category,
             location: location,
             stock: stock,

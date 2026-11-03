@@ -284,12 +284,14 @@ class FakeTicketsRepository implements TicketsRepository {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   }) async {
     final cleanSku = sku?.trim();
     final id = inventoryParts.length + 1;
     inventoryParts.add(
       InventoryPart(
         id: id,
+        jobLevel: jobLevel,
         name: name,
         description: description,
         sku: cleanSku == null || cleanSku.isEmpty
@@ -347,6 +349,7 @@ class FakeTicketsRepository implements TicketsRepository {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   }) async {
     final index = inventoryParts.indexWhere((part) => part.id == partId);
     if (index == -1) throw StateError('Inventory part not found.');
@@ -354,6 +357,7 @@ class FakeTicketsRepository implements TicketsRepository {
     final cleanSku = sku?.trim();
     inventoryParts[index] = InventoryPart(
       id: partId,
+      jobLevel: jobLevel,
       name: name,
       description: description,
       sku: cleanSku == null || cleanSku.isEmpty

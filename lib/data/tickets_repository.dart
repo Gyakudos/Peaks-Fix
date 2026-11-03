@@ -273,6 +273,11 @@ class StaffMemberEntry {
       );
 }
 
+/// Technician levels for labour; Tech 1 is the highest and Admin counts as one.
+const List<int> jobLevels = [1, 2, 3];
+
+String jobLevelLabel(int level) => 'Tech $level';
+
 class InventoryPart {
   const InventoryPart({
     required this.id,
@@ -287,6 +292,7 @@ class InventoryPart {
     this.vendorId,
     this.vendorSku,
     this.brand,
+    this.jobLevel,
     this.category,
     this.location,
     this.purchaseType = PartPurchaseType.single,
@@ -299,6 +305,9 @@ class InventoryPart {
 
   /// The manufacturer or brand, e.g. "Anker".
   final String? brand;
+
+  /// Labour only: technician level needed, 1 (Tech 1) to 3 (Tech 3).
+  final int? jobLevel;
 
   /// Shop supplies only: bills [retailPriceCents] per use on the invoice.
   final bool chargeShopSupply;
@@ -658,6 +667,7 @@ abstract class TicketsRepository {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   });
 
   /// Parts that come with each labour item, keyed by the labour part id.
@@ -686,6 +696,7 @@ abstract class TicketsRepository {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   });
 
   Future<void> removeInventoryPart(int partId);
@@ -1177,6 +1188,7 @@ class DriftTicketsRepository implements TicketsRepository {
         vendorId: part.vendorId,
         vendorSku: part.vendorSku,
         brand: part.brand,
+        jobLevel: part.jobLevel,
         category: part.category,
         location: part.location,
         purchaseType: part.purchaseType,
@@ -1510,9 +1522,11 @@ class DriftTicketsRepository implements TicketsRepository {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   }) =>
       _db.createInventoryPart(
         brand: brand,
+        jobLevel: jobLevel,
         name: name,
         description: description,
         sku: sku,
@@ -1549,9 +1563,11 @@ class DriftTicketsRepository implements TicketsRepository {
     int minimumStock = 0,
     bool chargeShopSupply = false,
     String? brand,
+    int? jobLevel,
   }) =>
       _db.updateInventoryPart(
         brand: brand,
+        jobLevel: jobLevel,
         partId: partId,
         name: name,
         description: description,

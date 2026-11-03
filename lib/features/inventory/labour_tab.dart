@@ -142,6 +142,8 @@ class LabourTab extends StatelessWidget {
                             part.description!.trim(),
                           if (part.sku != null) 'SKU ${part.sku}',
                           'Labour Cost ${_money(part.retailPriceCents)}',
+                          if (part.jobLevel != null)
+                            jobLevelLabel(part.jobLevel!),
                           if ((included[part.id] ?? const []).isNotEmpty)
                             'Includes ${(included[part.id] ?? const []).map((item) => '${item.quantity} × ${names[item.partId] ?? 'part #${item.partId}'}').join(', ')}',
                         ].join(' · ')),
