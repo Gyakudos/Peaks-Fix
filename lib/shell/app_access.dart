@@ -31,6 +31,53 @@ class StaffAccount {
 
 typedef StaffAccountLoader = Future<List<StaffAccount>> Function();
 
+/// Creates the shop's first Admin login and returns it.
+typedef AdminCreator = Future<StaffAccount> Function(
+  String name,
+  String username,
+  String password,
+);
+
+/// Adds an Admin to the staff roster with a salted password hash.
+Future<StaffAccount> createFirstAdmin(
+  AppDatabase database, {
+  required String name,
+  required String username,
+  required String password,
+}) async {
+  final row = await (database.select(database.settings)
+        ..where((setting) => setting.key.equals('staff_roster')))
+      .getSingleOrNull();
+  final roster = row == null
+      ? <dynamic>[]
+      : List<dynamic>.of(jsonDecode(row.value) as List<dynamic>);
+  final salt = StaffCredentials.newSalt();
+  final hash = StaffCredentials.hash(password, salt);
+  final id = DateTime.now().microsecondsSinceEpoch.toString();
+  roster.add({
+    'id': id,
+    'name': name,
+    'job': AppAccess.adminJob,
+    'isActive': true,
+    'hourlyRateCents': 0,
+    'phone': '',
+    'email': '',
+    'address': '',
+    'username': username,
+    'passwordSalt': salt,
+    'passwordHash': hash,
+  });
+  await database.writeSetting('staff_roster', jsonEncode(roster));
+  return StaffAccount(
+    id: id,
+    name: name,
+    job: AppAccess.adminJob,
+    username: username,
+    passwordSalt: salt,
+    passwordHash: hash,
+  );
+}
+
 /// Reads the active staff with a username and password from the roster.
 Future<List<StaffAccount>> loadStaffAccounts(AppDatabase database) async {
   final row = await (database.select(database.settings)
@@ -131,11 +178,16 @@ class LoginGate extends StatefulWidget {
     super.key,
     required this.session,
     required this.loadAccounts,
+    this.createAdmin,
     required this.child,
   });
 
   final AppSession session;
   final StaffAccountLoader? loadAccounts;
+
+  /// When set, a shop with no Admin login must create one before using the
+  /// app. When null the app stays open until an Admin exists.
+  final AdminCreator? createAdmin;
   final Widget child;
 
   @override
@@ -186,7 +238,12 @@ class _LoginGateState extends State<LoginGate> {
             }
             final accounts = snapshot.data!;
             if (!accounts.any((account) => account.isAdmin)) {
-              return widget.child;
+              final create = widget.createAdmin;
+              if (create == null) return widget.child;
+              return _AdminSetupScreen(
+                createAdmin: create,
+                onCreated: widget.session.signIn,
+              );
             }
             return _LoginScreen(
               accounts: accounts,
@@ -195,6 +252,144 @@ class _LoginGateState extends State<LoginGate> {
           },
         );
       },
+    );
+  }
+}
+
+/// First-run screen: the shop owner creates the Admin login.
+class _AdminSetupScreen extends StatefulWidget {
+  const _AdminSetupScreen({required this.createAdmin, required this.onCreated});
+
+  final AdminCreator createAdmin;
+  final ValueChanged<StaffAccount> onCreated;
+
+  @override
+  State<_AdminSetupScreen> createState() => _AdminSetupScreenState();
+}
+
+class _AdminSetupScreenState extends State<_AdminSetupScreen> {
+  final _name = TextEditingController();
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _username.dispose();
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _name.text.trim();
+    final username = _username.text.trim();
+    String? problem;
+    if (name.isEmpty || username.isEmpty) {
+      problem = 'Enter your name and a username.';
+    } else if (_password.text.length < StaffCredentials.minPasswordLength) {
+      problem = 'Password must be at least '
+          '${StaffCredentials.minPasswordLength} characters.';
+    } else if (_password.text != _confirm.text) {
+      problem = 'The passwords do not match.';
+    }
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final account = await widget.createAdmin(name, username, _password.text);
+      widget.onCreated(account);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = 'Could not create the login: $error';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Welcome to Peaks Fix',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Create the Admin login for this shop. Staff logins are '
+                  'added later in Settings. Keep this password safe: it '
+                  'cannot be recovered.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  key: const Key('setup-name'),
+                  controller: _name,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Your name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('setup-username'),
+                  controller: _username,
+                  autocorrect: false,
+                  decoration: const InputDecoration(labelText: 'Username'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('setup-password'),
+                  controller: _password,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(labelText: 'Password'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('setup-confirm'),
+                  controller: _confirm,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm password',
+                    errorText: _error,
+                    errorMaxLines: 3,
+                  ),
+                  onSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  key: const Key('setup-submit'),
+                  onPressed: _saving ? null : _submit,
+                  child: const Text('Create Admin login'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

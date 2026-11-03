@@ -15,10 +15,13 @@ StaffAccount account(String name, String job, String user, String password) {
   );
 }
 
-Widget host(AppSession session, StaffAccountLoader? loader) => MaterialApp(
+Widget host(AppSession session, StaffAccountLoader? loader,
+        {AdminCreator? createAdmin}) =>
+    MaterialApp(
       home: LoginGate(
         session: session,
         loadAccounts: loader,
+        createAdmin: createAdmin,
         child: Builder(
           builder: (context) {
             final access = AppSessionScope.accessOf(context);
@@ -36,8 +39,12 @@ Widget host(AppSession session, StaffAccountLoader? loader) => MaterialApp(
       ),
     );
 
-Widget scoped(AppSession session, StaffAccountLoader? loader) =>
-    AppSessionScope(session: session, child: host(session, loader));
+Widget scoped(AppSession session, StaffAccountLoader? loader,
+        {AdminCreator? createAdmin}) =>
+    AppSessionScope(
+      session: session,
+      child: host(session, loader, createAdmin: createAdmin),
+    );
 
 void main() {
   test('admin opens everything, others only the front desk pages', () {
@@ -80,6 +87,40 @@ void main() {
           () async => [account('Dee', 'Front Desk', 'dee', 'secret1')]),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Inside as Admin'), findsOneWidget);
+  });
+
+  testWidgets('new shop must create an Admin before using the app',
+      (tester) async {
+    final session = AppSession();
+    final created = <String>[];
+    await tester.pumpWidget(
+      scoped(
+        session,
+        () async => [],
+        createAdmin: (name, username, password) async {
+          created.add('$name/$username');
+          return account(name, 'Admin', username, password);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('setup-submit')), findsOneWidget);
+    expect(find.text('Inside as Admin'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('setup-name')), 'Ann');
+    await tester.enterText(find.byKey(const Key('setup-username')), 'ann');
+    await tester.enterText(find.byKey(const Key('setup-password')), 'adminpw1');
+    await tester.enterText(find.byKey(const Key('setup-confirm')), 'nope');
+    await tester.tap(find.byKey(const Key('setup-submit')));
+    await tester.pump();
+    expect(find.text('The passwords do not match.'), findsOneWidget);
+    expect(created, isEmpty);
+
+    await tester.enterText(find.byKey(const Key('setup-confirm')), 'adminpw1');
+    await tester.tap(find.byKey(const Key('setup-submit')));
+    await tester.pumpAndSettle();
+    expect(created, ['Ann/ann']);
     expect(find.text('Inside as Admin'), findsOneWidget);
   });
 

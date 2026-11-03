@@ -44,7 +44,15 @@ Future<String?> openConfiguredDatabase(NetworkSettings settings) async {
 }
 
 void runShop() => runApp(
-      VolaFixApp(loadAccounts: () => loadStaffAccounts(AppDatabase.instance)),
+      VolaFixApp(
+        loadAccounts: () => loadStaffAccounts(AppDatabase.instance),
+        createAdmin: (name, username, password) => createFirstAdmin(
+          AppDatabase.instance,
+          name: name,
+          username: username,
+          password: password,
+        ),
+      ),
     );
 
 /// Shown when a client PC can't reach its host.

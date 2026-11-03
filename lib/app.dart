@@ -9,7 +9,15 @@ import 'window/window_chrome.dart';
 import 'window/window_title_bar.dart';
 
 class VolaFixApp extends StatefulWidget {
-  const VolaFixApp({super.key, this.tickets, this.loadAccounts});
+  const VolaFixApp({
+    super.key,
+    this.tickets,
+    this.loadAccounts,
+    this.createAdmin,
+  });
+
+  /// Creates the first Admin on a new install. Null skips the setup screen.
+  final AdminCreator? createAdmin;
 
   /// Injected by tests; production uses the SQLite-backed repository.
   final TicketsRepository? tickets;
@@ -68,6 +76,7 @@ class _VolaFixAppState extends State<VolaFixApp> {
       home: LoginGate(
         session: _session,
         loadAccounts: widget.loadAccounts,
+        createAdmin: widget.createAdmin,
         child: const ShopShell(),
       ),
     );
