@@ -241,22 +241,28 @@ class _PartsTabState extends State<PartsTab> {
                               if (part.sku != null)
                                 _InfoBlock(
                                   key: Key('part-sku-${part.id}'),
-                                  text: 'SKU ${part.sku}',
+                                  label: 'SKU',
+                                  value: part.sku!,
+                                  color: const Color(0xFF1565C0),
                                 ),
                               if (part.vendorId != null)
                                 _InfoBlock(
                                   key: Key('part-vendor-${part.id}'),
-                                  text: 'Vendor ${part.vendorId}',
+                                  label: 'Vendor',
+                                  value: part.vendorId!,
+                                  color: const Color(0xFF6A1B9A),
                                 ),
                               _InfoBlock(
                                 key: Key('part-raw-cost-${part.id}'),
-                                text:
-                                    'Raw Parts Cost ${_money(part.rawCostCents)}',
+                                label: 'Raw Parts Cost',
+                                value: _money(part.rawCostCents),
+                                color: const Color(0xFFE65100),
                               ),
                               _InfoBlock(
                                 key: Key('part-retail-cost-${part.id}'),
-                                text: 'Retail Parts Cost '
-                                    '${_money(part.retailPriceCents)}',
+                                label: 'Retail Parts Cost',
+                                value: _money(part.retailPriceCents),
+                                color: const Color(0xFF2E7D32),
                               ),
                             ],
                           ),
@@ -356,23 +362,44 @@ class _PartsTabState extends State<PartsTab> {
   String _money(int cents) => '\$${(cents / 100).toStringAsFixed(2)}';
 }
 
-/// A small outlined box around one inventory detail.
+/// A coloured box that makes one inventory detail stand out.
 class _InfoBlock extends StatelessWidget {
-  const _InfoBlock({super.key, required this.text});
+  const _InfoBlock({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
-  final String text;
+  final String label;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(6),
+        color: color.withValues(alpha: .1),
+        border: Border.all(color: color.withValues(alpha: .6), width: 1.4),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(text, style: theme.textTheme.bodySmall),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$label ',
+              style: TextStyle(color: color, fontWeight: FontWeight.w500),
+            ),
+            TextSpan(
+              text: value,
+              style: TextStyle(color: color, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        style: theme.textTheme.bodyMedium,
+      ),
     );
   }
 }
