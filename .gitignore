@@ -50,3 +50,5 @@ app.*.map.json
 
 # Test and coverage output
 coverage/
+
+installer/Output/
