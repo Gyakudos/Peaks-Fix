@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/data/database.dart';
+import 'package:vola_fix/data/etransfer.dart';
 import 'package:vola_fix/data/print_documents.dart';
 import 'package:vola_fix/data/tickets_repository.dart';
 
@@ -34,6 +35,10 @@ void main() {
     await logo.writeAsBytes(png);
     addTearDown(() => logo.deleteSync());
     await database.writeSetting(shopLogoKey, logo.path);
+    await saveETransferConfig(
+      database,
+      const ETransferConfig(email: 'pay@example.com'),
+    );
 
     final data = await loadTicketPrintData(repository, database, ticket.id);
     expect(data, isNotNull);
@@ -41,6 +46,7 @@ void main() {
     expect(data.disclaimer, 'No refunds on wear.');
     expect(data.shopName, 'Grizzly Peaks Repair Center');
     expect(data.logoPath, logo.path);
+    expect(data.eTransfer.email, 'pay@example.com');
     final folder = Directory.systemTemp.createTempSync('docs_test');
     addTearDown(() => folder.deleteSync(recursive: true));
     await database.writeSetting(documentsFolderKey, folder.path);

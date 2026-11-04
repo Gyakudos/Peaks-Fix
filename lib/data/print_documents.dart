@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'database.dart';
+import 'etransfer.dart';
 import 'partners.dart';
 import 'tickets_repository.dart';
 import 'warranty.dart';
@@ -75,6 +76,7 @@ class TicketPrintData {
     required this.shopName,
     required this.disclaimer,
     this.logoPath = '',
+    this.eTransfer = const ETransferConfig(),
     this.requiredParts = const [],
     this.recipientEmail = '',
     this.recipientName = '',
@@ -91,6 +93,7 @@ class TicketPrintData {
   final String disclaimer;
   final List<RequiredPart> requiredParts;
   final String logoPath;
+  final ETransferConfig eTransfer;
 
   /// Where documents are emailed: the partner for partner bookings, otherwise
   /// the customer. Empty when no address is on file.
@@ -130,6 +133,7 @@ Future<TicketPrintData?> loadTicketPrintData(
     recipientEmail: email,
     recipientName: name,
     logoPath: await database.readSetting(shopLogoKey, ''),
+    eTransfer: await loadETransferConfig(database),
     requiredParts: await repository.watchRequiredParts(ticketId).first,
     entry: entry,
     photos: await repository.watchPhotoChecklist(ticketId).first,
@@ -539,6 +543,37 @@ List<pw.Widget> _invoiceBody(TicketPrintData data) {
           ),
         ),
       row('Balance due', _money(invoice.totalCents - paid), bold: true),
+    ],
+    if (data.eTransfer.isConfigured && invoice.totalCents - paid > 0) ...[
+      pw.SizedBox(height: 14),
+      pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.BarcodeWidget(
+            barcode: pw.Barcode.qrCode(),
+            data: eTransferPayload(
+              data.eTransfer,
+              amountCents: invoice.totalCents - paid,
+              reference: data.entry.summary.number,
+            ),
+            width: 90,
+            height: 90,
+          ),
+          pw.SizedBox(width: 12),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'Pay by Interac e-Transfer',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.Text('To: ${data.eTransfer.email.trim()}'),
+              pw.Text('Amount: ${_money(invoice.totalCents - paid)}'),
+              pw.Text('Message: ${data.entry.summary.number}'),
+            ],
+          ),
+        ],
+      ),
     ],
   ];
 }
