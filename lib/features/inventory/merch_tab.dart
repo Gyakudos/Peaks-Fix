@@ -6,6 +6,7 @@ import '../../data/tickets_repository.dart';
 import '../../shell/app_access.dart';
 import 'add_merch_item_dialog.dart';
 import 'adjust_stock_dialog.dart';
+import 'info_block.dart';
 
 class MerchTab extends StatelessWidget {
   const MerchTab({super.key});
@@ -129,20 +130,32 @@ class MerchTab extends StatelessWidget {
                       child: ListTile(
                         leading: const Icon(Icons.storefront_outlined),
                         title: Text(item.name),
-                        subtitle: Text([
-                          if (item.description != null &&
-                              item.description!.trim().isNotEmpty)
-                            item.description!.trim(),
-                          if (item.category != null) item.category!,
-                          if (item.sku != null) 'SKU ${item.sku}',
-                          if (item.location != null)
-                            'Location ${item.location}',
-                          'Cost ${_money(item.costCents)}',
-                          'Retail ${_money(item.priceCents)}',
-                          if (item.priceCents > 0)
-                            '${(item.profitCents * 100 / item.priceCents).round()}'
-                                '% margin',
-                        ].join(' · ')),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text([
+                              if (item.description != null &&
+                                  item.description!.trim().isNotEmpty)
+                                item.description!.trim(),
+                              if (item.category != null) item.category!,
+                              if (item.location != null)
+                                'Location ${item.location}',
+                              if (item.priceCents > 0)
+                                '${(item.profitCents * 100 / item.priceCents).round()}'
+                                    '% margin',
+                            ].join(' · ')),
+                            const SizedBox(height: 6),
+                            InventoryInfoBlocks(
+                              keyPrefix: 'merch',
+                              id: item.id,
+                              sku: item.sku,
+                              costLabel: 'Cost',
+                              costCents: item.costCents,
+                              retailLabel: 'Retail',
+                              retailCents: item.priceCents,
+                            ),
+                          ],
+                        ),
                         trailing: Wrap(
                           crossAxisAlignment: WrapCrossAlignment.center,
                           spacing: 4,
@@ -207,6 +220,4 @@ class MerchTab extends StatelessWidget {
       ),
     );
   }
-
-  String _money(int cents) => '\$${(cents / 100).toStringAsFixed(2)}';
 }

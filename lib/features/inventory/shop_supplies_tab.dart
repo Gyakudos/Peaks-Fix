@@ -6,6 +6,7 @@ import '../../data/tickets_repository.dart';
 import '../../shell/app_access.dart';
 import 'add_inventory_part_dialog.dart';
 import 'adjust_stock_dialog.dart';
+import 'info_block.dart';
 
 class ShopSuppliesTab extends StatelessWidget {
   const ShopSuppliesTab({super.key});
@@ -144,20 +145,36 @@ class ShopSuppliesTab extends StatelessWidget {
                       child: ListTile(
                         leading: const Icon(Icons.handyman_outlined),
                         title: Text(part.name),
-                        subtitle: Text([
-                          if (part.description != null &&
-                              part.description!.trim().isNotEmpty)
-                            part.description!.trim(),
-                          if (part.category != null) part.category!,
-                          if (part.sku != null) 'SKU ${part.sku}',
-                          if (part.location != null)
-                            'Location ${part.location}',
-                          if (part.purchaseType == PartPurchaseType.tube)
-                            'Full tubes ${part.fullTubes} · '
-                                '${part.usesInOpenTube} uses in open tube',
-                          'Inventory ${part.inventory}',
-                          'Minimum stock ${part.minimumStock}',
-                        ].join(' · ')),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text([
+                              if (part.description != null &&
+                                  part.description!.trim().isNotEmpty)
+                                part.description!.trim(),
+                              if (part.category != null) part.category!,
+                              if (part.location != null)
+                                'Location ${part.location}',
+                              if (part.purchaseType == PartPurchaseType.tube)
+                                'Full tubes ${part.fullTubes} · '
+                                    '${part.usesInOpenTube} uses in open tube',
+                              'Inventory ${part.inventory}',
+                              'Minimum stock ${part.minimumStock}',
+                            ].join(' · ')),
+                            const SizedBox(height: 6),
+                            InventoryInfoBlocks(
+                              keyPrefix: 'supply',
+                              id: part.id,
+                              sku: part.sku,
+                              vendor: part.vendorId,
+                              vendorSku: part.vendorSku,
+                              costLabel: 'Raw Cost',
+                              costCents: part.rawCostCents,
+                              retailLabel: 'Retail Cost',
+                              retailCents: part.retailPriceCents,
+                            ),
+                          ],
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
