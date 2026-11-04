@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -15,6 +17,36 @@ const shopLogoKey = 'shop_logo_path';
 /// Settings keys for the shop's chosen printer (empty = ask every time).
 const printerUrlKey = 'default_printer_url';
 const printerNameKey = 'default_printer_name';
+const documentsFolderKey = 'documents_folder';
+
+/// Folder where copies of printed and emailed documents are kept.
+Future<String> documentsFolder(AppDatabase database) async {
+  final chosen = await database.readSetting(documentsFolderKey, '');
+  if (chosen.isNotEmpty) return chosen;
+  final support = await getApplicationSupportDirectory();
+  return p.join(support.path, 'documents');
+}
+
+/// Keeps a local copy of a document under `<folder>/Ticket <number>/`.
+Future<File> saveDocumentCopy({
+  required AppDatabase database,
+  required String ticketNumber,
+  required String fileName,
+  required Uint8List bytes,
+}) async {
+  final safe = ticketNumber.replaceAll(RegExp(r'[<>:"/\\|?*]'), '-');
+  final dir =
+      Directory(p.join(await documentsFolder(database), 'Ticket $safe'));
+  await dir.create(recursive: true);
+  final now = DateTime.now();
+  String two(int v) => v.toString().padLeft(2, '0');
+  final stamp = '${now.year}${two(now.month)}${two(now.day)}_'
+      '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+  final base = p.basenameWithoutExtension(fileName);
+  final file = File(p.join(dir.path, '${base}_$stamp.pdf'));
+  await file.writeAsBytes(bytes, flush: true);
+  return file;
+}
 
 /// Which paper document to produce for a ticket.
 enum PrintKind {

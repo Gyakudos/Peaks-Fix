@@ -17,6 +17,7 @@ import '../tickets/ticket_widgets.dart';
 import '../../shell/app_access.dart';
 import 'device_catalog_section.dart';
 import 'inventory_file_section.dart';
+import 'documents_folder_section.dart';
 import 'printer_section.dart';
 import 'shop_identity_section.dart';
 import 'warranty_disclaimer_section.dart';
@@ -153,6 +154,8 @@ class _SettingsPageState extends State<SettingsPage> {
           InventoryFileSettings(database: _database),
           const Divider(height: 36),
           ShopIdentitySettings(database: _database),
+          const Divider(height: 36),
+          DocumentsFolderSettings(database: _database),
           const Divider(height: 36),
           WarrantyDisclaimerSettings(database: _database),
           const Divider(height: 36),

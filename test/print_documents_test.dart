@@ -41,6 +41,17 @@ void main() {
     expect(data.disclaimer, 'No refunds on wear.');
     expect(data.shopName, 'Grizzly Peaks Repair Center');
     expect(data.logoPath, logo.path);
+    final folder = Directory.systemTemp.createTempSync('docs_test');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    await database.writeSetting(documentsFolderKey, folder.path);
+    final saved = await saveDocumentCopy(
+      database: database,
+      ticketNumber: data.entry.summary.number,
+      fileName: 'Invoice_1.pdf',
+      bytes: await buildTicketPdf(data, PrintKind.invoice),
+    );
+    expect(saved.existsSync(), isTrue);
+    expect(saved.path.startsWith(folder.path), isTrue);
     for (final kind in PrintKind.values) {
       final bytes = await buildTicketPdf(data, kind);
       expect(String.fromCharCodes(bytes.take(4)), '%PDF', reason: kind.label);

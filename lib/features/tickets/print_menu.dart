@@ -28,6 +28,18 @@ Future<void> runTicketPrint(
     final bytes = await buildTicketPdf(data, kind);
     final number = data.entry.summary.number;
     final name = '${kind.label.split(' ').first}_$number.pdf';
+    try {
+      await saveDocumentCopy(
+        database: AppDatabase.instance,
+        ticketNumber: number,
+        fileName: name,
+        bytes: bytes,
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not save a local copy.')),
+      );
+    }
     if (action == PrintAction.print) {
       final url = await AppDatabase.instance.readSetting(printerUrlKey, '');
       final printer = url.isEmpty
