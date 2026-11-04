@@ -5,6 +5,7 @@ import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../../shell/app_access.dart';
 import 'add_inventory_part_dialog.dart';
+import 'adjust_stock_dialog.dart';
 import 'labour_tab.dart';
 
 /// True when every word in [query] appears in the part's ID, brand, name,
@@ -315,6 +316,20 @@ class _PartsTabState extends State<PartsTab> {
                               ),
                             ),
                           ),
+                          if (AppSessionScope.accessOf(context)
+                                  .canAdjustStock &&
+                              !AppSessionScope.accessOf(context)
+                                  .canChangeInventory)
+                            TextButton.icon(
+                              key: Key('adjust-stock-${part.id}'),
+                              onPressed: () => showAdjustStockDialog(
+                                context,
+                                repository: repository,
+                                part: part,
+                              ),
+                              icon: const Icon(Icons.exposure),
+                              label: const Text('Adjust stock'),
+                            ),
                           if (AppSessionScope.accessOf(context)
                               .canChangeInventory) ...[
                             TextButton.icon(

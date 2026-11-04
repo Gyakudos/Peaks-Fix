@@ -78,6 +78,36 @@ Future<StaffAccount> createFirstAdmin(
   );
 }
 
+/// Replaces a staff member's password after checking the current one.
+/// Returns false when [currentPassword] is wrong or the member isn't found.
+Future<bool> changeStaffPassword(
+  AppDatabase database, {
+  required String staffId,
+  required String currentPassword,
+  required String newPassword,
+}) async {
+  final row = await (database.select(database.settings)
+        ..where((setting) => setting.key.equals('staff_roster')))
+      .getSingleOrNull();
+  if (row == null) return false;
+  final roster = List<dynamic>.of(jsonDecode(row.value) as List<dynamic>);
+  final index = roster.indexWhere((item) => (item as Map)['id'] == staffId);
+  if (index == -1) return false;
+  final member = Map<String, dynamic>.of(roster[index] as Map<String, dynamic>);
+  final ok = StaffCredentials.verify(
+    currentPassword,
+    member['passwordSalt'] as String? ?? '',
+    member['passwordHash'] as String? ?? '',
+  );
+  if (!ok) return false;
+  final salt = StaffCredentials.newSalt();
+  member['passwordSalt'] = salt;
+  member['passwordHash'] = StaffCredentials.hash(newPassword, salt);
+  roster[index] = member;
+  await database.writeSetting('staff_roster', jsonEncode(roster));
+  return true;
+}
+
 /// Reads the active staff with a username and password from the roster.
 Future<List<StaffAccount>> loadStaffAccounts(AppDatabase database) async {
   final row = await (database.select(database.settings)
@@ -108,8 +138,8 @@ Future<List<StaffAccount>> loadStaffAccounts(AppDatabase database) async {
 /// What the signed-in job is allowed to do.
 ///
 /// Admin can open everything and change every setting. Every other job gets
-/// Tickets (including intake), Calendar, Inventory (view and add only) and
-/// Staff Login.
+/// Tickets (including intake), Calendar, Inventory (view and add only), Staff
+/// Login and a limited Settings page (their own account and jobs).
 class AppAccess {
   const AppAccess(this.job);
 
@@ -121,6 +151,7 @@ class AppAccess {
     'Calendar',
     'Inventory',
     'Staff Login',
+    'Settings',
   };
 
   final String job;
@@ -148,6 +179,9 @@ class AppAccess {
 
   /// Admin and Front Desk book jobs to technicians on the calendar.
   bool get canSchedule => isAdmin || job == 'Front Desk';
+
+  /// Admin and Front Desk correct inventory quantities.
+  bool get canAdjustStock => isAdmin || job == 'Front Desk';
 }
 
 /// Who is signed in. With no [user] the app is open (nobody has a login yet).

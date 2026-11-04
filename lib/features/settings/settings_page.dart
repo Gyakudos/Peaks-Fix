@@ -14,7 +14,9 @@ import '../../data/staff_credentials.dart';
 import '../../data/taxes.dart';
 import '../tickets/ticket_detail_page.dart';
 import '../tickets/ticket_widgets.dart';
+import '../../shell/app_access.dart';
 import 'device_catalog_section.dart';
+import 'my_account_page.dart';
 import 'section_heading.dart';
 
 const _staffJobs = ['Admin', 'Front Desk', 'Tech 3', 'Tech 2', 'Tech 1'];
@@ -124,6 +126,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AppSessionScope.accessOf(context).isAdmin) {
+      return MyAccountPage(database: widget.database);
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(

@@ -68,9 +68,12 @@ void main() {
       ].every(desk.canOpen),
       isTrue,
     );
-    for (final label in ['Invoicing', 'Customers', 'Financial', 'Settings']) {
+    for (final label in ['Invoicing', 'Customers', 'Financial']) {
       expect(desk.canOpen(label), isFalse, reason: label);
     }
+    expect(desk.canOpen('Settings'), isTrue);
+    expect(desk.canAdjustStock, isTrue);
+    expect(const AppAccess('Tech 2').canAdjustStock, isFalse);
     expect(admin.canChangeInventory, isTrue);
     expect(desk.canChangeInventory, isFalse);
   });
@@ -160,7 +163,7 @@ void main() {
     await tester.tap(find.byKey(const Key('login-submit')));
     await tester.pumpAndSettle();
     expect(find.text('Inside as Front Desk'), findsOneWidget);
-    expect(find.text('no settings'), findsOneWidget);
+    expect(find.text('settings'), findsOneWidget);
     expect(find.text('view only'), findsOneWidget);
 
     session.signOut();
