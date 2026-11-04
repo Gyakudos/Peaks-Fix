@@ -76,7 +76,7 @@ class _PrinterSettingsState extends State<PrinterSettings> {
         ),
         const SizedBox(height: 8),
         if (_loading)
-          const LinearProgressIndicator()
+          const Text('Looking for printers...')
         else if (_error != null)
           Text(_error!)
         else
