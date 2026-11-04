@@ -10,6 +10,7 @@ import '../../data/database.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../capture/phone_capture_dialog.dart';
+import 'print_menu.dart';
 import 'ticket_dates_panel.dart';
 import 'technical_report_editor.dart';
 import 'ticket_widgets.dart';
@@ -62,7 +63,10 @@ class TicketDetailPage extends StatelessWidget {
     required Widget child,
   }) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: Text(title),
+        actions: [TicketPrintMenu(ticketId: ticketId)],
+      ),
       body: child,
     );
   }
