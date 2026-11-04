@@ -168,27 +168,27 @@ List<pw.Widget> _header(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            if (logo != null) ...[
+              pw.SizedBox(height: 54, child: pw.Image(logo)),
+              pw.SizedBox(width: 10),
+            ],
+            pw.Text(
+              data.shopName,
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+          ],
+        ),
         pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
             pw.Text(
               title,
               style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
             ),
             pw.Text('Ticket ${summary.number}'),
-          ],
-        ),
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            pw.Text(
-              data.shopName,
-              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-            ),
-            if (logo != null) ...[
-              pw.SizedBox(width: 10),
-              pw.SizedBox(height: 54, child: pw.Image(logo)),
-            ],
           ],
         ),
       ],
