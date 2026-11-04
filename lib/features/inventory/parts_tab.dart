@@ -253,6 +253,14 @@ class _PartsTabState extends State<PartsTab> {
                                   value: part.vendorId!,
                                   color: const Color(0xFF6A1B9A),
                                 ),
+                              if (part.vendorSku != null &&
+                                  part.vendorSku!.isNotEmpty)
+                                _InfoBlock(
+                                  key: Key('part-vendor-sku-${part.id}'),
+                                  label: 'Vendor SKU',
+                                  value: part.vendorSku!,
+                                  color: const Color(0xFF00838F),
+                                ),
                               _InfoBlock(
                                 key: Key('part-raw-cost-${part.id}'),
                                 label: 'Raw Parts Cost',
