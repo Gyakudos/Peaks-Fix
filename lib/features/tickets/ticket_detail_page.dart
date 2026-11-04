@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../data/database.dart';
+import '../../data/print_documents.dart';
 import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../capture/phone_capture_dialog.dart';
@@ -871,6 +872,15 @@ class _ReportsCard extends StatelessWidget {
                       repository: repository,
                       initialNotes: intakeNotes,
                     ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: PrintEmailButtons(
+                        ticketId: ticketId,
+                        kind: PrintKind.report1,
+                        label: 'Report 1',
+                      ),
+                    ),
                     _ReportOneFooter(
                       ticketId: ticketId,
                       checklist: checklist,
@@ -943,6 +953,31 @@ class _ReportsCard extends StatelessWidget {
                               device: device,
                               repository: repository,
                             ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(40, 0, 8, 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  PrintEmailButtons(
+                                    ticketId: ticketId,
+                                    kind: PrintKind.report2,
+                                    label: 'Report 2',
+                                  ),
+                                  const SizedBox(height: 8),
+                                  PrintEmailButtons(
+                                    ticketId: ticketId,
+                                    kind: PrintKind.partsRequired,
+                                    label: 'Parts required',
+                                  ),
+                                  const SizedBox(height: 8),
+                                  PrintEmailButtons(
+                                    ticketId: ticketId,
+                                    kind: PrintKind.invoice,
+                                    label: 'Invoice',
+                                  ),
+                                ],
+                              ),
+                            ),
                             _ReportCompletionFooter(
                               completedAt: report2CompletedAt,
                               title: 'Report 2 complete',
@@ -991,6 +1026,25 @@ class _ReportsCard extends StatelessWidget {
                         customerName: customerName,
                         device: device,
                         repository: repository,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(40, 8, 8, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            PrintEmailButtons(
+                              ticketId: ticketId,
+                              kind: PrintKind.report3,
+                              label: 'Report 3',
+                            ),
+                            const SizedBox(height: 8),
+                            PrintEmailButtons(
+                              ticketId: ticketId,
+                              kind: PrintKind.warranty,
+                              label: 'Warranty',
+                            ),
+                          ],
+                        ),
                       ),
                       _ReportCompletionFooter(
                         completedAt: report3CompletedAt,

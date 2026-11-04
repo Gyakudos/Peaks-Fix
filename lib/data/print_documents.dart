@@ -21,6 +21,7 @@ enum PrintKind {
   report1('Report 1 - Intake'),
   report2('Report 2 - Technical'),
   report3('Report 3 - Client'),
+  partsRequired('Parts required'),
   warranty('Warranty');
 
   const PrintKind(this.label);
@@ -40,6 +41,7 @@ class TicketPrintData {
     required this.payments,
     required this.shopName,
     required this.disclaimer,
+    this.requiredParts = const [],
     this.recipientEmail = '',
     this.recipientName = '',
   });
@@ -53,6 +55,7 @@ class TicketPrintData {
   final List<PaymentEntry> payments;
   final String shopName;
   final String disclaimer;
+  final List<RequiredPart> requiredParts;
 
   /// Where documents are emailed: the partner for partner bookings, otherwise
   /// the customer. Empty when no address is on file.
@@ -91,6 +94,7 @@ Future<TicketPrintData?> loadTicketPrintData(
   return TicketPrintData(
     recipientEmail: email,
     recipientName: name,
+    requiredParts: await repository.watchRequiredParts(ticketId).first,
     entry: entry,
     photos: await repository.watchPhotoChecklist(ticketId).first,
     technical: await repository.watchTechnicalEntries(ticketId).first,
@@ -126,6 +130,7 @@ Future<Uint8List> buildTicketPdf(TicketPrintData data, PrintKind kind) async {
       PrintKind.report1 => await _report1Body(data),
       PrintKind.report2 => await _report2Body(data),
       PrintKind.report3 => await _report3Body(data),
+      PrintKind.partsRequired => _partsRequiredBody(data),
       PrintKind.warranty => await _warrantyBody(data),
     },
   ];
@@ -375,6 +380,35 @@ Future<List<pw.Widget>> _warrantyBody(TicketPrintData data) async {
     if ((data.entry.diagnosis ?? '').trim().isNotEmpty)
       _paragraph(data.entry.diagnosis!.trim()),
     ...await _technicalBlocks(data.technical),
+  ];
+}
+
+List<pw.Widget> _partsRequiredBody(TicketPrintData data) {
+  if (data.requiredParts.isEmpty) {
+    return [_paragraph('No parts have been listed for this ticket.')];
+  }
+  return [
+    pw.TableHelper.fromTextArray(
+      headers: const ['Part', 'SKU', 'Qty', 'Location', 'Unit', 'Total'],
+      data: [
+        for (final part in data.requiredParts)
+          [
+            part.name,
+            part.sku ?? '',
+            '${part.quantity}',
+            part.location ?? '',
+            _money(part.retailPriceCents),
+            _money(part.retailPriceCents * part.quantity),
+          ],
+      ],
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+      cellAlignments: {
+        2: pw.Alignment.centerRight,
+        4: pw.Alignment.centerRight,
+        5: pw.Alignment.centerRight,
+      },
+    ),
   ];
 }
 

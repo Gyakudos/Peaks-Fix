@@ -3403,6 +3403,8 @@ void main() {
       250,
       scrollable: ticketScroll,
     );
+    await tester.ensureVisible(complete2);
+    await tester.pumpAndSettle();
     await tester.tap(complete2);
     await tester.pumpAndSettle();
 
