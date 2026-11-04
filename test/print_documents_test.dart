@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vola_fix/data/database.dart';
@@ -23,11 +26,21 @@ void main() {
       unitPriceCents: 6000,
     );
     await database.writeSetting(warrantyDisclaimerKey, 'No refunds on wear.');
+    await database.writeSetting('shop_name', 'Grizzly Peaks Repair Center');
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    );
+    final logo = File('${Directory.systemTemp.path}\\test_shop_logo.png');
+    await logo.writeAsBytes(png);
+    addTearDown(() => logo.deleteSync());
+    await database.writeSetting(shopLogoKey, logo.path);
 
     final data = await loadTicketPrintData(repository, database, ticket.id);
     expect(data, isNotNull);
     expect(data!.recipientEmail, 'pat@example.com');
     expect(data.disclaimer, 'No refunds on wear.');
+    expect(data.shopName, 'Grizzly Peaks Repair Center');
+    expect(data.logoPath, logo.path);
     for (final kind in PrintKind.values) {
       final bytes = await buildTicketPdf(data, kind);
       expect(String.fromCharCodes(bytes.take(4)), '%PDF', reason: kind.label);

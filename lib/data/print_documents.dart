@@ -10,6 +10,7 @@ import 'tickets_repository.dart';
 import 'warranty.dart';
 
 const warrantyDisclaimerKey = 'warranty_disclaimer';
+const shopLogoKey = 'shop_logo_path';
 
 /// Settings keys for the shop's chosen printer (empty = ask every time).
 const printerUrlKey = 'default_printer_url';
@@ -41,6 +42,7 @@ class TicketPrintData {
     required this.payments,
     required this.shopName,
     required this.disclaimer,
+    this.logoPath = '',
     this.requiredParts = const [],
     this.recipientEmail = '',
     this.recipientName = '',
@@ -56,6 +58,7 @@ class TicketPrintData {
   final String shopName;
   final String disclaimer;
   final List<RequiredPart> requiredParts;
+  final String logoPath;
 
   /// Where documents are emailed: the partner for partner bookings, otherwise
   /// the customer. Empty when no address is on file.
@@ -94,6 +97,7 @@ Future<TicketPrintData?> loadTicketPrintData(
   return TicketPrintData(
     recipientEmail: email,
     recipientName: name,
+    logoPath: await database.readSetting(shopLogoKey, ''),
     requiredParts: await repository.watchRequiredParts(ticketId).first,
     entry: entry,
     photos: await repository.watchPhotoChecklist(ticketId).first,
@@ -123,8 +127,9 @@ String _date(DateTime? time) {
 Future<Uint8List> buildTicketPdf(TicketPrintData data, PrintKind kind) async {
   final document =
       pw.Document(title: '${kind.label} ${data.entry.summary.number}');
+  final logo = await _image(data.logoPath.isEmpty ? null : data.logoPath);
   final widgets = <pw.Widget>[
-    ..._header(data, kind.label),
+    ..._header(data, kind.label, logo),
     ...switch (kind) {
       PrintKind.invoice => _invoiceBody(data),
       PrintKind.report1 => await _report1Body(data),
@@ -152,25 +157,38 @@ Future<Uint8List> buildTicketPdf(TicketPrintData data, PrintKind kind) async {
   return document.save();
 }
 
-List<pw.Widget> _header(TicketPrintData data, String title) {
+List<pw.Widget> _header(
+  TicketPrintData data,
+  String title,
+  pw.MemoryImage? logo,
+) {
   final summary = data.entry.summary;
   return [
     pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          data.shopName,
-          style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-        ),
         pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
               title,
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
             ),
             pw.Text('Ticket ${summary.number}'),
+          ],
+        ),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Text(
+              data.shopName,
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            if (logo != null) ...[
+              pw.SizedBox(width: 10),
+              pw.SizedBox(height: 54, child: pw.Image(logo)),
+            ],
           ],
         ),
       ],
