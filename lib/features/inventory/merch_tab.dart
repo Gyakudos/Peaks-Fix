@@ -5,6 +5,7 @@ import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../../shell/app_access.dart';
 import 'add_merch_item_dialog.dart';
+import 'adjust_stock_dialog.dart';
 
 class MerchTab extends StatelessWidget {
   const MerchTab({super.key});
@@ -150,6 +151,25 @@ class MerchTab extends StatelessWidget {
                               label: Text('Stock ${item.stock}'),
                               visualDensity: VisualDensity.compact,
                             ),
+                            if (AppSessionScope.accessOf(context)
+                                    .canAdjustStock &&
+                                !AppSessionScope.accessOf(context)
+                                    .canChangeInventory)
+                              TextButton.icon(
+                                key: Key('adjust-stock-merch-${item.id}'),
+                                onPressed: () => showAdjustStockDialog(
+                                  context,
+                                  name: item.name,
+                                  stock: item.stock,
+                                  onSave: (stock) => saveMerchItemStock(
+                                    repository,
+                                    item,
+                                    stock,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.exposure),
+                                label: const Text('Adjust stock'),
+                              ),
                             if (AppSessionScope.accessOf(context)
                                 .canChangeInventory) ...[
                               TextButton.icon(

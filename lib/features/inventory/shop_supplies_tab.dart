@@ -5,6 +5,7 @@ import '../../data/shop_scope.dart';
 import '../../data/tickets_repository.dart';
 import '../../shell/app_access.dart';
 import 'add_inventory_part_dialog.dart';
+import 'adjust_stock_dialog.dart';
 
 class ShopSuppliesTab extends StatelessWidget {
   const ShopSuppliesTab({super.key});
@@ -160,6 +161,25 @@ class ShopSuppliesTab extends StatelessWidget {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (AppSessionScope.accessOf(context)
+                                    .canAdjustStock &&
+                                !AppSessionScope.accessOf(context)
+                                    .canChangeInventory)
+                              TextButton.icon(
+                                key: Key('adjust-stock-${part.id}'),
+                                onPressed: () => showAdjustStockDialog(
+                                  context,
+                                  name: part.name,
+                                  stock: part.stock,
+                                  onSave: (stock) => saveInventoryPartStock(
+                                    repository,
+                                    part,
+                                    stock,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.exposure),
+                                label: const Text('Adjust stock'),
+                              ),
                             if (AppSessionScope.accessOf(context)
                                 .canChangeInventory) ...[
                               TextButton.icon(

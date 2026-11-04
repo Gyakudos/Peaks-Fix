@@ -3,46 +3,27 @@ import 'package:flutter/material.dart';
 import '../../data/tickets_repository.dart';
 
 /// Lets Front Desk correct the on-hand quantity without editing anything
-/// else about the part.
+/// else about the item. [onSave] stores the new quantity.
 Future<void> showAdjustStockDialog(
   BuildContext context, {
-  required TicketsRepository repository,
-  required InventoryPart part,
+  required String name,
+  required int stock,
+  required Future<void> Function(int stock) onSave,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => _AdjustStockDialog(repository: repository, part: part),
+    builder: (_) =>
+        _AdjustStockDialog(name: name, stock: stock, onSave: onSave),
   );
 }
 
-class _AdjustStockDialog extends StatefulWidget {
-  const _AdjustStockDialog({required this.repository, required this.part});
-
-  final TicketsRepository repository;
-  final InventoryPart part;
-
-  @override
-  State<_AdjustStockDialog> createState() => _AdjustStockDialogState();
-}
-
-class _AdjustStockDialogState extends State<_AdjustStockDialog> {
-  late final _quantity = TextEditingController(text: '${widget.part.stock}');
-  String? _error;
-
-  @override
-  void dispose() {
-    _quantity.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final stock = int.tryParse(_quantity.text.trim());
-    if (stock == null || stock < 0) {
-      setState(() => _error = 'Enter a quantity of 0 or more.');
-      return;
-    }
-    final part = widget.part;
-    await widget.repository.updateInventoryPart(
+/// Saves a new quantity for a part or shop supply, keeping all other fields.
+Future<void> saveInventoryPartStock(
+  TicketsRepository repository,
+  InventoryPart part,
+  int stock,
+) =>
+    repository.updateInventoryPart(
       partId: part.id,
       name: part.name,
       description: part.description,
@@ -62,13 +43,64 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
       brand: part.brand,
       jobLevel: part.jobLevel,
     );
+
+/// Saves a new quantity for a merch item, keeping all other fields.
+Future<void> saveMerchItemStock(
+  TicketsRepository repository,
+  InventoryMerchItem item,
+  int stock,
+) =>
+    repository.updateMerchItem(
+      itemId: item.id,
+      name: item.name,
+      description: item.description,
+      sku: item.sku,
+      category: item.category,
+      location: item.location,
+      stock: stock,
+      costCents: item.costCents,
+      priceCents: item.priceCents,
+    );
+
+class _AdjustStockDialog extends StatefulWidget {
+  const _AdjustStockDialog({
+    required this.name,
+    required this.stock,
+    required this.onSave,
+  });
+
+  final String name;
+  final int stock;
+  final Future<void> Function(int stock) onSave;
+
+  @override
+  State<_AdjustStockDialog> createState() => _AdjustStockDialogState();
+}
+
+class _AdjustStockDialogState extends State<_AdjustStockDialog> {
+  late final _quantity = TextEditingController(text: '${widget.stock}');
+  String? _error;
+
+  @override
+  void dispose() {
+    _quantity.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final stock = int.tryParse(_quantity.text.trim());
+    if (stock == null || stock < 0) {
+      setState(() => _error = 'Enter a quantity of 0 or more.');
+      return;
+    }
+    await widget.onSave(stock);
     if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Adjust ${widget.part.name}'),
+      title: Text('Adjust ${widget.name}'),
       content: TextField(
         key: const Key('adjust-stock-quantity'),
         controller: _quantity,

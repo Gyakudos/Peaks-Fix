@@ -324,8 +324,13 @@ class _PartsTabState extends State<PartsTab> {
                               key: Key('adjust-stock-${part.id}'),
                               onPressed: () => showAdjustStockDialog(
                                 context,
-                                repository: repository,
-                                part: part,
+                                name: part.name,
+                                stock: part.stock,
+                                onSave: (stock) => saveInventoryPartStock(
+                                  repository,
+                                  part,
+                                  stock,
+                                ),
                               ),
                               icon: const Icon(Icons.exposure),
                               label: const Text('Adjust stock'),
