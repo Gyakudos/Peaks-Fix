@@ -1,6 +1,6 @@
 ; Builds the Peaks Fix Windows installer.
 ; Build the app first (flutter build windows --release), then:
-;   ISCC.exe /DAppVersion=0.05.03.11.26 installer\vola_fix.iss
+;   ISCC.exe /DAppVersion=0.06.03.11.26 installer\vola_fix.iss
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Shown bottom-right of the main window; matches the GitHub release tag.
-const String appBuildVersion = '0.05.03.11.26';
+const String appBuildVersion = '0.06.03.11.26';
 
 const _releasesApi =
     'https://api.github.com/repos/Gyakudos/Peaks-Fix/releases/latest';
